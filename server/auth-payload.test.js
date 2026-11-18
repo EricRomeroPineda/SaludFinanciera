@@ -60,7 +60,7 @@ test('changing theme never resends the profile photo', async (t) => {
   })
 
   const state = { user: { id: 7, photo, theme: 'verde' } }
-  await handlers.handleThemeChange.call(state, { target: { value: 'oscuro' } })
+  await handlers.handleThemeChange.call(state, { currentTarget: { value: 'oscuro' } })
   assert.equal(state.error, '')
   assert.equal(state.user.theme, 'oscuro')
   assert.equal(request.path, '/api/auth/theme')

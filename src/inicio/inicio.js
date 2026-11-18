@@ -325,7 +325,8 @@ class Inicio extends LitElement {
   }
 
   async handleThemeChange(event) {
-    const theme = event.target.value
+    const select = event.currentTarget
+    const theme = select.value
     this.error = ''
     this.notice = ''
     this.savingTheme = true
@@ -338,7 +339,7 @@ class Inicio extends LitElement {
       this.notice = 'Tema guardado.'
     } catch (error) {
       this.error = error.message
-      event.target.value = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
+      select.value = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
     } finally {
       this.savingTheme = false
     }
@@ -346,10 +347,11 @@ class Inicio extends LitElement {
 
   async handleProfileSubmit(event) {
     event.preventDefault()
+    const form = event.currentTarget
     this.error = ''
     this.notice = ''
     this.submitting = true
-    const formData = new FormData(event.currentTarget)
+    const formData = new FormData(form)
     try {
       const { user } = await apiRequest(`/api/users/${this.user.id}/profile`, {
         method: 'PUT',
@@ -362,8 +364,8 @@ class Inicio extends LitElement {
       })
       this.user = user
       this.photoDraft = user.photo
-      event.target.querySelector('[name="recoveryKey"]').value = ''
-      event.target.querySelector('[name="currentPassword"]').value = ''
+      form.querySelector('[name="recoveryKey"]').value = ''
+      form.querySelector('[name="currentPassword"]').value = ''
       this.notice = 'Perfil guardado.'
     } catch (error) {
       this.error = error.message
