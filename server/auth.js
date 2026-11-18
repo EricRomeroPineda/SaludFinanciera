@@ -22,7 +22,11 @@ export function validateSessionSecret() {
   requireSessionSecret()
 }
 
-export function createSession(userId, version = 0) {
+function passwordVersion(passwordHash) {
+  return sign(`session-password:${passwordHash}`)
+}
+
+export function createSession(userId, version) {
   const payload = Buffer.from(JSON.stringify({
     userId,
     version,
@@ -64,11 +68,11 @@ export async function getSessionUserId(request) {
       Number.isSafeInteger(session.userId) &&
       session.userId > 0 &&
       session.expiresAt > Math.floor(Date.now() / 1000))) return null
-  const [users] = await pool.execute('SELECT session_version FROM usuario WHERE id = ?', [session.userId])
-  return users.length === 1 && users[0].session_version === (session.version ?? 0) ? session.userId : null
+  const [users] = await pool.execute('SELECT password_hash FROM usuario WHERE id = ?', [session.userId])
+  return users.length === 1 && session.version === passwordVersion(users[0].password_hash) ? session.userId : null
 }
 
-export function setSessionCookie(response, userId, version = 0) {
+export function setSessionCookie(response, userId, version) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
   response.setHeader(
     'Set-Cookie',
@@ -105,7 +109,7 @@ function normalizeRecoveryKey(value) {
 }
 
 function validateProfile(photo, theme) {
-  if (!isValidPhoto(photo)) invalidInput('Selecciona una foto JPG, PNG o WebP de hasta 256 KB, o una URL HTTPS válida.')
+  if (!isValidPhoto(photo)) invalidInput('Escribe una URL HTTPS de foto válida de hasta 500 caracteres.')
   validateTheme(theme)
 }
 
@@ -150,11 +154,11 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     const passwordHash = await bcrypt.hash(normalizedPassword, 12)
     const recoveryHash = await bcrypt.hash(normalizedKey, 12)
     const [result] = await connection.execute(
-      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recovery_key_hash) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira) VALUES (?, ?, ?, ?, ?, NULL)',
       [normalizedName, passwordHash, photo, theme, recoveryHash],
     )
 
-    return { id: result.insertId, name: normalizedName, photo, theme, sessionVersion: 0 }
+    return { id: result.insertId, name: normalizedName, photo, theme, sessionVersion: passwordVersion(passwordHash) }
   } finally {
     try {
       await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
@@ -174,7 +178,7 @@ export async function authenticateUser(name, password) {
   }
 
   const [users] = await pool.execute(
-    'SELECT id, nombre, password_hash, foto_perfil, tema, session_version FROM usuario WHERE nombre = ? LIMIT 2',
+    'SELECT id, nombre, password_hash, foto_perfil, tema FROM usuario WHERE nombre = ? LIMIT 2',
     [normalizedName],
   )
   if (users.length !== 1 || !await bcrypt.compare(normalizedPassword, users[0].password_hash)) {
@@ -183,13 +187,13 @@ export async function authenticateUser(name, password) {
     throw error
   }
 
-  const { id, nombre, foto_perfil: photo, tema: theme, session_version: sessionVersion } = users[0]
-  return { id, name: nombre, photo, theme, sessionVersion }
+  const { id, nombre, foto_perfil: photo, tema: theme, password_hash: passwordHash } = users[0]
+  return { id, name: nombre, photo, theme, sessionVersion: passwordVersion(passwordHash) }
 }
 
 export async function findSessionUser(userId) {
   const [users] = await pool.execute(
-    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, recovery_key_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
+    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
     [userId],
   )
   return users[0] || null
@@ -207,8 +211,8 @@ export async function updateProfile(userId, { photo, theme, recoveryKey, current
     recoveryHash = await bcrypt.hash(normalizedKey, 12)
   }
   await pool.execute(
-    'UPDATE usuario SET foto_perfil = ?, tema = ?, recovery_key_hash = COALESCE(?, recovery_key_hash) WHERE id = ?',
-    [photo, theme, recoveryHash, userId],
+    'UPDATE usuario SET foto_perfil = ?, tema = ?, recuperacion_expira = IF(? IS NULL, recuperacion_expira, NULL), recuperacion_token_hash = COALESCE(?, recuperacion_token_hash) WHERE id = ?',
+    [photo, theme, recoveryHash, recoveryHash, userId],
   )
   return findSessionUser(userId)
 }
@@ -247,16 +251,18 @@ export async function recoverPassword(name, recoveryKey, password, address) {
   const normalizedKey = normalizeRecoveryKey(recoveryKey)
   validatePassword(password)
   const [users] = await pool.execute(
-    'SELECT id, recovery_key_hash, password_hash FROM usuario WHERE nombre = ? LIMIT 2',
+    'SELECT id, recuperacion_token_hash, password_hash FROM usuario WHERE nombre = ? AND (recuperacion_expira IS NULL OR recuperacion_expira > CURRENT_TIMESTAMP) LIMIT 2',
     [normalizedName],
   )
   const user = users.length === 1 ? users[0] : null
-  const matches = await bcrypt.compare(normalizedKey, user?.recovery_key_hash || dummyRecoveryHash)
-  if (!user?.recovery_key_hash || !matches) invalidInput('El usuario o la palabra clave no son correctos.')
+  const recoveryHash = user?.recuperacion_token_hash
+  const isBcryptHash = typeof recoveryHash === 'string' && /^\$2[ab]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(recoveryHash)
+  const matches = await bcrypt.compare(normalizedKey, isBcryptHash ? recoveryHash : dummyRecoveryHash)
+  if (!isBcryptHash || !matches) invalidInput('El usuario o la palabra clave no son correctos.')
   const passwordHash = await bcrypt.hash(password, 12)
   const [result] = await pool.execute(
-    'UPDATE usuario SET password_hash = ?, session_version = session_version + 1 WHERE id = ? AND password_hash = ? AND recovery_key_hash = ?',
-    [passwordHash, user.id, user.password_hash, user.recovery_key_hash],
+    'UPDATE usuario SET password_hash = ? WHERE id = ? AND password_hash = ? AND recuperacion_token_hash = ? AND (recuperacion_expira IS NULL OR recuperacion_expira > CURRENT_TIMESTAMP)',
+    [passwordHash, user.id, user.password_hash, recoveryHash],
   )
   if (result.affectedRows !== 1) invalidInput('No fue posible restablecer la contraseña. Intenta de nuevo.')
 }

@@ -6,7 +6,7 @@
 2. En PowerShell, desde la raíz del proyecto, ejecuta `Copy-Item .env.example .env`.
 3. En `.env`, configura `DB_PASSWORD` con la contraseña local de MySQL. Para generar `SESSION_SECRET`, ejecuta `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` y copia el resultado. No compartas ni subas `.env`.
 4. Ejecuta `npm ci`.
-5. Antes del primer arranque con perfiles y recuperación, ejecuta una sola vez `server/migrations/001-user-profile.sql` en tu base existente desde MySQL Workbench u otro cliente MySQL. Amplía `foto_perfil`, normaliza `tema` y agrega el hash de recuperación y la versión de sesión. Haz un respaldo antes de aplicar la migración.
+5. Si necesitas normalizar los temas existentes, ejecuta `server/migrations/001-user-profile.sql` desde MySQL Workbench u otro cliente MySQL. No agrega columnas ni modifica `foto_perfil VARCHAR(500)`. Haz un respaldo antes de aplicar la migración.
 6. En una terminal, ejecuta `npm run server`.
 7. En otra terminal, ejecuta `npm run dev`. Abre la dirección local que indique Vite.
 
@@ -14,11 +14,13 @@ El backend verifica la conexión al arrancar. También puedes comprobarla en `ht
 
 ## Perfil, temas y recuperación
 
-Al registrarse se solicita una foto (archivo JPG, PNG o WebP de hasta 5 MB, o URL HTTPS) y una palabra clave de recuperación. Las fotos locales se reducen a un máximo de 384 píxeles por lado y 256 KB, y se guardan en MySQL; las URL se guardan como referencia y deben seguir disponibles públicamente. La foto aparece junto al nombre al iniciar sesión y al restaurar la sesión.
+Al registrarse se solicita la URL HTTPS de una foto (máximo 500 caracteres) y una palabra clave de recuperación. Solo se guarda la URL en `foto_perfil VARCHAR(500)`, no se suben archivos ni se admiten imágenes base64. La URL debe seguir disponible públicamente. La foto aparece junto al nombre al iniciar sesión y al restaurar la sesión. No es necesario ampliar el campo de foto; si ya lo ampliaste, puede conservarse sin cambios.
 
 En **Mi perfil** se puede actualizar la foto y seleccionar **Verde, Azul, Violeta u Oscuro**. Cada cambio de tema se guarda automáticamente en `usuario.tema` y se recupera al volver a entrar, incluido el calendario. Los usuarios existentes pueden configurar su palabra clave desde esta sección, confirmando su contraseña actual.
 
-**Olvidé mi contraseña** solicita usuario, palabra clave y una contraseña nueva. La palabra clave no distingue mayúsculas y se guarda con bcrypt, nunca en texto claro; usa una frase difícil de adivinar y distinta de tu contraseña. El restablecimiento invalida las sesiones anteriores. La recuperación limita los intentos por usuario e IP durante 15 minutos; estos contadores viven en el proceso del backend y requieren un almacén compartido si se despliega más de una instancia.
+La tabla `usuario` utiliza los campos existentes `id`, `nombre`, `password_hash`, `recuperacion_token_hash`, `recuperacion_expira`, `foto_perfil` y `tema`. Las solicitudes JSON tienen un límite de 16 KB; el login solo envía usuario y contraseña, sin reenviar la foto.
+
+**Olvidé mi contraseña** solicita usuario, palabra clave y una contraseña nueva. La palabra clave no distingue mayúsculas y se guarda con bcrypt en `recuperacion_token_hash`, nunca en texto claro; `recuperacion_expira` queda en `NULL` al configurarla porque es una clave permanente, no un enlace temporal. Los valores con expiración vencida o hashes de tokens antiguos no sirven como palabra clave; configura una desde **Mi perfil**. Usa una frase difícil de adivinar y distinta de tu contraseña. Las sesiones están vinculadas mediante HMAC al hash de contraseña, por lo que un restablecimiento invalida las sesiones anteriores sin requerir otra columna; las sesiones del formato anterior deberán iniciar sesión de nuevo. La recuperación limita los intentos por usuario e IP durante 15 minutos; estos contadores viven en el proceso del backend y requieren un almacén compartido si se despliega más de una instancia.
 
 ## Carpetas principales
 

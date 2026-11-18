@@ -98,7 +98,7 @@ export const server = createServer(async (request, response) => {
     }
 
     if (route === 'POST /api/auth/register') {
-      const body = await readJson(request, 360 * 1024)
+      const body = await readJson(request)
       const user = await registerUser(body.name, body.password, body.photo, body.recoveryKey, body.theme)
       setSessionCookie(response, user.id, user.sessionVersion)
       sendJson(response, 201, { user })
@@ -130,7 +130,7 @@ export const server = createServer(async (request, response) => {
     if (route === 'PUT /api/auth/profile') {
       const userId = await getUserId(request, response)
       if (!userId) return
-      const user = await updateProfile(userId, await readJson(request, 360 * 1024))
+      const user = await updateProfile(userId, await readJson(request))
       sendJson(response, 200, { user })
       return
     }

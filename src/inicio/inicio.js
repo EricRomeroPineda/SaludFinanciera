@@ -46,7 +46,6 @@ class Inicio extends LitElement {
     newAccountType: { state: true },
     newMovementDefaults: { state: true },
     photoDraft: { state: true },
-    photoBusy: { state: true },
     notice: { state: true },
     savingTheme: { state: true },
     brokenPhoto: { state: true },
@@ -223,7 +222,6 @@ class Inicio extends LitElement {
     this.editingMovement = null
     this.error = ''
     this.photoDraft = ''
-    this.photoBusy = false
     this.notice = ''
     this.savingTheme = false
     this.brokenPhoto = false
@@ -266,16 +264,17 @@ class Inicio extends LitElement {
     const formData = new FormData(event.currentTarget)
     const recovering = this.authMode === 'recover'
     const route = `/api/auth/${recovering ? 'recover' : this.authMode}`
+    const payload = {
+      name: formData.get('name'),
+      password: formData.get('password'),
+    }
+    if (this.authMode === 'register') payload.photo = this.photoDraft
+    if (this.authMode !== 'login') payload.recoveryKey = formData.get('recoveryKey')
 
     try {
       const { user } = await apiRequest(route, {
         method: 'POST',
-        body: JSON.stringify({
-          name: formData.get('name'),
-          password: formData.get('password'),
-          photo: this.photoDraft,
-          recoveryKey: formData.get('recoveryKey'),
-        }),
+        body: JSON.stringify(payload),
       })
       if (recovering) {
         this.setAuthMode('login')
@@ -313,44 +312,6 @@ class Inicio extends LitElement {
     this.notice = ''
     this.photoDraft = ''
     this.renderRoot.querySelector('.auth-form')?.reset()
-  }
-
-  async handlePhotoFile(event) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    this.error = ''
-    this.photoBusy = true
-    try {
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-        throw new Error('Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.')
-      }
-      const image = await createImageBitmap(file)
-      try {
-        const scale = Math.min(1, 384 / Math.max(image.width, image.height))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(image.width * scale))
-        canvas.height = Math.max(1, Math.round(image.height * scale))
-        const context = canvas.getContext('2d')
-        if (!context) throw new Error('No fue posible procesar la foto.')
-        context.fillStyle = '#ffffff'
-        context.fillRect(0, 0, canvas.width, canvas.height)
-        context.drawImage(image, 0, 0, canvas.width, canvas.height)
-        const photo = canvas.toDataURL('image/jpeg', 0.85)
-        if (!isValidPhoto(photo)) {
-          throw new Error('La imagen procesada supera 256 KB. Selecciona una foto más pequeña.')
-        }
-        this.photoDraft = photo
-        const urlInput = this.renderRoot.querySelector('input[name="photoUrl"]')
-        if (urlInput) urlInput.value = ''
-      } finally {
-        image.close()
-      }
-    } catch (error) {
-      this.error = `No se pudo cargar la foto. ${error.message}`
-    } finally {
-      this.photoBusy = false
-      event.target.value = ''
-    }
   }
 
   handlePhotoUrl(event) {
@@ -395,7 +356,8 @@ class Inicio extends LitElement {
       })
       this.user = user
       this.photoDraft = user.photo
-      event.target.reset()
+      event.target.querySelector('[name="recoveryKey"]').value = ''
+      event.target.querySelector('[name="currentPassword"]').value = ''
       this.notice = 'Perfil guardado.'
     } catch (error) {
       this.error = error.message
@@ -407,16 +369,11 @@ class Inicio extends LitElement {
   renderPhotoFields() {
     return html`
       <label>
-        Foto desde tu dispositivo
-        <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp"
-          ?disabled=${this.photoBusy || this.submitting} @change=${this.handlePhotoFile} />
-        <small>JPG, PNG o WebP, hasta 5 MB. Se reduce antes de guardarse.</small>
-      </label>
-      <label>
-        O URL de una foto
+        URL de tu foto de perfil
         <input name="photoUrl" type="url" placeholder="https://ejemplo.com/foto.jpg"
-          maxlength="2048" ?disabled=${this.photoBusy || this.submitting} @input=${this.handlePhotoUrl} />
-        <small>Usa una dirección HTTPS pública.</small>
+          .value=${this.photoDraft} maxlength="500" required
+          ?disabled=${this.submitting} @input=${this.handlePhotoUrl} />
+        <small>Usa una dirección HTTPS pública de hasta 500 caracteres.</small>
       </label>
       ${this.photoDraft && isValidPhoto(this.photoDraft) ? html`
         <img class="profile-photo preview-photo" src=${this.photoDraft} alt="Vista previa de tu foto"
@@ -559,7 +516,7 @@ class Inicio extends LitElement {
               </label>
             ` : ''}
             <button class="primary-button submit-button" type="submit"
-              ?disabled=${this.submitting || this.photoBusy || (registering && !isValidPhoto(this.photoDraft))}>
+              ?disabled=${this.submitting || (registering && !isValidPhoto(this.photoDraft))}>
               ${this.submitting ? 'Un momento…' : registering ? 'Crear usuario' : recovering ? 'Restablecer contraseña' : 'Entrar'}
               <span aria-hidden="true">→</span>
             </button>
@@ -569,7 +526,7 @@ class Inicio extends LitElement {
             ${registering || recovering ? '¿Ya tienes usuario?' : '¿Primera vez aquí?'}
             <button
               type="button"
-              ?disabled=${this.submitting || this.photoBusy}
+              ?disabled=${this.submitting}
               @click=${() => this.setAuthMode(registering || recovering ? 'login' : 'register')}
             >${registering || recovering ? 'Inicia sesión' : 'Crea tu usuario'}</button>
           </p>
@@ -693,7 +650,7 @@ class Inicio extends LitElement {
           </label>
           <small>Los usuarios existentes deben guardar una palabra clave aquí antes de poder recuperar su contraseña.</small>
           <button class="primary-button" type="submit"
-            ?disabled=${this.submitting || this.photoBusy || this.savingTheme || !isValidPhoto(this.photoDraft)}>
+            ?disabled=${this.submitting || this.savingTheme || !isValidPhoto(this.photoDraft)}>
             ${this.submitting ? 'Guardando…' : 'Guardar perfil'}
           </button>
         </form>
