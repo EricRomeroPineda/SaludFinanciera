@@ -22,6 +22,7 @@ class Subscriptions extends LitElement {
     formFrequency: { state: true },
     formCost: { state: true },
     brokenImages: { state: true },
+    pendingDelete: { state: true },
   }
 
   constructor() {
@@ -36,6 +37,7 @@ class Subscriptions extends LitElement {
     this.formFrequency = 'Mensual'
     this.formCost = ''
     this.brokenImages = new Set()
+    this.pendingDelete = null
   }
 
   connectedCallback() {
@@ -106,8 +108,22 @@ class Subscriptions extends LitElement {
     }
   }
 
-  async remove(item) {
-    if (!window.confirm(`¿Eliminar "${item.name}"? Si tiene movimientos asociados se cancelará sin borrar su historial.`)) return
+  async requestDelete(item) {
+    this.pendingDelete = item
+    this.error = ''
+    await this.updateComplete
+    this.renderRoot.querySelector('dialog').showModal()
+  }
+
+  closeDeleteDialog() {
+    if (this.submitting) return
+    this.renderRoot.querySelector('dialog').close()
+    this.pendingDelete = null
+  }
+
+  async remove() {
+    const item = this.pendingDelete
+    if (!item || this.submitting) return
     this.submitting = true
     this.error = ''
     this.notice = ''
@@ -123,6 +139,8 @@ class Subscriptions extends LitElement {
         this.showForm = false
       }
       this.notice = result.cancelled ? 'Suscripción cancelada; se conserva su historial de movimientos.' : 'Suscripción eliminada.'
+      this.renderRoot.querySelector('dialog').close()
+      this.pendingDelete = null
       this.notifyChange()
     } catch (error) {
       this.error = error.message
@@ -184,7 +202,7 @@ class Subscriptions extends LitElement {
           <datalist id="subscription-statuses"><option value="activa"></option><option value="cancelada"></option></datalist>
         </label>
         <p class="form-hint">Monetizado se calcula sumando los importes de todos los movimientos vinculados a esta suscripción; no se captura manualmente.</p>
-        <p class="form-hint">Estimación anual: costo por cobro × número de cobros al año. Semanal: 52; mensual: 12; trimestral: 4; semestral: 2; anual: 1. El promedio mensual es el anual ÷ 12.</p>
+        <p class="form-hint">Mensual semanal: costo por cobro × 4 semanas. Estimación anual: costo por cobro × número de cobros al año. Semanal: 52; mensual: 12; trimestral: 4; semestral: 2; anual: 1. Para las demás frecuencias, el mensual es el anual ÷ 12.</p>
         <div class="form-actions">
           <button class="primary-button compact-button" type="submit" ?disabled=${this.submitting}>
             ${this.submitting ? 'Guardando…' : item ? 'Guardar cambios' : 'Registrar suscripción'}
@@ -234,8 +252,11 @@ class Subscriptions extends LitElement {
                   </dl>
                   <div class="subscription-actions">
                     <button class="text-button" type="button" ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>
-                    <button class="text-button delete-button" type="button" ?disabled=${this.submitting} @click=${() => this.remove(item)}>
-                      ${item.status.toLowerCase() === 'activa' ? 'Cancelar / eliminar' : 'Eliminar'}
+                    <button class="trash-button" type="button" ?disabled=${this.submitting}
+                      aria-label=${`Eliminar ${item.name}`} title="Eliminar suscripción" @click=${() => this.requestDelete(item)}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
+                      </svg>
                     </button>
                   </div>
                 </article>
@@ -243,6 +264,25 @@ class Subscriptions extends LitElement {
             </div>
           ` : html`<p class="empty-state">No tienes suscripciones registradas. Usa «Agregar suscripción» para crear la primera.</p>`}
         ${!this.loading && this.error ? html`<button class="quiet-button" type="button" ?disabled=${this.submitting} @click=${this.load}>Actualizar lista</button>` : ''}
+        <dialog class="delete-dialog" aria-labelledby="delete-subscription-title"
+          aria-describedby="delete-subscription-description"
+          @cancel=${(event) => {
+            if (this.submitting) event.preventDefault()
+            else this.pendingDelete = null
+          }}>
+          <h2 id="delete-subscription-title">¿Estás seguro que quieres eliminar?</h2>
+          <p id="delete-subscription-description">
+            ${this.pendingDelete?.name}
+          </p>
+          <p>Si tiene movimientos asociados, se cancelará y se conservará su historial. Si no tiene movimientos, se eliminará definitivamente.</p>
+          ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
+          <div class="delete-dialog-actions">
+            <button class="quiet-button" type="button" autofocus ?disabled=${this.submitting} @click=${this.closeDeleteDialog}>Cancelar</button>
+            <button class="primary-button confirm-delete" type="button" ?disabled=${this.submitting} @click=${this.remove}>
+              ${this.submitting ? 'Eliminando…' : 'Sí, eliminar'}
+            </button>
+          </div>
+        </dialog>
       </section>
     `
   }

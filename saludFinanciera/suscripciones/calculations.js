@@ -15,7 +15,7 @@ export function calculateCosts(cost, frequency) {
   const format = (value) => `${value / 100n}.${String(value % 100n).padStart(2, '0')}`
   return {
     annualCost: format(annual),
-    monthlyCost: format((annual + 6n) / 12n),
+    monthlyCost: format(isWeekly(frequency) ? cents * 4n : (annual + 6n) / 12n),
     chargesPerYear: count,
   }
 }

@@ -18,6 +18,16 @@
 .subscription-logo { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: var(--soft); }
 .subscription-card .annual-cost { grid-column: 1 / -1; padding: 12px; border-radius: 8px; background: var(--soft); }
 .subscription-card .annual-cost dd { color: var(--green); font-size: 19px; }
+.subscription-actions { align-items: center; justify-content: space-between; }
+.trash-button { display: grid; place-items: center; width: 36px; height: 36px; padding: 8px; border: 1px solid var(--negative-line); border-radius: 8px; background: var(--negative-bg); color: var(--negative); }
+.trash-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.delete-dialog { width: min(440px, calc(100% - 36px)); max-height: calc(100vh - 40px); overflow: auto; padding: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); }
+.delete-dialog::backdrop { background: #0009; }
+.delete-dialog h2 { margin: 0 0 16px; font-size: 21px; }
+.delete-dialog p { color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.delete-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.confirm-delete { background: var(--negative); color: var(--surface); }
+.confirm-delete:hover:not(:disabled) { background: var(--negative); }
 @media (max-width: 420px) {
   .subscription-card { padding: 18px; }
 }
