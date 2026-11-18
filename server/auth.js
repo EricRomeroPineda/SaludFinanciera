@@ -214,7 +214,16 @@ export async function updateProfile(userId, { photo, theme, recoveryKey, current
     'UPDATE usuario SET foto_perfil = ?, tema = ?, recuperacion_expira = IF(? IS NULL, recuperacion_expira, NULL), recuperacion_token_hash = COALESCE(?, recuperacion_token_hash) WHERE id = ?',
     [photo, theme, recoveryHash, recoveryHash, userId],
   )
-  return findSessionUser(userId)
+  const user = await findSessionUser(userId)
+  if (!user) {
+    const error = new Error('El usuario que intentas modificar ya no existe.')
+    error.statusCode = 404
+    throw error
+  }
+  if (user.photo !== photo) {
+    throw new Error('No se pudo confirmar que la foto de perfil quedara guardada.')
+  }
+  return user
 }
 
 export async function updateTheme(userId, theme) {

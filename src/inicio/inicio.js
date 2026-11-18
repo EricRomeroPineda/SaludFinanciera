@@ -351,7 +351,7 @@ class Inicio extends LitElement {
     this.submitting = true
     const formData = new FormData(event.currentTarget)
     try {
-      const { user } = await apiRequest('/api/auth/profile', {
+      const { user } = await apiRequest(`/api/users/${this.user.id}/profile`, {
         method: 'PUT',
         body: JSON.stringify({
           photo: String(formData.get('photoUrl') || '').trim(),

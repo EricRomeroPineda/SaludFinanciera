@@ -127,9 +127,14 @@ export const server = createServer(async (request, response) => {
       return
     }
 
-    if (route === 'PUT /api/auth/profile') {
+    const profileRoute = /^\/api\/users\/(\d+)\/profile$/.exec(url.pathname)
+    if (route === 'PUT /api/auth/profile' || (request.method === 'PUT' && profileRoute)) {
       const userId = await getUserId(request, response)
       if (!userId) return
+      if (profileRoute && Number(profileRoute[1]) !== userId) {
+        sendJson(response, 403, { error: 'Solo puedes modificar tu propio perfil.' })
+        return
+      }
       const user = await updateProfile(userId, await readJson(request))
       sendJson(response, 200, { user })
       return
