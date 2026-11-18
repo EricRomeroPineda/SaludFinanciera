@@ -14,6 +14,10 @@
 .status-tag.inactive { background: var(--soft); color: var(--muted); }
 .section-heading { flex-wrap: wrap; }
 .module-form { margin-top: 18px; }
+.module-form output { display: flex; align-items: center; min-height: 38px; color: var(--green); font-size: 15px; font-weight: 700; }
+.subscription-logo { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: var(--soft); }
+.subscription-card .annual-cost { grid-column: 1 / -1; padding: 12px; border-radius: 8px; background: var(--soft); }
+.subscription-card .annual-cost dd { color: var(--green); font-size: 19px; }
 @media (max-width: 420px) {
   .subscription-card { padding: 18px; }
 }

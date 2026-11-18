@@ -79,16 +79,7 @@ export async function getDashboardData(userId) {
   const monthlySubscriptionTotal = subscriptions
     .filter((subscription) => subscription.status.toLowerCase() === 'activa')
     .reduce((total, subscription) => {
-      const cost = Number(subscription.cost || 0)
-      const frequency = String(subscription.frequency || '').toLowerCase()
-      const divisor = frequency.includes('anual') ? 12
-        : frequency.includes('semestral') ? 6
-          : frequency.includes('trimestral') ? 3
-            : frequency.includes('mensual') ? 1
-              : null
-      const monthly = subscription.monthlyCost == null
-        ? divisor ? cost / divisor : 0
-        : Number(subscription.monthlyCost)
+      const monthly = Number(subscription.monthlyCost || 0)
       return total + Math.round(monthly * 100)
     }, 0) / 100
 

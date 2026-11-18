@@ -5,9 +5,9 @@ import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from '../frontend/styles.css?inline'
 import responsiveStyles from '../frontend/responsive.css?inline'
 import styles from './styles.css?inline'
+import { calculateCosts, frequencies, isImageUrl, isWeekly, weekdays } from './calculations.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
-const frequencies = ['Mensual', 'Trimestral', 'Semestral', 'Anual']
 
 class Subscriptions extends LitElement {
   static styles = [unsafeCSS(sharedStyles), unsafeCSS(financeStyles), unsafeCSS(responsiveStyles), unsafeCSS(styles)]
@@ -19,6 +19,9 @@ class Subscriptions extends LitElement {
     editing: { state: true },
     error: { state: true },
     notice: { state: true },
+    formFrequency: { state: true },
+    formCost: { state: true },
+    brokenImages: { state: true },
   }
 
   constructor() {
@@ -30,6 +33,9 @@ class Subscriptions extends LitElement {
     this.editing = null
     this.error = ''
     this.notice = ''
+    this.formFrequency = 'Mensual'
+    this.formCost = ''
+    this.brokenImages = new Set()
   }
 
   connectedCallback() {
@@ -63,6 +69,8 @@ class Subscriptions extends LitElement {
     this.showForm = true
     this.error = ''
     this.notice = ''
+    this.formFrequency = item?.frequency || 'Mensual'
+    this.formCost = item?.cost ?? ''
   }
 
   async save(event) {
@@ -80,7 +88,6 @@ class Subscriptions extends LitElement {
           cost: data.get('cost'),
           frequency: data.get('frequency'),
           type: data.get('type'),
-          monthlyCost: data.get('monthlyCost') || null,
           billingDay: data.get('billingDay') || null,
           paymentType: data.get('paymentType') || null,
           status: data.get('status'),
@@ -126,6 +133,7 @@ class Subscriptions extends LitElement {
 
   renderForm() {
     const item = this.editing
+    const costs = calculateCosts(this.formCost, this.formFrequency)
     const options = item?.frequency && !frequencies.includes(item.frequency)
       ? [item.frequency, ...frequencies] : frequencies
     return html`
@@ -140,30 +148,43 @@ class Subscriptions extends LitElement {
           </select>
         </label>
         <label>Costo por cobro
-          <input name="cost" type="number" min="0.01" max="9999999999999.99" step="0.01" .value=${item?.cost ?? ''} required />
+          <input name="cost" type="number" min="0.01" max="9999999999999.99" step="0.01" .value=${item?.cost ?? ''}
+            @input=${(event) => { this.formCost = event.target.value }} required />
         </label>
         <label>Frecuencia
-          <select name="frequency" required>
+          <select name="frequency" @change=${(event) => { this.formFrequency = event.target.value }} required>
             ${options.map((frequency) => html`
               <option value=${frequency} .selected=${frequency === (item?.frequency || 'Mensual')}>${frequency}</option>
             `)}
           </select>
         </label>
-        <label>Costo mensual (opcional)
-          <input name="monthlyCost" type="number" min="0" max="9999999999999.99" step="0.01"
-            .value=${item?.monthlyCost ?? ''} placeholder="Se calcula según frecuencia" />
+        <label>Costo mensual calculado
+          <output>${costs ? money.format(costs.monthlyCost) : 'Introduce costo y frecuencia'}</output>
         </label>
-        <label>Día de cobro
-          <input name="billingDay" type="number" min="1" max="31" step="1" .value=${item?.billingDay ?? ''} />
+        <label>${isWeekly(this.formFrequency) ? 'Día de la semana' : 'Día de cobro (del mes)'}
+          ${keyed(isWeekly(this.formFrequency), isWeekly(this.formFrequency) ? html`
+            <select name="billingDay">
+              <option value="">Sin definir</option>
+              ${weekdays.map((day, index) => html`
+                <option value=${index + 1} .selected=${isWeekly(item?.frequency) && Number(item?.billingDay) === index + 1}>${day}</option>
+              `)}
+            </select>
+          ` : html`
+            <input name="billingDay" type="number" min="1" max="31" step="1"
+              .value=${!isWeekly(item?.frequency) ? item?.billingDay ?? '' : ''} />
+          `)}
         </label>
-        <label>Método de pago
-          <input name="paymentType" maxlength="40" .value=${item?.paymentType || ''} placeholder="Ej. tarjeta, transferencia" />
+        <label>URL de imagen (opcional)
+          <input name="paymentType" type="url" maxlength="40"
+            .value=${isImageUrl(item?.paymentType) ? item.paymentType : ''} placeholder="https://sitio.com/logo.png" />
+          <small>Hasta 40 caracteres, según el campo tipo_pago actual.</small>
         </label>
         <label>Estado
           <input name="status" maxlength="30" .value=${item?.status || 'activa'} required list="subscription-statuses" />
           <datalist id="subscription-statuses"><option value="activa"></option><option value="cancelada"></option></datalist>
         </label>
         <p class="form-hint">Monetizado se calcula sumando los importes de todos los movimientos vinculados a esta suscripción; no se captura manualmente.</p>
+        <p class="form-hint">Estimación anual: costo por cobro × número de cobros al año. Semanal: 52; mensual: 12; trimestral: 4; semestral: 2; anual: 1. El promedio mensual es el anual ÷ 12.</p>
         <div class="form-actions">
           <button class="primary-button compact-button" type="submit" ?disabled=${this.submitting}>
             ${this.submitting ? 'Guardando…' : item ? 'Guardar cambios' : 'Registrar suscripción'}
@@ -192,16 +213,24 @@ class Subscriptions extends LitElement {
               ${this.items.map((item) => html`
                 <article class="subscription-card">
                   <div class="subscription-heading">
+                    ${isImageUrl(item.paymentType) && !this.brokenImages.has(item.paymentType) ? html`
+                      <img class="subscription-logo" src=${item.paymentType} alt=${`Imagen de ${item.name}`} referrerpolicy="no-referrer"
+                        @error=${() => {
+                          this.brokenImages = new Set([...this.brokenImages, item.paymentType])
+                          this.error = `No se pudo cargar la imagen de ${item.name}. Revisa la URL.`
+                        }} />
+                    ` : ''}
                     <span class="subscription-type">${item.type === 'servicio' ? 'Servicio' : 'Suscripción'}</span>
                     <span class="status-tag ${item.status.toLowerCase() === 'activa' ? '' : 'inactive'}">${item.status}</span>
                   </div>
                   <h3>${item.name}</h3>
                   <p class="subscription-price">${money.format(item.cost)} <small>· ${item.frequency}</small></p>
                   <dl>
+                    <div class="annual-cost"><dt>Costo estimado por 1 año</dt><dd>${item.annualCost == null ? 'Revisa la frecuencia' : money.format(item.annualCost)}</dd></div>
                     <div><dt>Costo mensual</dt><dd>${item.monthlyCost == null ? 'Sin calcular' : money.format(item.monthlyCost)}</dd></div>
-                    <div><dt>Monetizado</dt><dd>${money.format(item.monetized)}</dd></div>
-                    <div><dt>Día de cobro</dt><dd>${item.billingDay ?? 'Sin definir'}</dd></div>
-                    <div><dt>Método de pago</dt><dd>${item.paymentType || 'Sin definir'}</dd></div>
+                    <div><dt>Monetizado hasta el momento</dt><dd>${money.format(item.monetized)}</dd></div>
+                    <div><dt>${isWeekly(item.frequency) ? 'Día de la semana' : 'Día de cobro'}</dt>
+                      <dd>${item.billingDay == null ? 'Sin definir' : isWeekly(item.frequency) ? weekdays[Number(item.billingDay) - 1] || 'Sin definir' : `Día ${item.billingDay}`}</dd></div>
                   </dl>
                   <div class="subscription-actions">
                     <button class="text-button" type="button" ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>

@@ -1,5 +1,6 @@
 import { pool } from '../../server/db.js'
 import { invalid, requiredText, decimal, positiveId } from '../server/validation.js'
+import { calculateCosts, isImageUrl, isWeekly } from './calculations.js'
 
 export async function getSubscriptions(userId, id = null) {
   const [rows] = await pool.execute(
@@ -13,7 +14,10 @@ export async function getSubscriptions(userId, id = null) {
      ORDER BY s.nombre, s.id`,
     id == null ? [userId] : [userId, id],
   )
-  return rows
+  return rows.map((row) => {
+    const costs = calculateCosts(row.cost, row.frequency)
+    return { ...row, monthlyCost: costs?.monthlyCost ?? null, annualCost: costs?.annualCost ?? null }
+  })
 }
 
 async function getSubscription(userId, id) {
@@ -54,29 +58,22 @@ function subscriptionFields(input) {
     throw invalid('El tipo debe ser servicio o suscripcion.')
   }
 
-  let monthlyCost = input.monthlyCost == null || input.monthlyCost === ''
-    ? null
-    : decimal(input.monthlyCost, 'El costo mensual', true)
-  if (monthlyCost == null) {
-    const frequencyKey = frequency.toLowerCase()
-    const divisor = frequencyKey.includes('anual') ? 12
-      : frequencyKey.includes('semestral') ? 6
-        : frequencyKey.includes('trimestral') ? 3
-          : frequencyKey.includes('mensual') ? 1
-            : null
-    if (divisor) monthlyCost = (Number(cost) / divisor).toFixed(2)
-  }
+  const costs = calculateCosts(cost, frequency)
+  if (!costs) throw invalid('Selecciona una frecuencia semanal, mensual, trimestral, semestral o anual.')
+  const monthlyCost = decimal(costs.monthlyCost, 'El costo mensual calculado', true)
 
   const billingDay = input.billingDay == null || input.billingDay === ''
     ? null
     : Number(input.billingDay)
-  if (billingDay != null && (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)) {
-    throw invalid('El día de cobro debe estar entre 1 y 31.')
+  const maxDay = isWeekly(frequency) ? 7 : 31
+  if (billingDay != null && (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > maxDay)) {
+    throw invalid(isWeekly(frequency) ? 'Selecciona un día de lunes a domingo.' : 'El día de cobro debe estar entre 1 y 31.')
   }
 
   const paymentType = input.paymentType == null || input.paymentType === ''
     ? null
-    : requiredText(input.paymentType, 'El método de pago', 40)
+    : requiredText(input.paymentType, 'La URL de imagen', 40)
+  if (paymentType && !isImageUrl(paymentType)) throw invalid('La imagen debe ser una URL HTTPS de hasta 40 caracteres.')
 
   const status = input.status == null ? 'activa' : requiredText(input.status, 'El estado', 30)
   return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status }
