@@ -127,7 +127,7 @@ class Subscriptions extends LitElement {
     this.pendingDelete = null
   }
 
-  async remove() {
+  async confirmDeleteSubscription() {
     const item = this.pendingDelete
     if (!item || this.submitting) return
     this.submitting = true
@@ -298,7 +298,7 @@ class Subscriptions extends LitElement {
           ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
           <div class="delete-dialog-actions">
             <button class="quiet-button" type="button" autofocus ?disabled=${this.submitting} @click=${this.closeDeleteDialog}>Cancelar</button>
-            <button class="primary-button confirm-delete" type="button" ?disabled=${this.submitting} @click=${this.remove}>
+            <button class="primary-button confirm-delete" type="button" ?disabled=${this.submitting} @click=${this.confirmDeleteSubscription}>
               ${this.submitting ? 'Eliminando…' : 'Sí, eliminar'}
             </button>
           </div>
