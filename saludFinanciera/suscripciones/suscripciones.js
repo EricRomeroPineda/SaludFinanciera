@@ -5,7 +5,7 @@ import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from '../frontend/styles.css?inline'
 import responsiveStyles from '../frontend/responsive.css?inline'
 import styles from './styles.css?inline'
-import { calculateCosts, frequencies, isImageUrl, isWeekly, weekdays } from './calculations.js'
+import { calculateCosts, daysUntilBilling, frequencies, isWeekly, weekdays } from './calculations.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 
@@ -21,7 +21,7 @@ class Subscriptions extends LitElement {
     notice: { state: true },
     formFrequency: { state: true },
     formCost: { state: true },
-    brokenImages: { state: true },
+    today: { state: true },
     pendingDelete: { state: true },
   }
 
@@ -36,13 +36,19 @@ class Subscriptions extends LitElement {
     this.notice = ''
     this.formFrequency = 'Mensual'
     this.formCost = ''
-    this.brokenImages = new Set()
+    this.today = new Date()
     this.pendingDelete = null
   }
 
   connectedCallback() {
     super.connectedCallback()
     this.load()
+    this.clock = window.setInterval(() => { this.today = new Date() }, 60000)
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    window.clearInterval(this.clock)
   }
 
   async load() {
@@ -192,10 +198,12 @@ class Subscriptions extends LitElement {
               .value=${!isWeekly(item?.frequency) ? item?.billingDay ?? '' : ''} />
           `)}
         </label>
-        <label>URL de imagen (opcional)
-          <input name="paymentType" type="url" maxlength="40"
-            .value=${isImageUrl(item?.paymentType) ? item.paymentType : ''} placeholder="https://sitio.com/logo.png" />
-          <small>Hasta 40 caracteres, según el campo tipo_pago actual.</small>
+        <label>Tipo de pago
+          <select name="paymentType" required>
+            <option value="" .selected=${!['manual', 'automatico'].includes(item?.paymentType)}>Selecciona una opción</option>
+            <option value="manual" .selected=${item?.paymentType === 'manual'}>Manual</option>
+            <option value="automatico" .selected=${item?.paymentType === 'automatico'}>Automático (domiciliado)</option>
+          </select>
         </label>
         <label>Estado
           <input name="status" maxlength="30" .value=${item?.status || 'activa'} required list="subscription-statuses" />
@@ -209,6 +217,22 @@ class Subscriptions extends LitElement {
           </button>
         </div>
       </form>
+    `
+  }
+
+  renderBillingIndicator(item) {
+    if (item.status.toLowerCase() !== 'activa') {
+      return html`<p class="billing-indicator">Sin próximo cobro: ${item.status}</p>`
+    }
+    const days = daysUntilBilling(item.frequency, item.billingDay, this.today)
+    if (days == null) return html`<p class="billing-indicator">Configura el día de cobro para ver cuánto falta.</p>`
+    const longerPeriod = !['semanal', 'mensual'].includes(String(item.frequency).trim().toLowerCase())
+    return html`
+      <div class="billing-indicator ${days === 0 ? 'billing-today' : days <= 2 ? 'billing-soon' : ''}"
+        role="status">
+        <strong>${days === 0 ? '¡Hoy es día de pagar!' : days === 1 ? 'Falta 1 día para pagar' : `Faltan ${days} días para pagar`}</strong>
+        ${longerPeriod ? html`<small>Referencia al próximo día configurado; no incluye el mes de inicio del periodo.</small>` : ''}
+      </div>
     `
   }
 
@@ -231,24 +255,20 @@ class Subscriptions extends LitElement {
               ${this.items.map((item) => html`
                 <article class="subscription-card">
                   <div class="subscription-heading">
-                    ${isImageUrl(item.paymentType) && !this.brokenImages.has(item.paymentType) ? html`
-                      <img class="subscription-logo" src=${item.paymentType} alt=${`Imagen de ${item.name}`} referrerpolicy="no-referrer"
-                        @error=${() => {
-                          this.brokenImages = new Set([...this.brokenImages, item.paymentType])
-                          this.error = `No se pudo cargar la imagen de ${item.name}. Revisa la URL.`
-                        }} />
-                    ` : ''}
                     <span class="subscription-type">${item.type === 'servicio' ? 'Servicio' : 'Suscripción'}</span>
                     <span class="status-tag ${item.status.toLowerCase() === 'activa' ? '' : 'inactive'}">${item.status}</span>
                   </div>
                   <h3>${item.name}</h3>
                   <p class="subscription-price">${money.format(item.cost)} <small>· ${item.frequency}</small></p>
+                  ${this.renderBillingIndicator(item)}
                   <dl>
                     <div class="annual-cost"><dt>Costo estimado por 1 año</dt><dd>${item.annualCost == null ? 'Revisa la frecuencia' : money.format(item.annualCost)}</dd></div>
                     <div><dt>Costo mensual</dt><dd>${item.monthlyCost == null ? 'Sin calcular' : money.format(item.monthlyCost)}</dd></div>
                     <div><dt>Monetizado hasta el momento</dt><dd>${money.format(item.monetized)}</dd></div>
                     <div><dt>${isWeekly(item.frequency) ? 'Día de la semana' : 'Día de cobro'}</dt>
                       <dd>${item.billingDay == null ? 'Sin definir' : isWeekly(item.frequency) ? weekdays[Number(item.billingDay) - 1] || 'Sin definir' : `Día ${item.billingDay}`}</dd></div>
+                    <div><dt>Tipo de pago</dt><dd>${item.paymentType === 'manual' ? 'Manual'
+                      : item.paymentType === 'automatico' ? 'Automático (domiciliado)' : 'Sin definir'}</dd></div>
                   </dl>
                   <div class="subscription-actions">
                     <button class="text-button" type="button" ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>

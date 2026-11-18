@@ -20,12 +20,17 @@ export function calculateCosts(cost, frequency) {
   }
 }
 
-export function isImageUrl(value) {
-  if (typeof value !== 'string' || value.length > 40) return false
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' && !url.username && !url.password
-  } catch {
-    return false
+export function daysUntilBilling(frequency, billingDay, today = new Date()) {
+  const day = Number(billingDay)
+  if (!Number.isInteger(day) || day < 1 || day > (isWeekly(frequency) ? 7 : 31)) return null
+  if (isWeekly(frequency)) return (day % 7 - today.getDay() + 7) % 7
+  const year = today.getFullYear()
+  const month = today.getMonth()
+  const current = Date.UTC(year, month, today.getDate())
+  const dueInMonth = (offset) => {
+    const lastDay = new Date(Date.UTC(year, month + offset + 1, 0)).getUTCDate()
+    return Date.UTC(year, month + offset, Math.min(day, lastDay))
   }
+  const due = dueInMonth(0)
+  return ((due < current ? dueInMonth(1) : due) - current) / 86400000
 }

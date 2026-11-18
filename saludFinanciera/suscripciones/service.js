@@ -1,6 +1,6 @@
 import { pool } from '../../server/db.js'
 import { invalid, requiredText, decimal, positiveId } from '../server/validation.js'
-import { calculateCosts, isImageUrl, isWeekly } from './calculations.js'
+import { calculateCosts, isWeekly } from './calculations.js'
 
 export async function getSubscriptions(userId, id = null) {
   const [rows] = await pool.execute(
@@ -72,8 +72,10 @@ function subscriptionFields(input) {
 
   const paymentType = input.paymentType == null || input.paymentType === ''
     ? null
-    : requiredText(input.paymentType, 'La URL de imagen', 40)
-  if (paymentType && !isImageUrl(paymentType)) throw invalid('La imagen debe ser una URL HTTPS de hasta 40 caracteres.')
+    : requiredText(input.paymentType, 'El tipo de pago', 40)
+  if (paymentType && !['manual', 'automatico'].includes(paymentType)) {
+    throw invalid('El tipo de pago debe ser manual o automático (domiciliado).')
+  }
 
   const status = input.status == null ? 'activa' : requiredText(input.status, 'El estado', 30)
   return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status }

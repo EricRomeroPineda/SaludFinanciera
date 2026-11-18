@@ -1,13 +1,14 @@
 :host { display: block; }
 .subscription-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr)); gap: 18px; }
-.subscription-card { display: flex; flex-direction: column; min-width: 0; min-height: 285px; aspect-ratio: 1; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 7px 25px var(--shadow); }
-.subscription-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.subscription-card { display: flex; flex-direction: column; min-width: 0; min-height: 285px; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); box-shadow: 0 7px 25px var(--shadow); }
+.subscription-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+.subscription-heading > *, .subscription-card dl > div { min-width: 0; max-width: 100%; }
 .subscription-type { color: var(--muted); font-size: 11px; }
 .subscription-card h3 { margin: 20px 0 10px; font-size: 19px; overflow-wrap: anywhere; }
 .subscription-price { margin: 0 0 20px; color: var(--green); font-size: 23px; font-weight: 750; overflow-wrap: anywhere; }
 .subscription-price small { color: var(--muted); font-size: 11px; font-weight: 400; }
 .subscription-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0 0 22px; }
-.subscription-card dt { color: var(--muted); font-size: 10px; }
+.subscription-card dt { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .subscription-card dd { margin: 5px 0 0; font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
 .subscription-actions { display: flex; gap: 18px; margin-top: auto; padding-top: 15px; border-top: 1px solid var(--line); }
 .subscription-actions .delete-button { font-size: 11px; }
@@ -15,7 +16,6 @@
 .section-heading { flex-wrap: wrap; }
 .module-form { margin-top: 18px; }
 .module-form output { display: flex; align-items: center; min-height: 38px; color: var(--green); font-size: 15px; font-weight: 700; }
-.subscription-logo { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: var(--soft); }
 .subscription-card .annual-cost { grid-column: 1 / -1; padding: 12px; border-radius: 8px; background: var(--soft); }
 .subscription-card .annual-cost dd { color: var(--green); font-size: 19px; }
 .subscription-actions { align-items: center; justify-content: space-between; }
@@ -28,6 +28,10 @@
 .delete-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 .confirm-delete { background: var(--negative); color: var(--surface); }
 .confirm-delete:hover:not(:disabled) { background: var(--negative); }
+.billing-indicator { display: grid; gap: 6px; margin: 0 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); color: var(--ink); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.billing-indicator small { color: var(--muted); }
+.billing-soon { border-color: var(--green); }
+.billing-today { border: 2px solid var(--negative); background: var(--negative-bg); color: var(--negative); font-size: 15px; }
 @media (max-width: 420px) {
   .subscription-card { padding: 18px; }
 }
