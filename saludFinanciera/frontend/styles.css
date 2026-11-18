@@ -32,6 +32,10 @@
 .card-balances span, .card-balances strong { display: block; }
 .card-balances span, .card-dates dt { color: var(--muted); font-size: 10px; }
 .card-balances strong { margin-top: 5px; color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.card-balances .card-main-balance { grid-column: 1 / -1; min-width: 0; }
+.card-balances .card-main-balance strong { color: var(--green); font-size: 28px; overflow-wrap: anywhere; }
+.account-form select { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.account-form output { align-self: center; color: var(--green); font-size: 15px; overflow-wrap: anywhere; }
 .card-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 10px; margin: 0; padding-top: 15px; border-top: 1px solid var(--line); }
 .card-dates dt { margin-bottom: 5px; }
 .card-dates dd { margin: 0; color: var(--ink); font-size: 11px; font-weight: 650; }

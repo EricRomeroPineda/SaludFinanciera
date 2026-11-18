@@ -1,9 +1,10 @@
 import { getSubscriptions } from '../suscripciones/service.js'
 import { pool } from '../../server/db.js'
+import { isCreditAccount, isDebitAccount } from '../account-types.js'
 
-function invalid(message) {
+function invalid(message, statusCode = 400) {
   const error = new Error(message)
-  error.statusCode = 400
+  error.statusCode = statusCode
   return error
 }
 
@@ -108,17 +109,27 @@ function accountFields(input, includeAvailable = true) {
   if (!name || name.length > 100) throw invalid('El nombre de la cuenta es obligatorio.')
   if (!type || type.length > 40) throw invalid('El tipo de cuenta es obligatorio.')
 
-  const total = decimalValue(input.total, 'El total')
+  const credit = isCreditAccount(type)
+  const debit = isDebitAccount(type)
+  const total = debit ? null : decimalValue(input.total, 'El total')
   const available = includeAvailable
     ? decimalValue(input.available, 'El saldo disponible') || '0.00'
     : undefined
-  const paymentToAvoidInterest = decimalValue(
+  const paymentToAvoidInterest = debit ? null : decimalValue(
     input.paymentToAvoidInterest,
     'El pago para evitar intereses',
   )
 
-  const statementDate = input.statementDate || null
-  const paymentDueDate = input.paymentDueDate || null
+  const statementDate = debit ? null : input.statementDate || null
+  const paymentDueDate = debit ? null : input.paymentDueDate || null
+  if (credit) {
+    if (total == null || !statementDate || !paymentDueDate || paymentToAvoidInterest == null) {
+      throw invalid('El crédito requiere límite máximo, fecha de corte, fecha límite de pago y pago para no generar intereses de este mes.')
+    }
+    if (includeAvailable && Number(available) > Number(total)) {
+      throw invalid('El crédito disponible no puede superar el límite máximo.')
+    }
+  }
   for (const [label, value] of [
     ['La fecha de corte', statementDate],
     ['La fecha límite de pago', paymentDueDate],
@@ -149,17 +160,23 @@ export async function createAccount(userId, input) {
 
 export async function updateAccount(userId, id, input) {
   const fields = accountFields(input, false)
+  const credit = isCreditAccount(fields.type)
   const [result] = await pool.execute(
     `UPDATE cuenta
      SET nombre = ?, tipo = ?, total = ?, fecha_corte = ?,
          fecha_limite_pago = ?, pago_para_no_generar_intereses = ?
-     WHERE id = ? AND id_usuario = ?`,
+     WHERE id = ? AND id_usuario = ?${credit ? ' AND disponible <= ?' : ''}`,
     [
       fields.name, fields.type, fields.total, fields.statementDate,
       fields.paymentDueDate, fields.paymentToAvoidInterest, id, userId,
+      ...(credit ? [fields.total] : []),
     ],
   )
-  if (!result.affectedRows) throw invalid('No se encontró la cuenta de tu usuario.', 404)
+  if (!result.affectedRows) {
+    throw invalid(credit
+      ? 'No se encontró la cuenta o el límite es menor que el crédito disponible actual.'
+      : 'No se encontró la cuenta de tu usuario.', credit ? 409 : 404)
+  }
   return { ok: true, id }
 }
 

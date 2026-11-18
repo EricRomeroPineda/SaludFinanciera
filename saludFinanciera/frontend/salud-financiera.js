@@ -1,5 +1,6 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
+import { isCreditAccount, isDebitAccount } from '../account-types.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -23,7 +24,7 @@ function isCardAccount(account) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-  return type.includes('tarjeta') || type.includes('credito')
+  return type.includes('tarjeta') || isCreditAccount(type) || isDebitAccount(type)
 }
 
 class SaludFinanciera extends LitElement {
@@ -43,6 +44,9 @@ class SaludFinanciera extends LitElement {
     error: { state: true },
     editingAccount: { state: true },
     newAccountType: { state: true },
+    cardForm: { state: true },
+    formLimit: { state: true },
+    formAvailable: { state: true },
     newMovementDefaults: { state: true },
   }
 
@@ -56,6 +60,11 @@ class SaludFinanciera extends LitElement {
     this.showAccountForm = false
     this.editingAccount = null
     this.newAccountType = ''
+    this.cardForm = false
+    this.formLimit = ''
+    this.formAvailable = '0'
+    this.formLimit = ''
+    this.formAvailable = '0'
     this.showMovementForm = false
     this.newMovementDefaults = null
     this.showPlanForm = false
@@ -315,7 +324,11 @@ class SaludFinanciera extends LitElement {
 
   startAccountEdit(account) {
     this.editingAccount = account
-    this.newAccountType = ''
+    this.cardForm = isCardAccount(account)
+    this.newAccountType = isCreditAccount(account.type) ? 'Tarjeta de crédito'
+      : isDebitAccount(account.type) ? 'Tarjeta de débito' : ''
+    this.formLimit = account.total ?? ''
+    this.formAvailable = account.available
     this.showAccountForm = true
     this.activeTab = 'accounts'
   }
@@ -331,6 +344,9 @@ class SaludFinanciera extends LitElement {
   startCardCreation() {
     this.editingAccount = null
     this.newAccountType = 'Tarjeta de crédito'
+    this.cardForm = true
+    this.formLimit = ''
+    this.formAvailable = '0'
     this.showAccountForm = true
     this.activeTab = 'accounts'
   }
@@ -391,6 +407,7 @@ class SaludFinanciera extends LitElement {
             this.showAccountForm = !this.showAccountForm
             this.editingAccount = null
             this.newAccountType = ''
+            this.cardForm = false
           }}>
             ${this.showAccountForm ? 'Cancelar' : '+ Nueva cuenta'}
           </button>
@@ -422,17 +439,40 @@ class SaludFinanciera extends LitElement {
 
   renderAccountForm() {
     const account = this.editingAccount || {}
+    const credit = isCreditAccount(this.newAccountType)
+    const showCreditFields = !this.cardForm || credit
+    const used = Math.round(Number(this.formLimit) * 100) - Math.round(Number(this.formAvailable) * 100)
     return html`
       <form class="account-form" @submit=${this.handleCreateAccount}>
         <label>Nombre<input name="name" maxlength="100" placeholder="Cuenta principal" .value=${account.name || ''} required /></label>
-        <label>Tipo<input name="type" maxlength="40" placeholder="Débito, efectivo, crédito…" .value=${account.type || this.newAccountType || ''} required /></label>
+        <label>Tipo
+          ${this.cardForm ? html`
+            <select name="type" required @change=${(event) => { this.newAccountType = event.target.value }}>
+              <option value="" .selected=${!this.newAccountType} disabled>Selecciona un tipo</option>
+              <option value="Tarjeta de crédito" .selected=${credit}>Crédito</option>
+              <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
+            </select>
+          ` : html`<input name="type" maxlength="40" placeholder="Débito, efectivo, crédito…" .value=${account.type || ''} required />`}
+        </label>
         ${this.editingAccount
           ? html`<p class="form-hint">El saldo disponible se modifica mediante movimientos para mantener el historial.</p>`
-          : html`<label>Disponible<input name="available" type="number" min="0" step="0.01" value="0" /></label>`}
-        <label>Total / límite<input name="total" type="number" min="0" step="0.01" .value=${account.total ?? ''} /></label>
-        <label>Fecha de corte<input name="statementDate" type="date" .value=${account.statementDate || ''} /></label>
-        <label>Fecha límite de pago<input name="paymentDueDate" type="date" .value=${account.paymentDueDate || ''} /></label>
-        <label>Pago para evitar intereses<input name="paymentToAvoidInterest" type="number" min="0" step="0.01" .value=${account.paymentToAvoidInterest ?? ''} /></label>
+          : html`<label>${credit ? 'Crédito disponible' : 'Saldo disponible'}
+              <input name="available" type="number" min="0" step="0.01" .value=${String(this.formAvailable)}
+                @input=${(event) => { this.formAvailable = event.target.value }} required />
+            </label>`}
+        ${showCreditFields ? html`
+          <label>${credit ? 'Límite máximo de crédito' : 'Total / límite'}
+            <input name="total" type="number" min="0" step="0.01" .value=${String(this.formLimit)}
+              @input=${(event) => { this.formLimit = event.target.value }} ?required=${credit} />
+          </label>
+          ${credit ? html`<label>Saldo utilizado (deuda actual)
+            <output>${this.formLimit === '' ? 'Introduce el límite de crédito' : used < 0
+              ? 'El disponible no puede superar el límite' : this.formatMoney(used / 100)}</output>
+          </label>` : ''}
+          <label>Fecha de corte<input name="statementDate" type="date" .value=${account.statementDate || ''} ?required=${credit} /></label>
+          <label>Fecha límite de pago<input name="paymentDueDate" type="date" .value=${account.paymentDueDate || ''} ?required=${credit} /></label>
+          <label>Pago para no generar intereses de este mes<input name="paymentToAvoidInterest" type="number" min="0" step="0.01" .value=${account.paymentToAvoidInterest ?? ''} ?required=${credit} /></label>
+        ` : ''}
         <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.editingAccount ? 'Guardar cambios' : 'Guardar cuenta'}</button></div>
       </form>
     `
@@ -443,7 +483,7 @@ class SaludFinanciera extends LitElement {
     return html`
       <section class="data-card">
         <div class="section-heading">
-          <div><p class="eyebrow">TARJETAS Y LÍNEAS DE CRÉDITO</p><h2>Mis tarjetas</h2></div>
+          <div><p class="eyebrow">CRÉDITO Y DÉBITO</p><h2>Mis tarjetas</h2></div>
           <button class="primary-button compact-button" type="button" @click=${this.startCardCreation}>+ Nueva tarjeta</button>
         </div>
         ${cards.length
@@ -457,24 +497,28 @@ class SaludFinanciera extends LitElement {
                     <span class="card-chip" aria-hidden="true">▦</span>
                   </div>
                   <div class="card-balances">
-                    <div><span>Disponible</span><strong>${this.formatMoney(card.available)}</strong></div>
-                    <div><span>Límite total</span><strong>${card.total == null ? '—' : this.formatMoney(card.total)}</strong></div>
+                    <div class="card-main-balance"><span>Saldo disponible</span><strong>${this.formatMoney(card.available)}</strong></div>
+                    ${isCreditAccount(card.type) ? html`
+                      <div><span>Límite máximo de crédito</span><strong>${card.total == null ? '—' : this.formatMoney(card.total)}</strong></div>
+                      <div><span>Saldo utilizado</span><strong>${card.total == null ? '—'
+                        : this.formatMoney((Math.round(Number(card.total) * 100) - Math.round(Number(card.available) * 100)) / 100)}</strong></div>
+                    ` : ''}
                   </div>
-                  <dl class="card-dates">
+                  ${isCreditAccount(card.type) ? html`<dl class="card-dates">
                     <div><dt>Fecha de corte</dt><dd>${this.formatDate(card.statementDate)}</dd></div>
                     <div><dt>Fecha límite de pago</dt><dd>${this.formatDate(card.paymentDueDate)}</dd></div>
                     <div class="card-payment">
-                      <dt>Pago para evitar intereses</dt>
+                      <dt>Pago para no generar intereses de este mes</dt>
                       <dd>${card.paymentToAvoidInterest == null
                         ? '—'
                         : this.formatMoney(card.paymentToAvoidInterest)}</dd>
                     </div>
-                  </dl>
+                  </dl>` : ''}
                   <div class="card-actions">
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedCard?.id === card.id ? 'true' : 'false'}
                       @click=${() => { this.selectedCard = card }}>Ver movimientos</button>
-                    <button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>
+                    ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
                     <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
                     <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteAccount(card)}>Eliminar</button>
                   </div>
@@ -484,7 +528,7 @@ class SaludFinanciera extends LitElement {
           : html`
             <div class="empty-state card-empty">
               <p>No encontramos tarjetas en tus cuentas.</p>
-              <p>Agrega una como “Tarjeta de crédito” para registrar su límite y fechas de pago.</p>
+              <p>Agrega una tarjeta de crédito o débito para empezar.</p>
             </div>
           `}
         ${cards.some((card) => card.id === this.selectedCard?.id) ? html`
