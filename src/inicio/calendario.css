@@ -9,9 +9,9 @@
 .calendar-card, .day-card {
   min-width: 0;
   padding: 20px;
-  border: 1px solid #e5ece7;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 7px 25px #18352e08;
 }
 
@@ -32,16 +32,16 @@
 .calendar-nav {
   width: 31px;
   height: 31px;
-  border: 1px solid #e5ece7;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
-  color: #64746e;
+  background: var(--surface);
+  color: var(--muted);
 }
 
-.calendar-nav:hover { border-color: #9dc6aa; color: #237b5b; }
+.calendar-nav:hover { border-color: var(--green); color: var(--green); }
 .weekdays, .days-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .weekdays { margin-bottom: 5px; }
-.weekdays span { padding: 6px 0; color: #87948c; text-align: center; font-size: 9px; font-weight: 700; }
+.weekdays span { padding: 6px 0; color: var(--muted); text-align: center; font-size: 9px; font-weight: 700; }
 
 .day-button {
   position: relative;
@@ -49,42 +49,42 @@
   height: 41px;
   border: 1px solid transparent;
   border-radius: 8px;
-  background: #f5f8f6;
-  color: #344b40;
+  background: var(--soft);
+  color: var(--ink);
   font-size: 11px;
 }
 
-.day-button:hover { border-color: #b6d2c0; }
-.day-button.today { box-shadow: inset 0 0 0 1px #237b5b; }
-.day-button.selected { background: #237b5b; color: #fff; }
+.day-button:hover { border-color: var(--green); }
+.day-button.today { box-shadow: inset 0 0 0 1px var(--green); }
+.day-button.selected { background: var(--green); color: var(--on-accent); }
 .day-button.empty { background: transparent; pointer-events: none; }
-.day-count { position: absolute; top: 2px; right: 3px; color: #237b5b; font-size: 8px; font-weight: 700; }
-.day-button.selected .day-count { color: #fff; }
+.day-count { position: absolute; top: 2px; right: 3px; color: var(--green); font-size: 8px; font-weight: 700; }
+.day-button.selected .day-count { color: var(--on-accent); }
 
-.calendar-summary { display: flex; gap: 14px; margin-top: 16px; padding-top: 13px; border-top: 1px solid #eef2ef; }
-.calendar-summary span { display: grid; gap: 4px; color: #87948c; font-size: 9px; }
-.calendar-summary strong { color: #18352e; font-size: 11px; }
+.calendar-summary { display: flex; gap: 14px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+.calendar-summary span { display: grid; gap: 4px; color: var(--muted); font-size: 9px; }
+.calendar-summary strong { color: var(--ink); font-size: 11px; }
 .calendar-summary .income { color: #43835c; }
 .calendar-summary .expense { color: #b94d45; }
 
 .day-title { margin: 0; font-size: 15px; }
-.day-total { margin: 5px 0 16px; color: #64746e; font-size: 11px; }
+.day-total { margin: 5px 0 16px; color: var(--muted); font-size: 11px; }
 .day-list { display: grid; gap: 8px; max-height: 340px; overflow: auto; }
-.day-movement { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid #edf1ed; border-radius: 9px; }
-.movement-sign { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; background: #f1f5f2; color: #64746e; font-weight: 700; }
+.day-movement { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
+.movement-sign { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--muted); font-weight: 700; }
 .movement-sign.income { background: #eaf5ed; color: #43835c; }
 .movement-sign.expense { background: #fff0ef; color: #ba554b; }
 .movement-text { min-width: 0; flex: 1; }
 .movement-text strong, .movement-text small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .movement-text strong { font-size: 11px; }
-.movement-text small { margin-top: 4px; color: #87948c; font-size: 9px; }
+.movement-text small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .movement-value { font-size: 11px; font-weight: 700; white-space: nowrap; }
 .movement-value.income { color: #43835c; }
 .movement-value.expense { color: #ba554b; }
-.calendar-loading, .calendar-empty { padding: 25px 10px; color: #87948c; text-align: center; font-size: 11px; }
-.calendar-categories { margin-top: 21px; padding-top: 15px; border-top: 1px solid #eef2ef; }
-.calendar-categories h3 { margin: 0 0 7px; color: #64746e; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.calendar-categories p { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding: 8px 0; border-top: 1px solid #f1f4f2; font-size: 10px; }
+.calendar-loading, .calendar-empty { padding: 25px 10px; color: var(--muted); text-align: center; font-size: 11px; }
+.calendar-categories { margin-top: 21px; padding-top: 15px; border-top: 1px solid var(--line); }
+.calendar-categories h3 { margin: 0 0 7px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.calendar-categories p { display: flex; justify-content: space-between; gap: 12px; margin: 0; padding: 8px 0; border-top: 1px solid var(--line); font-size: 10px; }
 .calendar-categories p strong { white-space: nowrap; }
 
 @media (max-width: 780px) {

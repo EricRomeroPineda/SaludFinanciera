@@ -1,0 +1,253 @@
+import assert from 'node:assert/strict'
+import { after, test } from 'node:test'
+import bcrypt from 'bcryptjs'
+import { pool } from './db.js'
+import { isValidPhoto, maxPhotoBytes, themes } from '../shared/profile.js'
+
+process.env.SESSION_SECRET = 'test-secret-for-profile-and-recovery-only'
+const {
+  authenticateUser, createSession, findSessionUser, getSessionUserId,
+  recoverPassword, registerUser, updateProfile, updateTheme,
+} = await import('./auth.js')
+const { server } = await import('./index.js')
+const photo = 'https://example.com/avatar.png'
+const password = 'a-long-test-password'
+const recoveryKey = 'UnaFrasePrivada'
+const passwordHash = await bcrypt.hash(password, 4)
+const recoveryHash = await bcrypt.hash(recoveryKey.toLowerCase(), 4)
+
+after(async () => { await pool.end() })
+
+test('photo validation permits HTTPS and image data but rejects unsafe or oversized values', () => {
+  assert.equal(isValidPhoto(photo), true)
+  for (const invalid of ['', null, 'http://example.com/a.png', 'javascript:alert(1)',
+    'https://name:password@example.com/a.png', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,AAAA']) {
+    assert.equal(isValidPhoto(invalid), false, String(invalid))
+  }
+  const image = Buffer.alloc(maxPhotoBytes)
+  Buffer.from([0xff, 0xd8, 0xff]).copy(image)
+  assert.equal(isValidPhoto(`data:image/jpeg;base64,${image.toString('base64')}`), true)
+  assert.equal(isValidPhoto(`data:image/jpeg;base64,${Buffer.concat([image, Buffer.from([0])]).toString('base64')}`), false)
+  assert.equal(isValidPhoto(`data:image/jpeg;base64,${Buffer.concat([image, Buffer.from([0, 0])]).toString('base64')}`), false)
+})
+
+test('registration stores photo, theme and a hashed recovery key', async (t) => {
+  let inserted
+  let released = false
+  t.mock.method(pool, 'getConnection', async () => ({
+    execute: async (sql, params) => {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
+      if (sql.startsWith('SELECT id')) return [[]]
+      if (sql.startsWith('INSERT')) {
+        inserted = params
+        return [{ insertId: 7 }]
+      }
+      if (sql.includes('RELEASE_LOCK')) return [[{}]]
+      assert.fail(`Unexpected SQL: ${sql}`)
+    },
+    release: () => { released = true },
+  }))
+  const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul')
+  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', sessionVersion: 0 })
+  assert.equal(inserted[2], photo)
+  assert.equal(inserted[3], 'azul')
+  assert.notEqual(inserted[4], recoveryKey)
+  assert.equal(await bcrypt.compare(recoveryKey.toLowerCase(), inserted[4]), true)
+  assert.equal(await bcrypt.compare(password, inserted[1]), true)
+  assert.equal(released, true)
+})
+
+test('registration rejects missing photos, recovery keys and invalid themes before touching MySQL', async (t) => {
+  const getConnection = t.mock.method(pool, 'getConnection', () => assert.fail('Unexpected connection'))
+  await assert.rejects(registerUser('Ana', password, '', recoveryKey), { statusCode: 400 })
+  await assert.rejects(registerUser('Ana', password, photo, ''), { statusCode: 400 })
+  await assert.rejects(registerUser('Ana', password, photo, recoveryKey, 'invalid'), { statusCode: 400 })
+  assert.equal(getConnection.mock.callCount(), 0)
+})
+
+test('login and restored sessions return saved profile fields without exposing hashes', async (t) => {
+  t.mock.method(pool, 'execute', async (sql) => {
+    if (sql.includes('WHERE nombre')) return [[{
+      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', session_version: 2,
+    }]]
+    return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', hasRecoveryKey: 1 }]]
+  })
+  assert.deepEqual(await authenticateUser('Ana', password), {
+    id: 7, name: 'Ana', photo, theme: 'violeta', sessionVersion: 2,
+  })
+  assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', hasRecoveryKey: 1 })
+  await assert.rejects(authenticateUser('Ana', 'wrong'), { statusCode: 401 })
+})
+
+test('all four themes persist independently of an existing profile photo', async (t) => {
+  let savedTheme
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('UPDATE')) {
+      assert.equal(sql, 'UPDATE usuario SET tema = ? WHERE id = ?')
+      assert.equal(params[1], 7)
+      savedTheme = params[0]
+      return [{ affectedRows: 1 }]
+    }
+    return [[{ id: 7, name: 'Ana', photo: null, theme: savedTheme }]]
+  })
+  assert.equal(themes.length, 4)
+  for (const { id } of themes) assert.equal((await updateTheme(7, id)).theme, id)
+  await assert.rejects(updateTheme(7, 'invalid'), { statusCode: 400 })
+})
+
+test('profile photo updates preserve the recovery key when omitted', async (t) => {
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('UPDATE')) {
+      assert.deepEqual(params, [photo, 'verde', null, 7])
+      return [{ affectedRows: 1 }]
+    }
+    return [[{ id: 7, name: 'Ana', photo, theme: 'verde' }]]
+  })
+  assert.equal((await updateProfile(7, { photo, theme: 'verde' })).photo, photo)
+})
+
+test('changing the recovery key requires the current password and hashes the new key', async (t) => {
+  let newHash
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT password_hash')) return [[{ password_hash: passwordHash }]]
+    if (sql.startsWith('UPDATE')) {
+      newHash = params[2]
+      return [{ affectedRows: 1 }]
+    }
+    return [[{ id: 7, photo, theme: 'verde' }]]
+  })
+  await assert.rejects(updateProfile(7, { photo, theme: 'verde', recoveryKey, currentPassword: 'wrong' }), { statusCode: 400 })
+  assert.equal(newHash, undefined)
+  await updateProfile(7, { photo, theme: 'verde', recoveryKey, currentPassword: password })
+  assert.equal(await bcrypt.compare(recoveryKey.toLowerCase(), newHash), true)
+})
+
+test('recovery validates the secret, changes the password and invalidates earlier sessions', async (t) => {
+  let version = 0
+  let savedPasswordHash
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT session_version')) return [[{ session_version: version }]]
+    if (sql.startsWith('SELECT id, recovery_key_hash')) {
+      return [[{ id: 7, recovery_key_hash: recoveryHash, password_hash: passwordHash }]]
+    }
+    assert.ok(sql.includes('session_version = session_version + 1'))
+    assert.deepEqual(params.slice(1), [7, passwordHash, recoveryHash])
+    savedPasswordHash = params[0]
+    version += 1
+    return [{ affectedRows: 1 }]
+  })
+  const oldRequest = { headers: { cookie: `salud_financiera_session=${createSession(7, 0)}` } }
+  assert.equal(await getSessionUserId(oldRequest), 7)
+  await recoverPassword('recovery-success', `  ${recoveryKey.toUpperCase()} `, 'my-new-long-password', 'test-success-ip')
+  assert.equal(await bcrypt.compare('my-new-long-password', savedPasswordHash), true)
+  assert.equal(await getSessionUserId(oldRequest), null)
+  const newRequest = { headers: { cookie: `salud_financiera_session=${createSession(7, 1)}` } }
+  assert.equal(await getSessionUserId(newRequest), 7)
+})
+
+test('unknown users, users without a key and incorrect keys have the same recovery error', async (t) => {
+  let rows = []
+  t.mock.method(pool, 'execute', async (sql) => {
+    assert.ok(sql.startsWith('SELECT'))
+    return [rows]
+  })
+  const expected = { statusCode: 400, message: 'El usuario o la palabra clave no son correctos.' }
+  await assert.rejects(recoverPassword('missing', recoveryKey, password, 'missing-ip'), expected)
+  rows = [{ id: 7, recovery_key_hash: null }]
+  await assert.rejects(recoverPassword('legacy', recoveryKey, password, 'legacy-ip'), expected)
+  rows = [{ id: 7, recovery_key_hash: recoveryHash }]
+  await assert.rejects(recoverPassword('wrong-key', 'incorrect-key', password, 'wrong-key-ip'), expected)
+})
+
+test('recovery limits attempts per user and per IP', async (t) => {
+  t.mock.method(pool, 'execute', async () => [[]])
+  for (let index = 0; index < 5; index += 1) {
+    await assert.rejects(recoverPassword('rate-user', recoveryKey, password, `rate-user-ip-${index}`), { statusCode: 400 })
+  }
+  await assert.rejects(recoverPassword('rate-user', recoveryKey, password, 'rate-user-ip-next'), { statusCode: 429 })
+  for (let index = 0; index < 10; index += 1) {
+    await assert.rejects(recoverPassword(`rate-ip-user-${index}`, recoveryKey, password, 'rate-ip'), { statusCode: 400 })
+  }
+  await assert.rejects(recoverPassword('rate-ip-next', recoveryKey, password, 'rate-ip'), { statusCode: 429 })
+})
+
+test('profile and theme API require a valid session and accept photos larger than the normal JSON limit', async (t) => {
+  const image = Buffer.alloc(20 * 1024)
+  Buffer.from([0xff, 0xd8, 0xff]).copy(image)
+  const largePhoto = `data:image/jpeg;base64,${image.toString('base64')}`
+  let savedPhoto
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT session_version')) return [[{ session_version: 0 }]]
+    if (sql.startsWith('UPDATE')) {
+      savedPhoto = params[0]
+      return [{ affectedRows: 1 }]
+    }
+    return [[{ id: 7, name: 'Ana', photo: savedPhoto, theme: 'verde' }]]
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())))
+  const base = `http://127.0.0.1:${server.address().port}`
+  for (const [method, path] of [
+    ['PUT', '/api/auth/profile'], ['PUT', '/api/auth/theme'], ['GET', '/api/auth/me'],
+    ['GET', '/api/dashboard'], ['GET', '/api/calendar'], ['POST', '/api/accounts'],
+    ['PUT', '/api/accounts/1'], ['DELETE', '/api/accounts/1'],
+    ['POST', '/api/subscriptions'], ['PUT', '/api/subscriptions/1'], ['DELETE', '/api/subscriptions/1'],
+    ['POST', '/api/plans'], ['PUT', '/api/plans/1'], ['DELETE', '/api/plans/1'],
+    ['POST', '/api/movements'], ['PUT', '/api/movements/1'], ['DELETE', '/api/movements/1'],
+  ]) {
+    const unauthorized = await fetch(`${base}${path}`, { method })
+    assert.equal(unauthorized.status, 401)
+  }
+  const response = await fetch(`${base}/api/auth/profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: `salud_financiera_session=${createSession(7)}` },
+    body: JSON.stringify({ photo: largePhoto, theme: 'verde' }),
+  })
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).user.photo, largePhoto)
+  const me = await fetch(`${base}/api/auth/me`, {
+    headers: { Cookie: `salud_financiera_session=${createSession(7)}` },
+  })
+  assert.equal(me.status, 200)
+  assert.equal((await me.json()).user.photo, largePhoto)
+})
+
+test('HTTP recovery revokes the old cookie and login issues a usable new-version cookie', async (t) => {
+  const user = {
+    id: 21, nombre: 'http-user', password_hash: passwordHash, recovery_key_hash: recoveryHash,
+    foto_perfil: photo, tema: 'oscuro', session_version: 0,
+  }
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('SELECT session_version')) return [[{ session_version: user.session_version }]]
+    if (sql.startsWith('UPDATE usuario SET password_hash')) {
+      user.password_hash = params[0]
+      user.session_version += 1
+      return [{ affectedRows: 1 }]
+    }
+    if (sql.includes('WHERE nombre')) return [[{ ...user }]]
+    return [[{ id: user.id, name: user.nombre, photo: user.foto_perfil, theme: user.tema }]]
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())))
+  const base = `http://127.0.0.1:${server.address().port}`
+  const post = (path, body) => fetch(`${base}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  const login = await post('/api/auth/login', { name: user.nombre, password })
+  assert.equal(login.status, 200)
+  const oldCookie = login.headers.get('set-cookie').split(';')[0]
+  assert.equal((await login.json()).user.photo, photo)
+  const recovery = await post('/api/auth/recover', { name: user.nombre, recoveryKey, password: 'a-new-http-password' })
+  assert.equal(recovery.status, 200)
+  assert.equal((await recovery.json()).ok, true)
+  const oldSession = await fetch(`${base}/api/auth/me`, { headers: { Cookie: oldCookie } })
+  assert.equal(oldSession.status, 401)
+  const newLogin = await post('/api/auth/login', { name: user.nombre, password: 'a-new-http-password' })
+  assert.equal(newLogin.status, 200)
+  const newCookie = newLogin.headers.get('set-cookie').split(';')[0]
+  const newSession = await fetch(`${base}/api/auth/me`, { headers: { Cookie: newCookie } })
+  assert.equal(newSession.status, 200)
+  const restored = await newSession.json()
+  assert.equal(restored.user.theme, 'oscuro')
+  assert.equal(restored.user.photo, photo)
+})

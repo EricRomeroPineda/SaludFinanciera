@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import { databaseConfig, pool } from './db.js'
 import {
   authenticateUser,
@@ -6,6 +7,9 @@ import {
   findSessionUser,
   getSessionUserId,
   registerUser,
+  recoverPassword,
+  updateProfile,
+  updateTheme,
   setSessionCookie,
   validateSessionSecret,
 } from './auth.js'
@@ -39,13 +43,13 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload))
 }
 
-async function readJson(request) {
+async function readJson(request, bodyLimit = maxBodyBytes) {
   const chunks = []
   let bodyBytes = 0
 
   for await (const chunk of request) {
     bodyBytes += chunk.length
-    if (bodyBytes > maxBodyBytes) {
+    if (bodyBytes > bodyLimit) {
       const error = new Error('La solicitud es demasiado grande.')
       error.statusCode = 413
       throw error
@@ -67,8 +71,8 @@ async function readJson(request) {
   }
 }
 
-function getUserId(request, response) {
-  const userId = getSessionUserId(request)
+async function getUserId(request, response) {
+  const userId = await getSessionUserId(request)
   if (!userId) {
     sendJson(response, 401, { error: 'Inicia sesión para continuar.' })
     return null
@@ -76,7 +80,7 @@ function getUserId(request, response) {
   return userId
 }
 
-const server = createServer(async (request, response) => {
+export const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`)
   const route = `${request.method} ${url.pathname}`
 
@@ -94,9 +98,9 @@ const server = createServer(async (request, response) => {
     }
 
     if (route === 'POST /api/auth/register') {
-      const body = await readJson(request)
-      const user = await registerUser(body.name, body.password)
-      setSessionCookie(response, user.id)
+      const body = await readJson(request, 360 * 1024)
+      const user = await registerUser(body.name, body.password, body.photo, body.recoveryKey, body.theme)
+      setSessionCookie(response, user.id, user.sessionVersion)
       sendJson(response, 201, { user })
       return
     }
@@ -104,7 +108,7 @@ const server = createServer(async (request, response) => {
     if (route === 'POST /api/auth/login') {
       const body = await readJson(request)
       const user = await authenticateUser(body.name, body.password)
-      setSessionCookie(response, user.id)
+      setSessionCookie(response, user.id, user.sessionVersion)
       sendJson(response, 200, { user })
       return
     }
@@ -115,8 +119,32 @@ const server = createServer(async (request, response) => {
       return
     }
 
+    if (route === 'POST /api/auth/recover') {
+      const body = await readJson(request)
+      await recoverPassword(body.name, body.recoveryKey, body.password, request.socket.remoteAddress)
+      clearSessionCookie(response)
+      sendJson(response, 200, { ok: true })
+      return
+    }
+
+    if (route === 'PUT /api/auth/profile') {
+      const userId = await getUserId(request, response)
+      if (!userId) return
+      const user = await updateProfile(userId, await readJson(request, 360 * 1024))
+      sendJson(response, 200, { user })
+      return
+    }
+
+    if (route === 'PUT /api/auth/theme') {
+      const userId = await getUserId(request, response)
+      if (!userId) return
+      const { theme } = await readJson(request)
+      sendJson(response, 200, { user: await updateTheme(userId, theme) })
+      return
+    }
+
     if (route === 'GET /api/auth/me') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const user = await findSessionUser(userId)
       if (!user) {
@@ -129,14 +157,14 @@ const server = createServer(async (request, response) => {
     }
 
     if (route === 'GET /api/dashboard') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       sendJson(response, 200, await getDashboardData(userId))
       return
     }
 
     if (route === 'GET /api/calendar') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const month = url.searchParams.get('month') || ''
       sendJson(response, 200, await getCalendarData(userId, month))
@@ -144,7 +172,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (route === 'POST /api/accounts') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const account = await createAccount(userId, await readJson(request))
       sendJson(response, 201, account)
@@ -153,7 +181,7 @@ const server = createServer(async (request, response) => {
 
     const accountRoute = /^\/api\/accounts\/(\d+)$/.exec(url.pathname)
     if (accountRoute && ['PUT', 'DELETE'].includes(request.method)) {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const id = Number(accountRoute[1])
       if (!Number.isSafeInteger(id) || id <= 0) {
@@ -170,7 +198,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (route === 'POST /api/subscriptions') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       sendJson(response, 201, await createSubscription(userId, await readJson(request)))
       return
@@ -178,7 +206,7 @@ const server = createServer(async (request, response) => {
 
     const subscriptionRoute = /^\/api\/subscriptions\/(\d+)$/.exec(url.pathname)
     if (subscriptionRoute && ['PUT', 'DELETE'].includes(request.method)) {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const id = Number(subscriptionRoute[1])
       const result = request.method === 'PUT'
@@ -189,7 +217,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (route === 'POST /api/plans') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       sendJson(response, 201, await createPlan(userId, await readJson(request)))
       return
@@ -197,7 +225,7 @@ const server = createServer(async (request, response) => {
 
     const planRoute = /^\/api\/plans\/(\d+)$/.exec(url.pathname)
     if (planRoute && ['PUT', 'DELETE'].includes(request.method)) {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const id = Number(planRoute[1])
       const result = request.method === 'PUT'
@@ -208,7 +236,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && url.pathname === '/api/movements') {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       sendJson(response, 201, await saveMovement(userId, await readJson(request)))
       return
@@ -216,7 +244,7 @@ const server = createServer(async (request, response) => {
 
     const movementRoute = /^\/api\/movements\/(\d+)$/.exec(url.pathname)
     if (movementRoute && ['PUT', 'DELETE'].includes(request.method)) {
-      const userId = getUserId(request, response)
+      const userId = await getUserId(request, response)
       if (!userId) return
       const movementId = Number(movementRoute[1])
       if (!Number.isSafeInteger(movementId) || movementId <= 0) {
@@ -263,8 +291,10 @@ async function start() {
   })
 }
 
-start().catch(async (error) => {
-  console.error(`[DB] No se pudo iniciar: ${error.code || error.message}`)
-  await pool.end()
-  process.exitCode = 1
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  start().catch(async (error) => {
+    console.error(`[DB] No se pudo iniciar: ${error.code || error.message}`)
+    await pool.end()
+    process.exitCode = 1
+  })
+}

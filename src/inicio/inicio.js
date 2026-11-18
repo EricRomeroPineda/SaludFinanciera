@@ -3,6 +3,7 @@ import { apiRequest } from '../api.js'
 import './calendario.js'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
+import { isValidPhoto, themes } from '../../shared/profile.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -44,6 +45,11 @@ class Inicio extends LitElement {
     editingAccount: { state: true },
     newAccountType: { state: true },
     newMovementDefaults: { state: true },
+    photoDraft: { state: true },
+    photoBusy: { state: true },
+    notice: { state: true },
+    savingTheme: { state: true },
+    brokenPhoto: { state: true },
   }
 
   async handleDeleteAccount(account) {
@@ -216,6 +222,19 @@ class Inicio extends LitElement {
     this.movementOperation = 'expense'
     this.editingMovement = null
     this.error = ''
+    this.photoDraft = ''
+    this.photoBusy = false
+    this.notice = ''
+    this.savingTheme = false
+    this.brokenPhoto = false
+  }
+
+  updated(changed) {
+    if (changed.has('user')) {
+      const theme = themes.some(({ id }) => id === this.user?.theme) ? this.user.theme : 'verde'
+      this.setAttribute('data-theme', theme)
+      if (changed.get('user')?.photo !== this.user?.photo) this.brokenPhoto = false
+    }
   }
 
   connectedCallback() {
@@ -245,7 +264,8 @@ class Inicio extends LitElement {
     this.submitting = true
 
     const formData = new FormData(event.currentTarget)
-    const route = this.authMode === 'register' ? '/api/auth/register' : '/api/auth/login'
+    const recovering = this.authMode === 'recover'
+    const route = `/api/auth/${recovering ? 'recover' : this.authMode}`
 
     try {
       const { user } = await apiRequest(route, {
@@ -253,9 +273,17 @@ class Inicio extends LitElement {
         body: JSON.stringify({
           name: formData.get('name'),
           password: formData.get('password'),
+          photo: this.photoDraft,
+          recoveryKey: formData.get('recoveryKey'),
         }),
       })
+      if (recovering) {
+        this.setAuthMode('login')
+        this.notice = 'Contraseña restablecida. Inicia sesión con tu nueva contraseña.'
+        return
+      }
       this.user = user
+      this.photoDraft = user.photo || ''
       this.activeTab = 'overview'
       await this.refreshDashboard()
     } catch (error) {
@@ -272,9 +300,129 @@ class Inicio extends LitElement {
       this.user = null
       this.dashboard = null
       this.authMode = 'login'
+      this.photoDraft = ''
+      this.notice = ''
     } catch (error) {
       this.error = error.message
     }
+  }
+
+  setAuthMode(mode) {
+    this.authMode = mode
+    this.error = ''
+    this.notice = ''
+    this.photoDraft = ''
+    this.renderRoot.querySelector('.auth-form')?.reset()
+  }
+
+  async handlePhotoFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    this.error = ''
+    this.photoBusy = true
+    try {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+        throw new Error('Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.')
+      }
+      const image = await createImageBitmap(file)
+      try {
+        const scale = Math.min(1, 384 / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.width * scale))
+        canvas.height = Math.max(1, Math.round(image.height * scale))
+        const context = canvas.getContext('2d')
+        if (!context) throw new Error('No fue posible procesar la foto.')
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        context.drawImage(image, 0, 0, canvas.width, canvas.height)
+        const photo = canvas.toDataURL('image/jpeg', 0.85)
+        if (!isValidPhoto(photo)) {
+          throw new Error('La imagen procesada supera 256 KB. Selecciona una foto más pequeña.')
+        }
+        this.photoDraft = photo
+        const urlInput = this.renderRoot.querySelector('input[name="photoUrl"]')
+        if (urlInput) urlInput.value = ''
+      } finally {
+        image.close()
+      }
+    } catch (error) {
+      this.error = `No se pudo cargar la foto. ${error.message}`
+    } finally {
+      this.photoBusy = false
+      event.target.value = ''
+    }
+  }
+
+  handlePhotoUrl(event) {
+    this.photoDraft = event.target.value.trim()
+  }
+
+  async handleThemeChange(event) {
+    const theme = event.target.value
+    this.error = ''
+    this.notice = ''
+    this.savingTheme = true
+    try {
+      const { user } = await apiRequest('/api/auth/theme', {
+        method: 'PUT',
+        body: JSON.stringify({ theme }),
+      })
+      this.user = user
+      this.notice = 'Tema guardado.'
+    } catch (error) {
+      this.error = error.message
+      event.target.value = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
+    } finally {
+      this.savingTheme = false
+    }
+  }
+
+  async handleProfileSubmit(event) {
+    event.preventDefault()
+    this.error = ''
+    this.notice = ''
+    this.submitting = true
+    const formData = new FormData(event.currentTarget)
+    try {
+      const { user } = await apiRequest('/api/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          photo: this.photoDraft || this.user.photo,
+          theme: themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde',
+          recoveryKey: formData.get('recoveryKey'),
+          currentPassword: formData.get('currentPassword'),
+        }),
+      })
+      this.user = user
+      this.photoDraft = user.photo
+      event.target.reset()
+      this.notice = 'Perfil guardado.'
+    } catch (error) {
+      this.error = error.message
+    } finally {
+      this.submitting = false
+    }
+  }
+
+  renderPhotoFields() {
+    return html`
+      <label>
+        Foto desde tu dispositivo
+        <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp"
+          ?disabled=${this.photoBusy || this.submitting} @change=${this.handlePhotoFile} />
+        <small>JPG, PNG o WebP, hasta 5 MB. Se reduce antes de guardarse.</small>
+      </label>
+      <label>
+        O URL de una foto
+        <input name="photoUrl" type="url" placeholder="https://ejemplo.com/foto.jpg"
+          maxlength="2048" ?disabled=${this.photoBusy || this.submitting} @input=${this.handlePhotoUrl} />
+        <small>Usa una dirección HTTPS pública.</small>
+      </label>
+      ${this.photoDraft && isValidPhoto(this.photoDraft) ? html`
+        <img class="profile-photo preview-photo" src=${this.photoDraft} alt="Vista previa de tu foto"
+          referrerpolicy="no-referrer" @error=${() => { this.error = 'No se pudo mostrar la foto. Revisa la URL o elige otra imagen.' }} />
+      ` : ''}
+    `
   }
 
   async handleCreateAccount(event) {
@@ -355,6 +503,7 @@ class Inicio extends LitElement {
 
   renderAuth() {
     const registering = this.authMode === 'register'
+    const recovering = this.authMode === 'recover'
 
     return html`
       <main class="auth-page">
@@ -375,13 +524,15 @@ class Inicio extends LitElement {
         <section class="auth-card" aria-labelledby="auth-title">
           <div class="auth-card-heading">
             <p class="eyebrow">${registering ? 'EMPIEZA AQUÍ' : 'QUÉ BUENO VERTE'}</p>
-            <h2 id="auth-title">${registering ? 'Crea tu usuario' : 'Inicia sesión'}</h2>
+            <h2 id="auth-title">${registering ? 'Crea tu usuario' : recovering ? 'Recupera tu acceso' : 'Inicia sesión'}</h2>
             <p>${registering
-              ? 'Registra tu perfil para empezar a organizar tus finanzas.'
-              : 'Entra con el usuario registrado en Salud Financiera.'}</p>
+              ? 'Registra tu usuario, foto y palabra clave para empezar a organizar tus finanzas.'
+              : recovering ? 'Escribe tu usuario, palabra clave y una contraseña nueva.'
+                : 'Entra con el usuario registrado en Salud Financiera.'}</p>
           </div>
 
           ${this.error ? html`<div class="error-message" role="alert">${this.error}</div>` : ''}
+          ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
 
           <form class="auth-form" @submit=${this.handleAuthSubmit}>
             <label>
@@ -389,32 +540,43 @@ class Inicio extends LitElement {
               <input name="name" type="text" maxlength="100" autocomplete="username" required />
             </label>
             <label>
-              Contraseña
+              ${recovering ? 'Nueva contraseña' : 'Contraseña'}
               <input
                 name="password"
                 type="password"
-                autocomplete=${registering ? 'new-password' : 'current-password'}
-                minlength=${registering ? '10' : '1'}
+                autocomplete=${registering || recovering ? 'new-password' : 'current-password'}
+                minlength=${registering || recovering ? '10' : '1'}
                 required
               />
-              ${registering ? html`<small>Usa entre 10 y 72 caracteres.</small>` : ''}
+              ${registering || recovering ? html`<small>Al menos 10 caracteres, máximo 72 bytes.</small>` : ''}
             </label>
-            <button class="primary-button submit-button" type="submit" ?disabled=${this.submitting}>
-              ${this.submitting ? 'Un momento…' : registering ? 'Crear usuario' : 'Entrar'}
+            ${registering ? this.renderPhotoFields() : ''}
+            ${registering || recovering ? html`
+              <label>
+                Palabra clave de recuperación
+                <input name="recoveryKey" type="password" minlength="4" maxlength="72" autocomplete="off" required />
+                <small>Usa una palabra difícil de adivinar. No distingue mayúsculas; no podemos mostrártela después.</small>
+              </label>
+            ` : ''}
+            <button class="primary-button submit-button" type="submit"
+              ?disabled=${this.submitting || this.photoBusy || (registering && !isValidPhoto(this.photoDraft))}>
+              ${this.submitting ? 'Un momento…' : registering ? 'Crear usuario' : recovering ? 'Restablecer contraseña' : 'Entrar'}
               <span aria-hidden="true">→</span>
             </button>
           </form>
 
           <p class="auth-switch">
-            ${registering ? '¿Ya tienes usuario?' : '¿Primera vez aquí?'}
+            ${registering || recovering ? '¿Ya tienes usuario?' : '¿Primera vez aquí?'}
             <button
               type="button"
-              @click=${() => {
-                this.error = ''
-                this.authMode = registering ? 'login' : 'register'
-              }}
-            >${registering ? 'Inicia sesión' : 'Crea tu usuario'}</button>
+              ?disabled=${this.submitting || this.photoBusy}
+              @click=${() => this.setAuthMode(registering || recovering ? 'login' : 'register')}
+            >${registering || recovering ? 'Inicia sesión' : 'Crea tu usuario'}</button>
           </p>
+          ${!registering && !recovering ? html`
+            <p class="auth-switch"><button type="button" ?disabled=${this.submitting}
+              @click=${() => this.setAuthMode('recover')}>Olvidé mi contraseña</button></p>
+          ` : ''}
         </section>
       </main>
     `
@@ -429,6 +591,7 @@ class Inicio extends LitElement {
       ['plans', 'Planes futuros'],
       ['movements', 'Movimientos'],
       ['calendar', 'Calendario'],
+      ['profile', 'Mi perfil'],
     ]
 
     return html`
@@ -438,6 +601,13 @@ class Inicio extends LitElement {
           Salud <span>Financiera</span>
         </a>
         <div class="user-actions">
+          ${this.user.photo && !this.brokenPhoto ? html`
+            <img class="profile-photo" src=${this.user.photo} alt=${`Foto de ${this.user.name}`}
+              referrerpolicy="no-referrer" @error=${() => {
+                this.brokenPhoto = true
+                this.error = 'No se pudo cargar tu foto de perfil. Actualízala en Mi perfil.'
+              }} />
+          ` : html`<span class="profile-photo avatar-placeholder" aria-label="Sin foto de perfil">${this.user.name.slice(0, 1).toUpperCase()}</span>`}
           <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
           <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
         </div>
@@ -453,6 +623,7 @@ class Inicio extends LitElement {
         </div>
 
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
+        ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
 
         <nav class="tabs" aria-label="Secciones financieras">
           ${tabs.map(([id, label]) => html`
@@ -463,6 +634,8 @@ class Inicio extends LitElement {
               @click=${() => {
                 this.activeTab = id
                 this.error = ''
+                this.notice = ''
+                if (id === 'profile') this.photoDraft = this.user.photo || ''
               }}
             >${label}</button>
           `)}
@@ -478,6 +651,7 @@ class Inicio extends LitElement {
   }
 
   renderActiveTab() {
+    if (this.activeTab === 'profile') return this.renderProfile()
     if (!this.dashboard) return html`<div class="empty-state">No se pudieron cargar tus datos.</div>`
     switch (this.activeTab) {
       case 'cards': return this.renderCards()
@@ -488,6 +662,43 @@ class Inicio extends LitElement {
       case 'calendar': return html`<financial-calendar></financial-calendar>`
       default: return this.renderOverview()
     }
+  }
+
+  renderProfile() {
+    const selectedTheme = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
+    return html`
+      <section class="data-card profile-settings">
+        <div class="section-heading"><h2>Mi perfil</h2></div>
+        <label class="theme-label">
+          Tema
+          <select ?disabled=${this.savingTheme || this.submitting}
+            @change=${this.handleThemeChange}>
+            ${themes.map(({ id, label }) => html`
+              <option value=${id}
+                .selected=${id === selectedTheme}
+              >${label}</option>
+            `)}
+          </select>
+          <small>${this.savingTheme ? 'Guardando tema…' : 'Cada cambio se guarda automáticamente en tu usuario.'}</small>
+        </label>
+        <form class="auth-form" @submit=${this.handleProfileSubmit}>
+          ${this.renderPhotoFields()}
+          <label>
+            Nueva palabra clave de recuperación (opcional)
+            <input name="recoveryKey" type="password" minlength="4" maxlength="72" autocomplete="off" />
+          </label>
+          <label>
+            Contraseña actual (necesaria si cambias la palabra clave)
+            <input name="currentPassword" type="password" autocomplete="current-password" />
+          </label>
+          <small>Los usuarios existentes deben guardar una palabra clave aquí antes de poder recuperar su contraseña.</small>
+          <button class="primary-button" type="submit"
+            ?disabled=${this.submitting || this.photoBusy || this.savingTheme || !isValidPhoto(this.photoDraft)}>
+            ${this.submitting ? 'Guardando…' : 'Guardar perfil'}
+          </button>
+        </form>
+      </section>
+    `
   }
 
   renderOverview() {

@@ -15,7 +15,7 @@
   .auth-card { max-width: none; justify-self: stretch; padding: 24px; }
   .auth-card-heading h2 { font-size: 25px; }
   .app-header, .dashboard { width: calc(100% - 36px); }
-  .app-header { height: 68px; }
+  .app-header { min-height: 68px; height: auto; flex-wrap: wrap; gap: 12px; padding-block: 14px; }
   .brand { gap: 6px; font-size: 14px; }
   .brand-icon { width: 30px; height: 30px; }
   .user-actions { gap: 9px; }
