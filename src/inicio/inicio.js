@@ -51,6 +51,7 @@ class Inicio extends LitElement {
     notice: { state: true },
     savingTheme: { state: true },
     brokenPhoto: { state: true },
+    appearance: { state: true },
   }
 
   async handleDeleteAccount(account) {
@@ -228,9 +229,21 @@ class Inicio extends LitElement {
     this.notice = ''
     this.savingTheme = false
     this.brokenPhoto = false
+    this.appearance = null
+  }
+
+  get effectiveAppearance() {
+    return this.appearance || (this.user?.theme === 'oscuro' ? 'night' : 'day')
+  }
+
+  toggleAppearance() {
+    this.appearance = this.effectiveAppearance === 'night' ? 'day' : 'night'
   }
 
   updated(changed) {
+    if (changed.has('user') || changed.has('appearance')) {
+      this.setAttribute('data-appearance', this.effectiveAppearance)
+    }
     if (changed.has('user')) {
       const theme = themes.some(({ id }) => id === this.user?.theme) ? this.user.theme : 'verde'
       this.setAttribute('data-theme', theme)
@@ -248,6 +261,7 @@ class Inicio extends LitElement {
       const { user } = await apiRequest('/api/auth/me')
       this.user = user
       this.activeSection = 'menu'
+      this.appearance = null
       await this.refreshDashboard()
     } catch (error) {
       if (error.status !== 401) this.error = error.message
@@ -286,6 +300,7 @@ class Inicio extends LitElement {
         return
       }
       this.user = user
+      this.appearance = null
       this.photoDraft = user.photo || ''
       this.activeTab = 'overview'
       this.activeSection = 'menu'
@@ -302,6 +317,7 @@ class Inicio extends LitElement {
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' })
       this.user = null
+      this.appearance = null
       this.dashboard = null
       this.authMode = 'login'
       this.activeSection = 'menu'
@@ -336,6 +352,7 @@ class Inicio extends LitElement {
         body: JSON.stringify({ theme }),
       })
       this.user = user
+      this.appearance = null
       this.notice = 'Tema guardado.'
     } catch (error) {
       this.error = error.message
@@ -483,6 +500,7 @@ class Inicio extends LitElement {
           Salud <span>Financiera</span>
         </a>
         <div class="user-actions">
+          ${this.renderAppearanceToggle()}
           <button class="user-profile-button" type="button" aria-label=${`Abrir perfil de ${this.user.name}`}
             title="Mi perfil" @click=${() => this.openFinancialSection('profile')}>
             <img class="profile-photo"
@@ -498,6 +516,19 @@ class Inicio extends LitElement {
           <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
         </div>
       </header>
+    `
+  }
+
+  renderAppearanceToggle() {
+    const night = this.effectiveAppearance === 'night'
+    const label = night ? 'Activar vista de día' : 'Activar vista de noche'
+    return html`
+      <button class="quiet-button appearance-toggle" type="button" aria-label=${label}
+        title=${label} aria-pressed=${String(night)} @click=${this.toggleAppearance}>
+        ${night ? html`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></svg>`
+          : html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z" /></svg>`}
+        <span>${night ? 'Día' : 'Noche'}</span>
+      </button>
     `
   }
 
@@ -546,6 +577,7 @@ class Inicio extends LitElement {
         </section>
 
         <section class="auth-card" aria-labelledby="auth-title">
+          <div class="auth-appearance">${this.renderAppearanceToggle()}</div>
           <div class="auth-card-heading">
             <p class="eyebrow">${registering ? 'EMPIEZA AQUÍ' : 'QUÉ BUENO VERTE'}</p>
             <h2 id="auth-title">${registering ? 'Crea tu usuario' : recovering ? 'Recupera tu acceso' : 'Inicia sesión'}</h2>

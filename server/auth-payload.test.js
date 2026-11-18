@@ -101,7 +101,7 @@ test('restored sessions land on the menu', async (t) => {
 })
 
 test('the shared header uses the saved photo or a default image instead of an initial', () => {
-  const state = { user: { name: 'Eric', photo }, brokenPhoto: false }
+  const state = { user: { name: 'Eric', photo }, brokenPhoto: false, renderAppearanceToggle: () => '' }
   const header = handlers.renderHeader.call(state)
   assert.ok(header.values.includes(photo))
   assert.ok(header.strings.join('').includes('<img class="profile-photo"'))
@@ -121,11 +121,27 @@ test('the profile beside logout displays the current user name and corresponding
     { name: 'Eric', photo: 'https://example.com/eric.jpg' },
     { name: 'Ana', photo: 'https://example.com/ana.jpg' },
   ]) {
-    const header = handlers.renderHeader.call({ user, brokenPhoto: false })
+    const header = handlers.renderHeader.call({ user, brokenPhoto: false, renderAppearanceToggle: () => '' })
     const markup = header.strings.join('')
     assert.ok(header.values.includes(user.photo))
     assert.ok(header.values.includes(user.name))
     assert.ok(header.values.includes(`Abrir perfil de ${user.name}`))
     assert.match(markup, /user-profile-button[\s\S]*profile-photo[\s\S]*user-greeting[\s\S]*<\/button>[\s\S]*Cerrar sesión/)
+  }
+})
+
+test('day and night change appearance without modifying the saved color theme', () => {
+  const effectiveAppearance = Object.getOwnPropertyDescriptor(handlers, 'effectiveAppearance').get
+  for (const theme of ['verde', 'azul', 'violeta', 'oscuro']) {
+    const state = { user: { theme }, appearance: null }
+    Object.defineProperty(state, 'effectiveAppearance', { get: () => effectiveAppearance.call(state) })
+    const initial = theme === 'oscuro' ? 'night' : 'day'
+    assert.equal(state.effectiveAppearance, initial)
+    handlers.toggleAppearance.call(state)
+    assert.equal(state.effectiveAppearance, initial === 'night' ? 'day' : 'night')
+    assert.equal(state.user.theme, theme)
+    handlers.toggleAppearance.call(state)
+    assert.equal(state.effectiveAppearance, initial)
+    assert.equal(state.user.theme, theme)
   }
 })
