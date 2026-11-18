@@ -14,6 +14,8 @@ El backend verifica la conexión al arrancar. También puedes comprobarla en `ht
 
 ## Perfil, temas y recuperación
 
+La barra de secciones no muestra Calendario ni Mi perfil para ahorrar espacio. El perfil sigue disponible al pulsar el nombre o la foto del usuario en la barra superior.
+
 Al iniciar sesión o restaurar una sesión se muestra un **Menú principal** con la opción **Salud financiera**, que abre el panel existente (Panorama, Tarjetas y las demás pestañas). Desde el panel se puede volver al menú. La barra superior agrupa la foto y el nombre del usuario autenticado junto a **Cerrar sesión** en ambas pantallas; al pulsar el perfil se abre **Mi perfil**. Si falta la URL o no carga, se muestra una imagen de perfil genérica, no una inicial.
 
 Al registrarse se solicita la URL HTTPS de una foto (máximo 500 caracteres) y una palabra clave de recuperación. Solo se guarda la URL en `foto_perfil VARCHAR(500)`, no se suben archivos ni se admiten imágenes base64. La URL debe seguir disponible públicamente. La foto aparece junto al nombre al iniciar sesión y al restaurar la sesión. No es necesario ampliar el campo de foto; si ya lo ampliaste, puede conservarse sin cambios.
@@ -30,12 +32,18 @@ El registro y **Guardar perfil** leen la URL directamente del formulario y la gu
 
 ## Carpetas principales
 
-- `src/inicio`: registro/inicio de sesión y panel web.
+- `saludFinanciera/`: módulo financiero completo, separado del login y del orquestador.
+- `saludFinanciera/frontend/`: componente `salud-financiera`, flujo financiero, estilos propios y calendario conservado sin pestaña visible.
+- `saludFinanciera/server/`: rutas y consultas de panorama/cuentas, movimientos, suscripciones, planes y calendario. Conserva las URL `/api/dashboard`, `/api/accounts`, `/api/movements`, `/api/subscriptions`, `/api/plans` y `/api/calendar`.
+- `src/inicio/inicio.js`: orquestador de menú, login/registro, perfil y barra de usuario; monta el módulo financiero.
+- `src/inicio/appearance.css`: paletas compartidas y vista Día/Noche; sus variables se heredan en los módulos.
 - `src/api.js`: cliente HTTP del frontend.
+- `server/index.js`: orquestador HTTP; autentica y delega las rutas financieras al módulo.
 - `server/auth.js`: registro, autenticación y sesiones.
-- `server/dashboard.js`: lecturas privadas por usuario y gestión de cuentas.
-- `server/movements.js`: registro, edición y eliminación transaccional de movimientos.
-- `server/modules.js`: gestión de suscripciones y planes futuros.
 - `server/db.js`: pool MySQL configurado con variables de entorno.
 
-Las contraseñas de usuarios nuevos se guardan con bcrypt. Cada consulta financiera usa el `id` del usuario autenticado. El panel muestra cuentas, tarjetas, suscripciones, planes, movimientos y un calendario mensual con sus reportes. Las tarjetas usan cuentas cuyo tipo contiene “tarjeta” o “crédito”; desde su sección se consultan límite, saldo disponible y fechas de pago, y se puede iniciar un registro de pago como transferencia. Las cuentas se pueden editar y eliminar si no tienen movimientos asociados; su saldo disponible se cambia únicamente mediante movimientos para preservar el historial. El esquema actual no incluye tablas para deudas ni configuración de sugerencias, por lo que esas funciones no se representan como datos persistidos.
+La barra financiera muestra **Panorama, Tarjetas, Planes futuros, Registro de movimientos, Suscripciones y Deudores**. Deudores es un estado vacío preparado para desarrollo posterior: no registra ni guarda datos. Cuentas ya no ocupa una pestaña; su gestión se conserva desde **Panorama → Cuentas → Ver todas** y desde la creación de tarjetas.
+
+Las contraseñas de usuarios nuevos se guardan con bcrypt. Cada consulta financiera usa el `id` del usuario autenticado. Los datos se cargan al entrar al módulo, no al iniciar sesión ni al abrir el perfil. Las tarjetas usan cuentas cuyo tipo contiene “tarjeta” o “crédito”; desde su sección se consultan límite, saldo disponible y fechas de pago, y se puede iniciar un registro de pago como transferencia. Las cuentas se pueden editar y eliminar si no tienen movimientos asociados; su saldo disponible se cambia únicamente mediante movimientos para preservar el historial.
+
+Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `server/` y `src/`, y reinicia el backend: las consultas financieras ya no están en los archivos antiguos de `server/`.

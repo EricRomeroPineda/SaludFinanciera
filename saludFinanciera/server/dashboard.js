@@ -1,4 +1,4 @@
-import { pool } from './db.js'
+import { pool } from '../../server/db.js'
 
 function invalid(message) {
   const error = new Error(message)

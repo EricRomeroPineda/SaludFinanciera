@@ -1,5 +1,5 @@
 import { LitElement, html, unsafeCSS } from 'lit'
-import { apiRequest } from '../api.js'
+import { apiRequest } from '../../src/api.js'
 import calendarStyles from './calendario.css?inline'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })

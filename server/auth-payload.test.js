@@ -145,3 +145,28 @@ test('day and night change appearance without modifying the saved color theme', 
     assert.equal(state.user.theme, theme)
   }
 })
+
+test('finance module owns its navigation and debtor placeholder outside the orchestrator', () => {
+  const Finance = components.get('salud-financiera')
+  assert.ok(Finance)
+  assert.equal(handlers.renderMovements, undefined)
+  assert.equal(typeof Finance.prototype.renderMovements, 'function')
+  const state = {
+    activeTab: 'debtors',
+    renderDebtors: () => 'debtors-placeholder',
+  }
+  const template = Finance.prototype.render.call(state)
+  const text = (value) => Array.isArray(value) ? value.map(text).join(' ')
+    : value?.strings ? `${value.strings.join(' ')} ${value.values.map(text).join(' ')}`
+      : typeof value === 'string' ? value : ''
+  const markup = text(template)
+  for (const label of ['Panorama', 'Tarjetas', 'Planes futuros', 'Registro de movimientos', 'Suscripciones', 'Deudores']) {
+    assert.ok(markup.includes(label))
+  }
+  assert.ok(markup.includes('debtors-placeholder'))
+  assert.ok(!markup.includes('>Cuentas<'))
+  assert.ok(!markup.includes('Calendario'))
+  assert.ok(!markup.includes('Mi perfil'))
+  const empty = text(Finance.prototype.renderDebtors.call({}))
+  assert.ok(empty.includes('Todavía no permite registrar ni guardar deudores.'))
+})
