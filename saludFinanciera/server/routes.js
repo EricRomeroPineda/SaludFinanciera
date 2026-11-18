@@ -5,7 +5,7 @@ import {
   getDashboardData,
   updateAccount,
 } from './dashboard.js'
-import { deleteMovement, saveMovement } from './movements.js'
+import { deleteMovement, getRelatedMovements, saveMovement } from './movements.js'
 import {
   createPlan,
   deletePlan,
@@ -73,6 +73,15 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
       ? await updatePlan(userId, id, await readJson(request))
       : await deletePlan(userId, id)
     sendJson(response, 200, result)
+    return true
+  }
+
+  if (route === 'GET /api/movements') {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    sendJson(response, 200, await getRelatedMovements(
+      userId, url.searchParams.get('relation'), url.searchParams.get('id'),
+    ))
     return true
   }
 

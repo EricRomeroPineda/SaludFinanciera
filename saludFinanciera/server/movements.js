@@ -14,6 +14,38 @@ function normalizeId(value, label) {
   return id
 }
 
+export async function getRelatedMovements(userId, relation, value) {
+  if (!['account', 'subscription'].includes(relation)) {
+    throw invalid('La relación de movimientos no es válida.')
+  }
+  const id = normalizeId(value, 'El identificador')
+  if (!id) throw invalid('El identificador es obligatorio.')
+  const condition = relation === 'account'
+    ? '(m.id_cuenta_origen = ? OR m.id_cuenta_destino = ?)'
+    : 'm.id_suscripcion = ?'
+  const [movements] = await pool.execute(
+    `SELECT m.id, m.monto AS amount,
+            DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
+            cat.nombre AS category,
+            origin.nombre AS originAccount, destination.nombre AS destinationAccount,
+            sub.nombre AS subscriptionName,
+            m.id_cuenta_origen AS originAccountId,
+            m.id_cuenta_destino AS destinationAccountId
+     FROM movimiento AS m
+     LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
+     LEFT JOIN cuenta AS origin
+       ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
+     LEFT JOIN cuenta AS destination
+       ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+     LEFT JOIN suscripciones AS sub
+       ON sub.id = m.id_suscripcion AND sub.id_usuario = m.id_usuario
+     WHERE m.id_usuario = ? AND ${condition}
+     ORDER BY m.fecha DESC, m.id DESC`,
+    relation === 'account' ? [userId, id, id] : [userId, id],
+  )
+  return { movements }
+}
+
 function normalizeAmount(value) {
   const text = String(value ?? '').trim()
   if (!/^\d{1,13}(?:\.\d{1,2})?$/.test(text)) {

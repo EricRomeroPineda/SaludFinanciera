@@ -4,6 +4,7 @@ import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import './calendario.js'
+import './related-movements.js'
 import '../suscripciones/suscripciones.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
@@ -30,6 +31,7 @@ class SaludFinanciera extends LitElement {
   static properties = {
     dashboard: { state: true },
     activeTab: { state: true },
+    selectedCard: { state: true },
     loading: { state: true },
     submitting: { state: true },
     showAccountForm: { state: true },
@@ -48,6 +50,7 @@ class SaludFinanciera extends LitElement {
     super()
     this.dashboard = null
     this.activeTab = 'overview'
+    this.selectedCard = null
     this.loading = true
     this.submitting = false
     this.showAccountForm = false
@@ -92,8 +95,8 @@ class SaludFinanciera extends LitElement {
     const tabs = [
       ['overview', 'Panorama'],
       ['cards', 'Tarjetas'],
+      ['movements', 'Movimiento'],
       ['plans', 'Planes futuros'],
-      ['movements', 'Registro de movimientos'],
       ['subscriptions', 'Suscripciones'],
       ['debtors', 'Deudores'],
     ]
@@ -446,7 +449,9 @@ class SaludFinanciera extends LitElement {
         ${cards.length
           ? html`<div class="card-grid">
               ${cards.map((card) => html`
-                <article class="credit-card">
+                <article class="credit-card" @click=${(event) => {
+                  if (!event.target.closest('button')) this.selectedCard = card
+                }}>
                   <div class="credit-card-heading">
                     <div><p>${card.type}</p><h3>${card.name}</h3></div>
                     <span class="card-chip" aria-hidden="true">▦</span>
@@ -466,6 +471,9 @@ class SaludFinanciera extends LitElement {
                     </div>
                   </dl>
                   <div class="card-actions">
+                    <button class="text-button" type="button"
+                      aria-pressed=${this.selectedCard?.id === card.id ? 'true' : 'false'}
+                      @click=${() => { this.selectedCard = card }}>Ver movimientos</button>
                     <button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>
                     <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
                     <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteAccount(card)}>Eliminar</button>
@@ -479,6 +487,10 @@ class SaludFinanciera extends LitElement {
               <p>Agrega una como “Tarjeta de crédito” para registrar su límite y fechas de pago.</p>
             </div>
           `}
+        ${cards.some((card) => card.id === this.selectedCard?.id) ? html`
+          <finance-related-movements relation="account"
+            .relationId=${this.selectedCard.id} .label=${this.selectedCard.name}></finance-related-movements>
+        ` : ''}
       </section>
     `
   }

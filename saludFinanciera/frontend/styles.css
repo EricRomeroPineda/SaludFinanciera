@@ -22,7 +22,8 @@
 .row-actions { display: flex; align-items: center; gap: 12px; }
 .row-actions .delete-button { font-size: 11px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 15px; }
-.credit-card { overflow: hidden; padding: 19px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(140deg, var(--surface), var(--soft)); }
+.credit-card { overflow: hidden; padding: 19px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(140deg, var(--surface), var(--soft)); cursor: pointer; }
+.credit-card:has([aria-pressed="true"]) { border-color: var(--green); outline: 1px solid var(--green); }
 .credit-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .credit-card-heading p { margin: 0 0 5px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; }
 .credit-card-heading h3 { margin: 0; color: var(--ink); font-size: 16px; }

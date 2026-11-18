@@ -1,5 +1,6 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
+import '../frontend/related-movements.js'
 import { apiRequest } from '../../src/api.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from '../frontend/styles.css?inline'
@@ -23,6 +24,7 @@ class Subscriptions extends LitElement {
     formCost: { state: true },
     today: { state: true },
     pendingDelete: { state: true },
+    selectedSubscription: { state: true },
   }
 
   constructor() {
@@ -38,6 +40,7 @@ class Subscriptions extends LitElement {
     this.formCost = ''
     this.today = new Date()
     this.pendingDelete = null
+    this.selectedSubscription = null
   }
 
   connectedCallback() {
@@ -253,7 +256,9 @@ class Subscriptions extends LitElement {
           : this.items.length ? html`
             <div class="subscription-grid">
               ${this.items.map((item) => html`
-                <article class="subscription-card">
+                <article class="subscription-card" @click=${(event) => {
+                  if (!event.target.closest('button')) this.selectedSubscription = item
+                }}>
                   <div class="subscription-heading">
                     <span class="subscription-type">${item.type === 'servicio' ? 'Servicio' : 'Suscripción'}</span>
                     <span class="status-tag ${item.status.toLowerCase() === 'activa' ? '' : 'inactive'}">${item.status}</span>
@@ -273,6 +278,9 @@ class Subscriptions extends LitElement {
                       : item.paymentType === 'automatico' ? 'Automático (domiciliado)' : 'Sin definir'}</dd></div>
                   </dl>
                   <div class="subscription-actions">
+                    <button class="text-button" type="button"
+                      aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}
+                      @click=${() => { this.selectedSubscription = item }}>Ver movimientos</button>
                     <button class="text-button" type="button" ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>
                     <button class="trash-button" type="button" ?disabled=${this.submitting}
                       aria-label=${`Eliminar ${item.name}`} title="Eliminar suscripción" @click=${() => this.requestDelete(item)}>
@@ -285,6 +293,10 @@ class Subscriptions extends LitElement {
               `)}
             </div>
           ` : html`<p class="empty-state">No tienes suscripciones registradas. Usa «Agregar suscripción» para crear la primera.</p>`}
+        ${this.items.some((item) => item.id === this.selectedSubscription?.id) ? html`
+          <finance-related-movements relation="subscription"
+            .relationId=${this.selectedSubscription.id} .label=${this.selectedSubscription.name}></finance-related-movements>
+        ` : ''}
         ${!this.loading && this.error ? html`<button class="quiet-button" type="button" ?disabled=${this.submitting} @click=${this.load}>Actualizar lista</button>` : ''}
         <dialog class="delete-dialog" aria-labelledby="delete-subscription-title"
           aria-describedby="delete-subscription-description"
