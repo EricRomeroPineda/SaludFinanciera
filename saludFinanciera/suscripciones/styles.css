@@ -30,7 +30,9 @@
 .confirm-delete:hover:not(:disabled) { background: var(--negative); }
 .billing-indicator { display: grid; gap: 6px; margin: 0 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--soft); color: var(--ink); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .billing-indicator small { color: var(--muted); }
-.billing-soon { border-color: var(--green); }
+.billing-countdown { padding: 14px 16px; border: 1px solid var(--transfer); border-left-width: 5px; background: var(--transfer-bg); color: var(--transfer); }
+.billing-countdown strong { font-size: 17px; font-weight: 800; }
+.billing-soon { border-color: var(--negative); background: var(--negative-bg); color: var(--negative); }
 .billing-today { border: 2px solid var(--negative); background: var(--negative-bg); color: var(--negative); font-size: 15px; }
 @media (max-width: 420px) {
   .subscription-card { padding: 18px; }

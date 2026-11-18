@@ -228,7 +228,7 @@ class Subscriptions extends LitElement {
     if (days == null) return html`<p class="billing-indicator">Configura el día de cobro para ver cuánto falta.</p>`
     const longerPeriod = !['semanal', 'mensual'].includes(String(item.frequency).trim().toLowerCase())
     return html`
-      <div class="billing-indicator ${days === 0 ? 'billing-today' : days <= 2 ? 'billing-soon' : ''}"
+      <div class="billing-indicator billing-countdown ${days === 0 ? 'billing-today' : days <= 2 ? 'billing-soon' : ''}"
         role="status">
         <strong>${days === 0 ? '¡Hoy es día de pagar!' : days === 1 ? 'Falta 1 día para pagar' : `Faltan ${days} días para pagar`}</strong>
         ${longerPeriod ? html`<small>Referencia al próximo día configurado; no incluye el mes de inicio del periodo.</small>` : ''}
@@ -263,7 +263,9 @@ class Subscriptions extends LitElement {
                   ${this.renderBillingIndicator(item)}
                   <dl>
                     <div class="annual-cost"><dt>Costo estimado por 1 año</dt><dd>${item.annualCost == null ? 'Revisa la frecuencia' : money.format(item.annualCost)}</dd></div>
-                    <div><dt>Costo mensual</dt><dd>${item.monthlyCost == null ? 'Sin calcular' : money.format(item.monthlyCost)}</dd></div>
+                    ${String(item.frequency).trim().toLowerCase() !== 'mensual' ? html`
+                      <div><dt>Costo mensual</dt><dd>${item.monthlyCost == null ? 'Sin calcular' : money.format(item.monthlyCost)}</dd></div>
+                    ` : ''}
                     <div><dt>Monetizado hasta el momento</dt><dd>${money.format(item.monetized)}</dd></div>
                     <div><dt>${isWeekly(item.frequency) ? 'Día de la semana' : 'Día de cobro'}</dt>
                       <dd>${item.billingDay == null ? 'Sin definir' : isWeekly(item.frequency) ? weekdays[Number(item.billingDay) - 1] || 'Sin definir' : `Día ${item.billingDay}`}</dd></div>

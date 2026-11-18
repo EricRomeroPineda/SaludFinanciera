@@ -59,6 +59,8 @@ El indicador calcula los días desde la fecha local actual: semanal busca la sig
 
 **Monetizado** no se captura manualmente: es la suma de `movimiento.monto` donde `movimiento.id_suscripcion = suscripciones.id` y ambos registros pertenecen al mismo usuario. Se incluyen todos los movimientos relacionados, sin limitarse a los 250 del historial. Las lecturas calculan el total incluso para movimientos anteriores; al crear, editar, reasignar o eliminar un movimiento se sincroniza también `suscripciones.monetizado` en la misma transacción, actualizando tanto la suscripción anterior como la nueva si cambia la relación. Una suscripción nueva inicia en cero. Usa **Registro de movimientos** para vincular un movimiento a una suscripción.
 
+Las tarjetas de frecuencia mensual omiten el detalle «Costo mensual», ya que repite el costo por cobro. El aviso de días faltantes tiene un contenedor y texto destacados en azul, o en color de alerta cuando faltan dos días o menos, adaptados al modo día/noche.
+
 Para frecuencia semanal, el costo mensual usa **costo por cobro × 4 semanas**, mientras la estimación anual conserva **costo por cobro × 52 semanas**. Por eso el anual semanal no equivale al mensual multiplicado por 12.
 
 Las tarjetas permiten editar y muestran un botón de papelera que abre un modal de confirmación antes de eliminar; si existen movimientos asociados se cancela la suscripción en lugar de eliminar su historial. El flujo conserva los campos y las tablas existentes, sin migraciones adicionales. Al desplegar, actualiza tanto `saludFinanciera/suscripciones/` como los archivos del módulo financiero que la integran y reinicia el backend.
