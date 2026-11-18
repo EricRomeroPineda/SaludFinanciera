@@ -4,6 +4,7 @@ import './calendario.js'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import { isValidPhoto, themes } from '../../shared/profile.js'
+import defaultAvatar from '../assets/default-avatar.svg'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -31,6 +32,7 @@ class Inicio extends LitElement {
     dashboard: { state: true },
     authMode: { state: true },
     activeTab: { state: true },
+    activeSection: { state: true },
     loading: { state: true },
     submitting: { state: true },
     showAccountForm: { state: true },
@@ -207,6 +209,7 @@ class Inicio extends LitElement {
     this.dashboard = null
     this.authMode = 'login'
     this.activeTab = 'overview'
+    this.activeSection = 'menu'
     this.loading = true
     this.submitting = false
     this.showAccountForm = false
@@ -244,6 +247,7 @@ class Inicio extends LitElement {
     try {
       const { user } = await apiRequest('/api/auth/me')
       this.user = user
+      this.activeSection = 'menu'
       await this.refreshDashboard()
     } catch (error) {
       if (error.status !== 401) this.error = error.message
@@ -284,6 +288,7 @@ class Inicio extends LitElement {
       this.user = user
       this.photoDraft = user.photo || ''
       this.activeTab = 'overview'
+      this.activeSection = 'menu'
       await this.refreshDashboard()
     } catch (error) {
       this.error = error.message
@@ -299,6 +304,7 @@ class Inicio extends LitElement {
       this.user = null
       this.dashboard = null
       this.authMode = 'login'
+      this.activeSection = 'menu'
       this.photoDraft = ''
       this.notice = ''
     } catch (error) {
@@ -455,7 +461,66 @@ class Inicio extends LitElement {
       return html`<main class="loading-screen"><span class="spinner"></span><p>Cargando Salud Financiera…</p></main>`
     }
 
-    return this.user ? this.renderDashboard() : this.renderAuth()
+    if (!this.user) return this.renderAuth()
+    return this.activeSection === 'menu' ? this.renderMenu() : this.renderDashboard()
+  }
+
+  openFinancialSection(tab = 'overview') {
+    this.activeSection = 'finance'
+    this.activeTab = tab
+    this.error = ''
+    this.notice = ''
+    if (tab === 'profile') this.photoDraft = this.user.photo || ''
+  }
+
+  renderHeader() {
+    return html`
+      <header class="app-header">
+        <a class="brand" href="/" aria-label="Salud Financiera">
+          <span class="brand-icon" aria-hidden="true">$</span>
+          Salud <span>Financiera</span>
+        </a>
+        <div class="user-actions">
+          <button class="avatar-button" type="button" aria-label="Abrir mi perfil"
+            title="Mi perfil" @click=${() => this.openFinancialSection('profile')}>
+            <img class="profile-photo"
+              src=${this.user.photo && !this.brokenPhoto ? this.user.photo : defaultAvatar}
+              alt=${`Foto de ${this.user.name}`} referrerpolicy="no-referrer"
+              @error=${() => {
+                if (!this.user.photo || this.brokenPhoto) return
+                this.brokenPhoto = true
+                this.error = 'No se pudo cargar tu foto de perfil. Revisa que la URL sea pública y apunte a una imagen en Mi perfil.'
+              }} />
+          </button>
+          <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
+          <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
+        </div>
+      </header>
+    `
+  }
+
+  renderMenu() {
+    return html`
+      ${this.renderHeader()}
+      <main class="dashboard">
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">TU ESPACIO</p>
+            <h1>Menú principal</h1>
+            <p>Selecciona la sección que quieres consultar.</p>
+          </div>
+        </div>
+        ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
+        <nav class="section-menu" aria-label="Menú principal">
+          <button class="section-menu-card" type="button" @click=${() => this.openFinancialSection()}>
+            <span class="brand-icon" aria-hidden="true">$</span>
+            <strong>Salud financiera</strong>
+            <span>Consulta tu panorama, tarjetas, cuentas y movimientos.</span>
+            <span class="section-menu-link">Entrar →</span>
+          </button>
+        </nav>
+      </main>
+    `
   }
 
   renderAuth() {
@@ -552,25 +617,13 @@ class Inicio extends LitElement {
     ]
 
     return html`
-      <header class="app-header">
-        <a class="brand" href="/" aria-label="Salud Financiera">
-          <span class="brand-icon" aria-hidden="true">$</span>
-          Salud <span>Financiera</span>
-        </a>
-        <div class="user-actions">
-          ${this.user.photo && !this.brokenPhoto ? html`
-            <img class="profile-photo" src=${this.user.photo} alt=${`Foto de ${this.user.name}`}
-              referrerpolicy="no-referrer" @error=${() => {
-                this.brokenPhoto = true
-                this.error = 'No se pudo cargar tu foto de perfil. Actualízala en Mi perfil.'
-              }} />
-          ` : html`<span class="profile-photo avatar-placeholder" aria-label="Sin foto de perfil">${this.user.name.slice(0, 1).toUpperCase()}</span>`}
-          <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
-          <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
-        </div>
-      </header>
+      ${this.renderHeader()}
 
       <main class="dashboard">
+        <button class="quiet-button back-to-menu" type="button" @click=${() => {
+          this.activeSection = 'menu'
+          this.notice = ''
+        }}>← Menú principal</button>
         <div class="dashboard-heading">
           <div>
             <p class="eyebrow">TU ESPACIO FINANCIERO</p>

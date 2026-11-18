@@ -254,7 +254,15 @@ td strong { color: var(--ink); }
 .empty-state { margin: 0; padding: 28px 16px; color: var(--muted); text-align: center; font-size: 12px; line-height: 1.6; }
 
 .profile-photo { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); }
-.avatar-placeholder { display: grid; place-items: center; background: var(--soft); color: var(--green); font-weight: 700; }
+.avatar-button { display: flex; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.avatar-button:hover, .avatar-button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+.back-to-menu { margin-bottom: 24px; }
+.section-menu { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px)); gap: 18px; }
+.section-menu-card { display: grid; justify-items: start; gap: 16px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); text-align: left; font: inherit; }
+.section-menu-card:hover, .section-menu-card:focus-visible { border-color: var(--green); background: var(--soft); }
+.section-menu-card > strong { font-size: 21px; }
+.section-menu-card > span:not(.brand-icon) { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.section-menu-card > .section-menu-link { color: var(--green); font-weight: 700; }
 .preview-photo { width: 80px; height: 80px; }
 .profile-settings { max-width: 580px; }
 .theme-label { display: grid; gap: 8px; margin-bottom: 24px; font-size: 13px; }
