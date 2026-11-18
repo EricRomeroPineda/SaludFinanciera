@@ -272,7 +272,7 @@ class Inicio extends LitElement {
       name: formData.get('name'),
       password: formData.get('password'),
     }
-    if (this.authMode === 'register') payload.photo = this.photoDraft
+    if (this.authMode === 'register') payload.photo = String(formData.get('photoUrl') || '').trim()
     if (this.authMode !== 'login') payload.recoveryKey = formData.get('recoveryKey')
 
     try {
@@ -354,7 +354,7 @@ class Inicio extends LitElement {
       const { user } = await apiRequest('/api/auth/profile', {
         method: 'PUT',
         body: JSON.stringify({
-          photo: this.photoDraft || this.user.photo,
+          photo: String(formData.get('photoUrl') || '').trim(),
           theme: themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde',
           recoveryKey: formData.get('recoveryKey'),
           currentPassword: formData.get('currentPassword'),

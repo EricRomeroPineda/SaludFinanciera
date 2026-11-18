@@ -23,7 +23,7 @@ const photo = 'https://example.com/avatar.png'
 for (const mode of ['login', 'register', 'recover']) {
   test(`${mode} sends only its required fields with a photo URL draft`, async (t) => {
     const fields = new Map([
-      ['name', 'Ana'], ['password', 'long-test-password'], ['recoveryKey', 'private-key'],
+      ['name', 'Ana'], ['password', 'long-test-password'], ['recoveryKey', 'private-key'], ['photoUrl', photo],
     ])
     t.mock.method(globalThis, 'FormData', function () { return fields })
     let request

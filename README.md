@@ -22,6 +22,8 @@ En **Mi perfil** se puede actualizar la foto y seleccionar **Verde, Azul, Violet
 
 La tabla `usuario` utiliza los campos existentes `id`, `nombre`, `password_hash`, `recuperacion_token_hash`, `recuperacion_expira`, `foto_perfil` y `tema`. Las solicitudes JSON tienen un límite de 16 KB; el login solo envía usuario y contraseña, sin reenviar la foto.
 
+El registro y **Guardar perfil** leen la URL directamente del formulario y la guardan en `usuario.foto_perfil`. `npm run server` recarga el backend cuando cambia su código. Si aparece «Ruta no encontrada» en una operación de perfil, detén el proceso anterior y vuelve a ejecutar `npm run server` desde este proyecto.
+
 **Olvidé mi contraseña** solicita usuario, palabra clave y una contraseña nueva. La palabra clave no distingue mayúsculas y se guarda con bcrypt en `recuperacion_token_hash`, nunca en texto claro; `recuperacion_expira` queda en `NULL` al configurarla porque es una clave permanente, no un enlace temporal. Los valores con expiración vencida o hashes de tokens antiguos no sirven como palabra clave; configura una desde **Mi perfil**. Usa una frase difícil de adivinar y distinta de tu contraseña. Las sesiones están vinculadas mediante HMAC al hash de contraseña, por lo que un restablecimiento invalida las sesiones anteriores sin requerir otra columna; las sesiones del formato anterior deberán iniciar sesión de nuevo. La recuperación limita los intentos por usuario e IP durante 15 minutos; estos contadores viven en el proceso del backend y requieren un almacén compartido si se despliega más de una instancia.
 
 ## Carpetas principales
