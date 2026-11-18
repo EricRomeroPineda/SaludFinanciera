@@ -1,3 +1,4 @@
+import { handleSubscriptionRoute } from '../suscripciones/routes.js'
 import {
   createAccount,
   deleteAccount,
@@ -7,16 +8,14 @@ import {
 import { deleteMovement, saveMovement } from './movements.js'
 import {
   createPlan,
-  createSubscription,
   deletePlan,
-  deleteSubscription,
   updatePlan,
-  updateSubscription,
 } from './modules.js'
 import { getCalendarData } from './calendar.js'
 
 export async function handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson }) {
   const route = `${request.method} ${url.pathname}`
+  if (await handleSubscriptionRoute(request, response, url, { getUserId, readJson, sendJson })) return true
   if (route === 'GET /api/dashboard') {
     const userId = await getUserId(request, response)
     if (!userId) return true
@@ -54,25 +53,6 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
     const result = request.method === 'PUT'
       ? await updateAccount(userId, id, await readJson(request))
       : await deleteAccount(userId, id)
-    sendJson(response, 200, result)
-    return true
-  }
-
-  if (route === 'POST /api/subscriptions') {
-    const userId = await getUserId(request, response)
-    if (!userId) return true
-    sendJson(response, 201, await createSubscription(userId, await readJson(request)))
-    return true
-  }
-
-  const subscriptionRoute = /^\/api\/subscriptions\/(\d+)$/.exec(url.pathname)
-  if (subscriptionRoute && ['PUT', 'DELETE'].includes(request.method)) {
-    const userId = await getUserId(request, response)
-    if (!userId) return true
-    const id = Number(subscriptionRoute[1])
-    const result = request.method === 'PUT'
-      ? await updateSubscription(userId, id, await readJson(request))
-      : await deleteSubscription(userId, id)
     sendJson(response, 200, result)
     return true
   }

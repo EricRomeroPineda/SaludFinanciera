@@ -1,3 +1,4 @@
+import { getSubscriptions } from '../suscripciones/service.js'
 import { pool } from '../../server/db.js'
 
 function invalid(message) {
@@ -27,15 +28,7 @@ export async function getDashboardData(userId) {
     [userId],
   )
 
-  const [subscriptions] = await pool.execute(
-    `SELECT id, nombre AS name, costo AS cost, monetizado AS monetized,
-            frecuencia AS frequency, tipo AS type, costo_mensual AS monthlyCost,
-            dia_cobro AS billingDay, tipo_pago AS paymentType, estatus AS status
-     FROM suscripciones
-     WHERE id_usuario = ?
-     ORDER BY nombre, id`,
-    [userId],
-  )
+  const subscriptions = await getSubscriptions(userId)
 
   const [plans] = await pool.execute(
     `SELECT id, nombre AS name, meta AS goal, monetizado AS saved,

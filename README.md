@@ -35,6 +35,7 @@ El registro y **Guardar perfil** leen la URL directamente del formulario y la gu
 - `saludFinanciera/`: módulo financiero completo, separado del login y del orquestador.
 - `saludFinanciera/frontend/`: componente `salud-financiera`, flujo financiero, estilos propios y calendario conservado sin pestaña visible.
 - `saludFinanciera/server/`: rutas y consultas de panorama/cuentas, movimientos, suscripciones, planes y calendario. Conserva las URL `/api/dashboard`, `/api/accounts`, `/api/movements`, `/api/subscriptions`, `/api/plans` y `/api/calendar`.
+- `saludFinanciera/suscripciones/`: formulario y tarjetas de suscripciones, estilos, rutas y servicio MySQL de este flujo.
 - `src/inicio/inicio.js`: orquestador de menú, login/registro, perfil y barra de usuario; monta el módulo financiero.
 - `src/inicio/appearance.css`: paletas compartidas y vista Día/Noche; sus variables se heredan en los módulos.
 - `src/api.js`: cliente HTTP del frontend.
@@ -47,3 +48,11 @@ La barra financiera muestra **Panorama, Tarjetas, Planes futuros, Registro de mo
 Las contraseñas de usuarios nuevos se guardan con bcrypt. Cada consulta financiera usa el `id` del usuario autenticado. Los datos se cargan al entrar al módulo, no al iniciar sesión ni al abrir el perfil. Las tarjetas usan cuentas cuyo tipo contiene “tarjeta” o “crédito”; desde su sección se consultan límite, saldo disponible y fechas de pago, y se puede iniciar un registro de pago como transferencia. Las cuentas se pueden editar y eliminar si no tienen movimientos asociados; su saldo disponible se cambia únicamente mediante movimientos para preservar el historial.
 
 Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `server/` y `src/`, y reinicia el backend: las consultas financieras ya no están en los archivos antiguos de `server/`.
+
+## Suscripciones
+
+En **Suscripciones → Agregar suscripción** se captura nombre, tipo (`servicio` o `suscripcion`), costo por cobro, frecuencia, día de cobro, método de pago y estado. El costo mensual es opcional: si se deja vacío se calcula según la frecuencia mensual, trimestral, semestral o anual. Al guardar, la API devuelve el registro de `suscripciones` del usuario conectado y se muestra inmediatamente en una tarjeta con todos esos datos, incluido el monetizado.
+
+**Monetizado** no se captura manualmente: es la suma de `movimiento.monto` donde `movimiento.id_suscripcion = suscripciones.id` y ambos registros pertenecen al mismo usuario. Se incluyen todos los movimientos relacionados, sin limitarse a los 250 del historial. Las lecturas calculan el total incluso para movimientos anteriores; al crear, editar, reasignar o eliminar un movimiento se sincroniza también `suscripciones.monetizado` en la misma transacción, actualizando tanto la suscripción anterior como la nueva si cambia la relación. Una suscripción nueva inicia en cero. Usa **Registro de movimientos** para vincular un movimiento a una suscripción.
+
+Las tarjetas permiten editar o eliminar; si existen movimientos asociados se cancela la suscripción en lugar de eliminar su historial. El flujo conserva los campos y las tablas existentes, sin migraciones adicionales. Al desplegar, actualiza tanto `saludFinanciera/suscripciones/` como los archivos del módulo financiero que la integran y reinicia el backend.

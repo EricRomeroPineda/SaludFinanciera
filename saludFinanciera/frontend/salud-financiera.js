@@ -4,6 +4,7 @@ import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import './calendario.js'
+import '../suscripciones/suscripciones.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -33,9 +34,7 @@ class SaludFinanciera extends LitElement {
     submitting: { state: true },
     showAccountForm: { state: true },
     showMovementForm: { state: true },
-    showSubscriptionForm: { state: true },
     showPlanForm: { state: true },
-    editingSubscription: { state: true },
     editingPlan: { state: true },
     movementOperation: { state: true },
     editingMovement: { state: true },
@@ -56,9 +55,7 @@ class SaludFinanciera extends LitElement {
     this.newAccountType = ''
     this.showMovementForm = false
     this.newMovementDefaults = null
-    this.showSubscriptionForm = false
     this.showPlanForm = false
-    this.editingSubscription = null
     this.editingPlan = null
     this.movementOperation = 'expense'
     this.editingMovement = null
@@ -79,6 +76,15 @@ class SaludFinanciera extends LitElement {
       this.error = error.message
     } finally {
       this.loading = false
+    }
+  }
+
+  async handleSubscriptionsChanged() {
+    this.error = ''
+    try {
+      await this.refreshDashboard()
+    } catch (error) {
+      this.error = `La suscripción se guardó, pero no se pudo actualizar el panorama: ${error.message}`
     }
   }
 
@@ -131,7 +137,7 @@ class SaludFinanciera extends LitElement {
     switch (this.activeTab) {
       case 'cards': return this.renderCards()
       case 'accounts': return this.renderAccounts()
-      case 'subscriptions': return this.renderSubscriptions()
+      case 'subscriptions': return html`<finance-subscriptions @subscriptions-changed=${this.handleSubscriptionsChanged}></finance-subscriptions>`
       case 'plans': return this.renderPlans()
       case 'movements': return this.renderMovements()
       default: return this.renderOverview()
@@ -155,36 +161,6 @@ class SaludFinanciera extends LitElement {
       await this.refreshDashboard()
     } catch (error) {
       this.error = error.message
-    }
-  }
-
-  async handleCreateSubscription(event) {
-    event.preventDefault()
-    this.error = ''
-    this.submitting = true
-    const formData = new FormData(event.currentTarget)
-
-    try {
-      const id = this.editingSubscription?.id
-      await apiRequest(id ? `/api/subscriptions/${id}` : '/api/subscriptions', {
-        method: id ? 'PUT' : 'POST',
-        body: JSON.stringify({
-          name: formData.get('name'),
-          type: formData.get('type'),
-          cost: formData.get('cost'),
-          frequency: formData.get('frequency'),
-          billingDay: formData.get('billingDay') || null,
-          paymentType: formData.get('paymentType') || null,
-          status: formData.get('status') || 'activa',
-        }),
-      })
-      this.showSubscriptionForm = false
-      this.editingSubscription = null
-      await this.refreshDashboard()
-    } catch (error) {
-      this.error = error.message
-    } finally {
-      this.submitting = false
     }
   }
 
@@ -213,19 +189,6 @@ class SaludFinanciera extends LitElement {
       this.error = error.message
     } finally {
       this.submitting = false
-    }
-  }
-
-  async handleDeleteSubscription(subscription) {
-    const action = subscription.status.toLowerCase() === 'activa' ? 'cancelar' : 'eliminar'
-    if (!window.confirm(`¿${action === 'cancelar' ? 'Cancelar' : 'Eliminar'} "${subscription.name}"?`)) return
-    this.error = ''
-    try {
-      const result = await apiRequest(`/api/subscriptions/${subscription.id}`, { method: 'DELETE' })
-      if (result.cancelled) this.error = 'Se canceló porque tiene movimientos asociados.'
-      await this.refreshDashboard()
-    } catch (error) {
-      this.error = error.message
     }
   }
 
@@ -516,76 +479,6 @@ class SaludFinanciera extends LitElement {
               <p>Agrega una como “Tarjeta de crédito” para registrar su límite y fechas de pago.</p>
             </div>
           `}
-      </section>
-    `
-  }
-
-  renderSubscriptions() {
-    const items = this.dashboard.subscriptions
-    return html`
-      <section class="data-card">
-        <div class="section-heading">
-          <div><p class="eyebrow">PAGOS RECURRENTES</p><h2>Suscripciones y servicios</h2></div>
-          <button class="primary-button compact-button" type="button" @click=${() => {
-            this.editingSubscription = null
-            this.showSubscriptionForm = !this.showSubscriptionForm
-          }}>
-            ${this.showSubscriptionForm ? 'Cancelar' : '+ Nueva'}
-          </button>
-        </div>
-        ${this.showSubscriptionForm ? html`
-          <form class="module-form" @submit=${this.handleCreateSubscription}>
-            <label>Nombre<input name="name" maxlength="100" .value=${this.editingSubscription?.name || ''} required /></label>
-            <label>Tipo
-              <select name="type" .value=${this.editingSubscription?.type || 'suscripcion'} required>
-                <option value="suscripcion">Suscripción</option>
-                <option value="servicio">Servicio</option>
-              </select>
-            </label>
-            <label>Costo<input name="cost" type="number" min="0.01" step="0.01" .value=${this.editingSubscription?.cost || ''} required /></label>
-            <label>Frecuencia
-              <select name="frequency" .value=${this.editingSubscription?.frequency || 'Mensual'} required>
-                <option value="Mensual">Mensual</option>
-                <option value="Anual">Anual</option>
-                <option value="Semestral">Semestral</option>
-                <option value="Trimestral">Trimestral</option>
-              </select>
-            </label>
-            <label>Día de cobro<input name="billingDay" type="number" min="1" max="31" .value=${this.editingSubscription?.billingDay || ''} /></label>
-            <label>Método de pago<input name="paymentType" maxlength="40" .value=${this.editingSubscription?.paymentType || ''} /></label>
-            ${this.editingSubscription ? html`
-              <label>Estado
-                <select name="status" .value=${this.editingSubscription.status}>
-                  <option value="activa">Activa</option>
-                  <option value="cancelada">Cancelada</option>
-                </select>
-              </label>
-            ` : ''}
-            <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>Guardar</button></div>
-          </form>
-        ` : ''}
-        ${items.length
-          ? html`<div class="table-wrap"><table>
-              <thead><tr><th>Nombre</th><th>Tipo</th><th>Frecuencia</th><th>Costo</th><th>Mensual</th><th>Estado</th><th></th></tr></thead>
-              <tbody>${items.map((item) => html`
-                <tr>
-                  <td><strong>${item.name}</strong></td><td>${item.type}</td><td>${item.frequency}</td>
-                  <td>${this.formatMoney(item.cost)}</td>
-                  <td>${item.monthlyCost == null ? '—' : this.formatMoney(item.monthlyCost)}</td>
-                  <td><span class="status-tag ${item.status.toLowerCase() === 'activa' ? '' : 'inactive'}">${item.status}</span></td>
-                  <td class="row-actions">
-                    <button class="text-button" type="button" @click=${() => {
-                      this.editingSubscription = item
-                      this.showSubscriptionForm = true
-                    }}>Editar</button>
-                    <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteSubscription(item)}>
-                      ${item.status.toLowerCase() === 'activa' ? 'Cancelar' : 'Eliminar'}
-                    </button>
-                  </td>
-                </tr>
-              `)}</tbody>
-            </table></div>`
-          : this.emptyMessage('No tienes suscripciones registradas.')}
       </section>
     `
   }

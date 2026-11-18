@@ -1,4 +1,5 @@
 import { pool } from '../../server/db.js'
+import { lockSubscriptions, syncMonetized } from '../suscripciones/service.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -187,14 +188,19 @@ export async function saveMovement(userId, input, movementId = null) {
 
   try {
     await connection.beginTransaction()
+    let oldSubscriptionId = null
 
     if (movementId) {
       const [oldRows] = await connection.execute(
-        'SELECT id, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+        'SELECT id, id_suscripcion, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
         [movementId, userId],
       )
       if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
+      oldSubscriptionId = oldRows[0].id_suscripcion
+      await lockSubscriptions(connection, userId, [oldSubscriptionId, movement.subscriptionId])
       await reverseMovement(connection, userId, oldRows[0])
+    } else {
+      await lockSubscriptions(connection, userId, [movement.subscriptionId])
     }
 
     await applyMovement(connection, userId, movement)
@@ -240,6 +246,7 @@ export async function saveMovement(userId, input, movementId = null) {
       id = result.insertId
     }
 
+    await syncMonetized(connection, userId, [oldSubscriptionId, movement.subscriptionId])
     await connection.commit()
     return { ok: true, id }
   } catch (error) {
@@ -256,16 +263,18 @@ export async function deleteMovement(userId, movementId) {
   try {
     await connection.beginTransaction()
     const [rows] = await connection.execute(
-      'SELECT id, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!rows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
 
+    await lockSubscriptions(connection, userId, [rows[0].id_suscripcion])
     await reverseMovement(connection, userId, rows[0])
     await connection.execute(
       'DELETE FROM movimiento WHERE id = ? AND id_usuario = ?',
       [movementId, userId],
     )
+    await syncMonetized(connection, userId, [rows[0].id_suscripcion])
     await connection.commit()
     return { ok: true, id: movementId }
   } catch (error) {
