@@ -5,11 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server/index.js",
+    "start": "npm run server",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "lit": "^3.3.3"
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.10",
+    "lit": "^3.3.3",
+    "mysql2": "^3.24.6"
   },
   "devDependencies": {
     "typescript": "~7.0.2",
