@@ -481,7 +481,7 @@ class Inicio extends LitElement {
           Salud <span>Financiera</span>
         </a>
         <div class="user-actions">
-          <button class="avatar-button" type="button" aria-label="Abrir mi perfil"
+          <button class="user-profile-button" type="button" aria-label=${`Abrir perfil de ${this.user.name}`}
             title="Mi perfil" @click=${() => this.openFinancialSection('profile')}>
             <img class="profile-photo"
               src=${this.user.photo && !this.brokenPhoto ? this.user.photo : defaultAvatar}
@@ -491,8 +491,8 @@ class Inicio extends LitElement {
                 this.brokenPhoto = true
                 this.error = 'No se pudo cargar tu foto de perfil. Revisa que la URL sea pública y apunte a una imagen en Mi perfil.'
               }} />
+            <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
           </button>
-          <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
           <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
         </div>
       </header>

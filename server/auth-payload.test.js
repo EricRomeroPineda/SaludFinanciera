@@ -115,3 +115,17 @@ test('the shared header uses the saved photo or a default image instead of an in
   assert.equal(state.activeTab, 'profile')
   assert.equal(state.activeSection, 'finance')
 })
+
+test('the profile beside logout displays the current user name and corresponding photo', () => {
+  for (const user of [
+    { name: 'Eric', photo: 'https://example.com/eric.jpg' },
+    { name: 'Ana', photo: 'https://example.com/ana.jpg' },
+  ]) {
+    const header = handlers.renderHeader.call({ user, brokenPhoto: false })
+    const markup = header.strings.join('')
+    assert.ok(header.values.includes(user.photo))
+    assert.ok(header.values.includes(user.name))
+    assert.ok(header.values.includes(`Abrir perfil de ${user.name}`))
+    assert.match(markup, /user-profile-button[\s\S]*profile-photo[\s\S]*user-greeting[\s\S]*<\/button>[\s\S]*Cerrar sesión/)
+  }
+})
