@@ -33,6 +33,7 @@ class SaludFinanciera extends LitElement {
     dashboard: { state: true },
     activeTab: { state: true },
     selectedCard: { state: true },
+    today: { state: true },
     loading: { state: true },
     submitting: { state: true },
     showAccountForm: { state: true },
@@ -54,6 +55,7 @@ class SaludFinanciera extends LitElement {
     this.dashboard = null
     this.activeTab = 'overview'
     this.selectedCard = null
+    this.today = new Date()
     this.loading = true
     this.submitting = false
     this.showAccountForm = false
@@ -75,6 +77,12 @@ class SaludFinanciera extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     this.loadDashboard()
+    this.cardClock = window.setInterval(() => { this.today = new Date() }, 60000)
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    window.clearInterval(this.cardClock)
   }
 
   async loadDashboard() {
@@ -474,16 +482,80 @@ class SaludFinanciera extends LitElement {
 
   renderCards() {
     const cards = this.dashboard.accounts.filter(isCardAccount)
+    const groups = [
+      { title: 'Nómina / Débito', cards: cards.filter((card) => !isCreditAccount(card.type)) },
+      { title: 'Crédito', cards: cards.filter((card) => isCreditAccount(card.type)) },
+    ]
     return html`
       <section>
         <div class="section-heading">
           <h2>Mis tarjetas</h2>
           <button class="primary-button compact-button" type="button" @click=${this.startCardCreation}>+ Nueva tarjeta</button>
         </div>
-        ${cards.length
-          ? html`<div class="card-grid">
-              ${cards.map((card) => html`
-                <article class="credit-card" @click=${(event) => {
+        <div class="card-type-columns">
+          ${groups.map((group) => html`
+            <section class="card-type-group" aria-label=${group.title}>
+              <h3 class="card-group-title">${group.title}</h3>
+              ${group.cards.length ? html`
+                <div class="card-grid">${group.cards.map((card) => this.renderBankCard(card))}</div>
+              ` : html`<p class="empty-state">No tienes tarjetas de ${group.title.toLowerCase()}.</p>`}
+            </section>
+          `)}
+        </div>
+        ${cards.some((card) => card.id === this.selectedCard?.id) ? html`
+          <finance-related-movements relation="account"
+            .relationId=${this.selectedCard.id} .label=${this.selectedCard.name}></finance-related-movements>
+        ` : ''}
+      </section>
+    `
+  }
+
+  renderCreditProgress(card) {
+    const total = Number(card.total)
+    const available = Number(card.available)
+    if (card.total == null || !Number.isFinite(total) || total <= 0 || !Number.isFinite(available)) {
+      return html`<p class="credit-progress-note">Configura un límite mayor que cero para ver el porcentaje disponible.</p>`
+    }
+    const percentage = Math.max(0, Math.min(100, available / total * 100))
+    const level = percentage > 50 ? 'healthy' : percentage > 20 ? 'moderate' : 'low'
+    return html`
+      <div class="credit-progress ${level}">
+        <div class="credit-progress-label"><span>Crédito disponible</span><strong>${Math.round(percentage)}%</strong></div>
+        <div class="credit-progress-track" role="progressbar" aria-label="Porcentaje de crédito disponible"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow=${percentage}
+          aria-valuetext=${`${this.formatMoney(available)} disponibles de ${this.formatMoney(total)}`}>
+          <div class="credit-progress-fill" style=${`width: ${percentage}%`}></div>
+        </div>
+        <small>${this.formatMoney(available)} de ${this.formatMoney(total)}</small>
+      </div>
+    `
+  }
+
+  renderCardPaymentCountdown(card) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(card.paymentDueDate || ''))
+    if (!match) return html`<p class="card-payment-countdown">Configura la fecha límite de pago.</p>`
+    const due = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    const today = Date.UTC(this.today.getFullYear(), this.today.getMonth(), this.today.getDate())
+    const days = Math.round((due - today) / 86400000)
+    return html`
+      <p class="card-payment-countdown ${days <= 2 ? 'urgent' : ''}" role="status">
+        <strong>${days < 0 ? `Fecha de pago vencida hace ${Math.abs(days)} ${days === -1 ? 'día' : 'días'}`
+          : days === 0 ? '¡Hoy es el último día para pagar!'
+            : days === 1 ? 'Falta 1 día para pagar' : `Faltan ${days} días para pagar`}</strong>
+      </p>
+    `
+  }
+
+  renderBankCard(card) {
+    return html`
+                <article class=${`credit-card ${this.selectedCard?.id === card.id ? 'selected' : ''}`}
+                  tabindex="0" aria-label=${`${card.name}. Mostrar movimientos`}
+                  @keydown=${(event) => {
+                    if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) {
+                      event.preventDefault()
+                      this.selectedCard = card
+                    }
+                  }} @click=${(event) => {
                   if (!event.target.closest('button')) this.selectedCard = card
                 }}>
                   <div class="credit-card-heading">
@@ -498,6 +570,10 @@ class SaludFinanciera extends LitElement {
                         : this.formatMoney((Math.round(Number(card.total) * 100) - Math.round(Number(card.available) * 100)) / 100)}</strong></div>
                     ` : ''}
                   </div>
+                  ${isCreditAccount(card.type) ? html`
+                    ${this.renderCreditProgress(card)}
+                    ${this.renderCardPaymentCountdown(card)}
+                  ` : ''}
                   ${isCreditAccount(card.type) ? html`<dl class="card-dates">
                     <div><dt>Fecha de corte</dt><dd>${this.formatDate(card.statementDate)}</dd></div>
                     <div><dt>Fecha límite de pago</dt><dd>${this.formatDate(card.paymentDueDate)}</dd></div>
@@ -509,27 +585,16 @@ class SaludFinanciera extends LitElement {
                     </div>
                   </dl>` : ''}
                   <div class="card-actions">
-                    <button class="text-button" type="button"
-                      aria-pressed=${this.selectedCard?.id === card.id ? 'true' : 'false'}
-                      @click=${() => { this.selectedCard = card }}>Ver movimientos</button>
                     ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
                     <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
-                    <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteAccount(card)}>Eliminar</button>
+                    <button class="card-trash-button" type="button" aria-label=${`Eliminar ${card.name}`}
+                      title="Eliminar tarjeta" @click=${() => this.handleDeleteAccount(card)}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
+                      </svg>
+                    </button>
                   </div>
                 </article>
-              `)}
-            </div>`
-          : html`
-            <div class="empty-state card-empty">
-              <p>No encontramos tarjetas en tus cuentas.</p>
-              <p>Agrega una tarjeta de crédito o débito para empezar.</p>
-            </div>
-          `}
-        ${cards.some((card) => card.id === this.selectedCard?.id) ? html`
-          <finance-related-movements relation="account"
-            .relationId=${this.selectedCard.id} .label=${this.selectedCard.name}></finance-related-movements>
-        ` : ''}
-      </section>
     `
   }
 
