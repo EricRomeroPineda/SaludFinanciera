@@ -51,6 +51,10 @@ Las contraseñas de usuarios nuevos se guardan con bcrypt. Cada consulta financi
 
 El formulario de tarjetas ofrece **Crédito** y **Débito**. En crédito se capturan nombre, límite máximo (`total`), crédito libre (`disponible`), fecha de corte, fecha límite de pago y pago para no generar intereses de este mes. La deuda se calcula como **Saldo utilizado = total − disponible**, sin una columna adicional, y el disponible no puede superar el límite al registrar o editar. Débito solo requiere nombre, tipo y saldo disponible; límite y datos de pago de crédito se guardan como `NULL`. Ambas tarjetas destacan el **Saldo disponible** como dato principal; solo crédito muestra límite, saldo utilizado, fechas y pago del mes, y permite iniciar el pago como transferencia.
 
+El campo Tipo siempre es un selector con Crédito y Débito, tanto desde Tarjetas como desde Cuentas, al crear o editar. El backend rechaza otros tipos al guardar; los registros antiguos se conservan y requieren elegir una de estas opciones al editarlos.
+
+El visor bancario usa el mismo formato visual de Suscripciones: cuadrícula adaptable de tarjetas compactas, fondo del tema, sombra, bordes redondeados y acciones al pie. La altura crece con el contenido y se mantiene el detalle de movimientos debajo de la cuadrícula al seleccionar una tarjeta.
+
 Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `server/` y `src/`, y reinicia el backend: las consultas financieras ya no están en los archivos antiguos de `server/`.
 
 ## Suscripciones

@@ -44,7 +44,6 @@ class SaludFinanciera extends LitElement {
     error: { state: true },
     editingAccount: { state: true },
     newAccountType: { state: true },
-    cardForm: { state: true },
     formLimit: { state: true },
     formAvailable: { state: true },
     newMovementDefaults: { state: true },
@@ -60,7 +59,6 @@ class SaludFinanciera extends LitElement {
     this.showAccountForm = false
     this.editingAccount = null
     this.newAccountType = ''
-    this.cardForm = false
     this.formLimit = ''
     this.formAvailable = '0'
     this.formLimit = ''
@@ -324,7 +322,6 @@ class SaludFinanciera extends LitElement {
 
   startAccountEdit(account) {
     this.editingAccount = account
-    this.cardForm = isCardAccount(account)
     this.newAccountType = isCreditAccount(account.type) ? 'Tarjeta de crédito'
       : isDebitAccount(account.type) ? 'Tarjeta de débito' : ''
     this.formLimit = account.total ?? ''
@@ -344,7 +341,6 @@ class SaludFinanciera extends LitElement {
   startCardCreation() {
     this.editingAccount = null
     this.newAccountType = 'Tarjeta de crédito'
-    this.cardForm = true
     this.formLimit = ''
     this.formAvailable = '0'
     this.showAccountForm = true
@@ -407,7 +403,8 @@ class SaludFinanciera extends LitElement {
             this.showAccountForm = !this.showAccountForm
             this.editingAccount = null
             this.newAccountType = ''
-            this.cardForm = false
+            this.formLimit = ''
+            this.formAvailable = '0'
           }}>
             ${this.showAccountForm ? 'Cancelar' : '+ Nueva cuenta'}
           </button>
@@ -440,19 +437,16 @@ class SaludFinanciera extends LitElement {
   renderAccountForm() {
     const account = this.editingAccount || {}
     const credit = isCreditAccount(this.newAccountType)
-    const showCreditFields = !this.cardForm || credit
     const used = Math.round(Number(this.formLimit) * 100) - Math.round(Number(this.formAvailable) * 100)
     return html`
       <form class="account-form" @submit=${this.handleCreateAccount}>
         <label>Nombre<input name="name" maxlength="100" placeholder="Cuenta principal" .value=${account.name || ''} required /></label>
         <label>Tipo
-          ${this.cardForm ? html`
-            <select name="type" required @change=${(event) => { this.newAccountType = event.target.value }}>
-              <option value="" .selected=${!this.newAccountType} disabled>Selecciona un tipo</option>
-              <option value="Tarjeta de crédito" .selected=${credit}>Crédito</option>
-              <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
-            </select>
-          ` : html`<input name="type" maxlength="40" placeholder="Débito, efectivo, crédito…" .value=${account.type || ''} required />`}
+          <select name="type" required @change=${(event) => { this.newAccountType = event.target.value }}>
+            <option value="" .selected=${!this.newAccountType} disabled>Selecciona un tipo</option>
+            <option value="Tarjeta de crédito" .selected=${credit}>Crédito</option>
+            <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
+          </select>
         </label>
         ${this.editingAccount
           ? html`<p class="form-hint">El saldo disponible se modifica mediante movimientos para mantener el historial.</p>`
@@ -460,7 +454,7 @@ class SaludFinanciera extends LitElement {
               <input name="available" type="number" min="0" step="0.01" .value=${String(this.formAvailable)}
                 @input=${(event) => { this.formAvailable = event.target.value }} required />
             </label>`}
-        ${showCreditFields ? html`
+        ${credit ? html`
           <label>${credit ? 'Límite máximo de crédito' : 'Total / límite'}
             <input name="total" type="number" min="0" step="0.01" .value=${String(this.formLimit)}
               @input=${(event) => { this.formLimit = event.target.value }} ?required=${credit} />
@@ -481,9 +475,9 @@ class SaludFinanciera extends LitElement {
   renderCards() {
     const cards = this.dashboard.accounts.filter(isCardAccount)
     return html`
-      <section class="data-card">
+      <section>
         <div class="section-heading">
-          <div><p class="eyebrow">CRÉDITO Y DÉBITO</p><h2>Mis tarjetas</h2></div>
+          <h2>Mis tarjetas</h2>
           <button class="primary-button compact-button" type="button" @click=${this.startCardCreation}>+ Nueva tarjeta</button>
         </div>
         ${cards.length
@@ -493,9 +487,9 @@ class SaludFinanciera extends LitElement {
                   if (!event.target.closest('button')) this.selectedCard = card
                 }}>
                   <div class="credit-card-heading">
-                    <div><p>${card.type}</p><h3>${card.name}</h3></div>
-                    <span class="card-chip" aria-hidden="true">▦</span>
+                    <span>${card.type}</span>
                   </div>
+                  <h3>${card.name}</h3>
                   <div class="card-balances">
                     <div class="card-main-balance"><span>Saldo disponible</span><strong>${this.formatMoney(card.available)}</strong></div>
                     ${isCreditAccount(card.type) ? html`

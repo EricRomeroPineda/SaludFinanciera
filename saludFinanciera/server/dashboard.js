@@ -107,7 +107,9 @@ function accountFields(input, includeAvailable = true) {
   const name = String(input.name || '').trim()
   const type = String(input.type || '').trim()
   if (!name || name.length > 100) throw invalid('El nombre de la cuenta es obligatorio.')
-  if (!type || type.length > 40) throw invalid('El tipo de cuenta es obligatorio.')
+  if (!['Tarjeta de crédito', 'Tarjeta de débito'].includes(type)) {
+    throw invalid('Selecciona Crédito o Débito como tipo de cuenta.')
+  }
 
   const credit = isCreditAccount(type)
   const debit = isDebitAccount(type)
