@@ -103,7 +103,7 @@ export async function getDashboardData(userId) {
   }
 }
 
-function accountFields(input, includeAvailable = true) {
+function accountFields(input) {
   const name = String(input.name || '').trim()
   const type = String(input.type || '').trim()
   if (!name || name.length > 100) throw invalid('El nombre de la cuenta es obligatorio.')
@@ -114,10 +114,8 @@ function accountFields(input, includeAvailable = true) {
   const credit = isCreditAccount(type)
   const debit = isDebitAccount(type)
   const total = debit ? null : decimalValue(input.total, 'El total')
-  const available = includeAvailable
-    ? decimalValue(input.available, 'El saldo disponible')
-    : undefined
-  if (includeAvailable && available == null) {
+  const available = decimalValue(input.available, 'El saldo disponible')
+  if (available == null) {
     throw invalid('Captura el saldo disponible actual; si no tienes disponible, introduce 0.')
   }
   const paymentToAvoidInterest = debit ? null : decimalValue(
@@ -131,7 +129,7 @@ function accountFields(input, includeAvailable = true) {
     if (total == null || !statementDate || !paymentDueDate || paymentToAvoidInterest == null) {
       throw invalid('El crédito requiere límite máximo, fecha de corte, fecha límite de pago y pago para no generar intereses de este mes.')
     }
-    if (includeAvailable && Number(available) > Number(total)) {
+    if (Number(available) > Number(total)) {
       throw invalid('El crédito disponible no puede superar el límite máximo.')
     }
   }
@@ -164,23 +162,19 @@ export async function createAccount(userId, input) {
 }
 
 export async function updateAccount(userId, id, input) {
-  const fields = accountFields(input, false)
-  const credit = isCreditAccount(fields.type)
+  const fields = accountFields(input)
   const [result] = await pool.execute(
     `UPDATE cuenta
-     SET nombre = ?, tipo = ?, total = ?, fecha_corte = ?,
+     SET nombre = ?, tipo = ?, total = ?, disponible = ?, fecha_corte = ?,
          fecha_limite_pago = ?, pago_para_no_generar_intereses = ?
-     WHERE id = ? AND id_usuario = ?${credit ? ' AND disponible <= ?' : ''}`,
+     WHERE id = ? AND id_usuario = ?`,
     [
-      fields.name, fields.type, fields.total, fields.statementDate,
+      fields.name, fields.type, fields.total, fields.available, fields.statementDate,
       fields.paymentDueDate, fields.paymentToAvoidInterest, id, userId,
-      ...(credit ? [fields.total] : []),
     ],
   )
   if (!result.affectedRows) {
-    throw invalid(credit
-      ? 'No se encontró la cuenta o el límite es menor que el crédito disponible actual.'
-      : 'No se encontró la cuenta de tu usuario.', credit ? 409 : 404)
+    throw invalid('No se encontró la cuenta de tu usuario.', 404)
   }
   return { ok: true, id }
 }

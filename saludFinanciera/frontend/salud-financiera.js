@@ -462,12 +462,10 @@ class SaludFinanciera extends LitElement {
               @input=${(event) => { this.formLimit = event.target.value }} required />
           </label>
         ` : ''}
-        ${this.editingAccount
-          ? html`<p class="form-hint">El saldo disponible se modifica mediante movimientos para mantener el historial.</p>`
-          : html`<label>${credit ? 'Crédito disponible (sin utilizar)' : 'Saldo disponible'}
-              <input name="available" type="number" min="0" step="0.01" .value=${String(this.formAvailable)}
-                @input=${(event) => { this.formAvailable = event.target.value }} required />
-            </label>`}
+        <label>${credit ? 'Crédito disponible (sin utilizar)' : 'Saldo disponible'}
+          <input name="available" type="number" min="0" step="0.01" .value=${String(this.formAvailable)}
+            @input=${(event) => { this.formAvailable = event.target.value }} required />
+        </label>
         ${credit ? html`
           ${credit ? html`<label>Saldo utilizado (deuda actual)
             <output>${this.formLimit === '' || this.formAvailable === '' ? 'Introduce crédito total y disponible' : used < 0
