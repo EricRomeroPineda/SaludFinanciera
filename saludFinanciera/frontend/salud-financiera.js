@@ -288,7 +288,7 @@ class SaludFinanciera extends LitElement {
     this.submitting = true
 
     const formData = new FormData(event.currentTarget)
-    const optionalNumber = (value) => value === '' ? null : Number(value)
+    const optionalNumber = (value) => value == null || value === '' ? null : value
 
     try {
       const id = this.editingAccount?.id
@@ -350,7 +350,7 @@ class SaludFinanciera extends LitElement {
     this.editingAccount = null
     this.newAccountType = 'Tarjeta de crédito'
     this.formLimit = ''
-    this.formAvailable = '0'
+    this.formAvailable = ''
     this.showAccountForm = true
     this.activeTab = 'accounts'
   }
@@ -456,21 +456,24 @@ class SaludFinanciera extends LitElement {
             <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
           </select>
         </label>
+        ${credit ? html`
+          <label>Crédito total (límite máximo)
+            <input name="total" type="number" min="0" step="0.01" .value=${String(this.formLimit)}
+              @input=${(event) => { this.formLimit = event.target.value }} required />
+          </label>
+        ` : ''}
         ${this.editingAccount
           ? html`<p class="form-hint">El saldo disponible se modifica mediante movimientos para mantener el historial.</p>`
-          : html`<label>${credit ? 'Crédito disponible' : 'Saldo disponible'}
+          : html`<label>${credit ? 'Crédito disponible (sin utilizar)' : 'Saldo disponible'}
               <input name="available" type="number" min="0" step="0.01" .value=${String(this.formAvailable)}
                 @input=${(event) => { this.formAvailable = event.target.value }} required />
             </label>`}
         ${credit ? html`
-          <label>${credit ? 'Límite máximo de crédito' : 'Total / límite'}
-            <input name="total" type="number" min="0" step="0.01" .value=${String(this.formLimit)}
-              @input=${(event) => { this.formLimit = event.target.value }} ?required=${credit} />
-          </label>
           ${credit ? html`<label>Saldo utilizado (deuda actual)
-            <output>${this.formLimit === '' ? 'Introduce el límite de crédito' : used < 0
+            <output>${this.formLimit === '' || this.formAvailable === '' ? 'Introduce crédito total y disponible' : used < 0
               ? 'El disponible no puede superar el límite' : this.formatMoney(used / 100)}</output>
           </label>` : ''}
+          <p class="form-hint">Se guardan el crédito total y el disponible por separado. Deuda total = crédito total − crédito disponible; no se captura ni se guarda como disponible.</p>
           <label>Fecha de corte<input name="statementDate" type="date" .value=${account.statementDate || ''} ?required=${credit} /></label>
           <label>Fecha límite de pago<input name="paymentDueDate" type="date" .value=${account.paymentDueDate || ''} ?required=${credit} /></label>
           <label>Pago para no generar intereses de este mes<input name="paymentToAvoidInterest" type="number" min="0" step="0.01" .value=${account.paymentToAvoidInterest ?? ''} ?required=${credit} /></label>

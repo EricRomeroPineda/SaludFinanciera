@@ -53,6 +53,8 @@ El formulario de tarjetas ofrece **Crédito** y **Débito**. En crédito se capt
 
 El campo Tipo siempre es un selector con Crédito y Débito, tanto desde Tarjetas como desde Cuentas, al crear o editar. El backend rechaza otros tipos al guardar; los registros antiguos se conservan y requieren elegir una de estas opciones al editarlos.
 
+Al registrar crédito se capturan explícitamente **Crédito total (límite máximo)** y **Crédito disponible (sin utilizar)**. Ambos valores se guardan tal como se capturan en `total` y `disponible`, respectivamente; un disponible vacío se rechaza, no se sustituye por cero. Por ejemplo, total 10 000 y disponible 7 000 producen una deuda calculada de 3 000, sin cambiar los valores guardados.
+
 El visor bancario usa el mismo formato visual de Suscripciones: cuadrícula adaptable de tarjetas compactas, fondo del tema, sombra, bordes redondeados y acciones al pie. La altura crece con el contenido y se mantiene el detalle de movimientos debajo de la cuadrícula al seleccionar una tarjeta.
 
 Las tarjetas se separan en dos mitades: **Nómina / Débito** a la izquierda y **Crédito** a la derecha; en móvil se apilan. La papelera solicita confirmación y mantiene la restricción de no eliminar cuentas con movimientos. Solo crédito muestra una barra de **disponible / límite máximo**: verde por encima de 50 %, azul entre más de 20 % y 50 %, y alerta hasta 20 %. Si el límite no permite calcular un porcentaje se solicita configurarlo. El aviso de pago usa la fecha límite registrada y la fecha local actual, se actualiza cada minuto y distingue días restantes, vencimiento hoy y fecha vencida; no adelanta automáticamente la fecha al mes siguiente ni determina si ya se cubrió el pago.

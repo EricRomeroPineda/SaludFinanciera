@@ -115,8 +115,11 @@ function accountFields(input, includeAvailable = true) {
   const debit = isDebitAccount(type)
   const total = debit ? null : decimalValue(input.total, 'El total')
   const available = includeAvailable
-    ? decimalValue(input.available, 'El saldo disponible') || '0.00'
+    ? decimalValue(input.available, 'El saldo disponible')
     : undefined
+  if (includeAvailable && available == null) {
+    throw invalid('Captura el saldo disponible actual; si no tienes disponible, introduce 0.')
+  }
   const paymentToAvoidInterest = debit ? null : decimalValue(
     input.paymentToAvoidInterest,
     'El pago para evitar intereses',
