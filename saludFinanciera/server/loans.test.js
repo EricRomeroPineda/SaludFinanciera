@@ -26,9 +26,9 @@ function ledger(t) {
       calls.push({ sql, params })
       if (sql.includes('FROM movimiento_evidencia')) return [[]]
       if (sql.startsWith('INSERT INTO prestamo')) {
-        const [userId, name, type, principal, startDate, commitmentDate, accountId, legacy, notes] = params
+        const [userId, name, type, principal, startDate, commitmentDate, accountId, legacy, notes, depositDetails] = params
         const id = state.nextLoan++
-        state.loans.push({ id, userId, name, type, principal, startDate, commitmentDate, accountId, legacy, notes })
+        state.loans.push({ id, userId, name, type, principal, startDate, commitmentDate, accountId, legacy, notes, depositDetails })
         return [{ insertId: id }]
       }
       if (sql.includes('FROM prestamo WHERE id_usuario')) {
@@ -39,8 +39,8 @@ function ledger(t) {
         return [state.loans.filter((loan) => loan.id === params[0] && loan.userId === params[1])]
       }
       if (sql.startsWith('UPDATE prestamo')) {
-        const [name, commitmentDate, accountId, notes, id, userId] = params
-        Object.assign(state.loans.find((loan) => loan.id === id && loan.userId === userId), { name, commitmentDate, accountId, notes })
+        const [name, commitmentDate, accountId, notes, depositDetails, id, userId] = params
+        Object.assign(state.loans.find((loan) => loan.id === id && loan.userId === userId), { name, commitmentDate, accountId, notes, depositDetails })
         return [{ affectedRows: 1 }]
       }
       if (sql.startsWith('DELETE FROM prestamo')) {

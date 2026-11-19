@@ -15,9 +15,9 @@ test('cash creation and editing persist only name, type and available balance', 
     paymentDueDate: '2026-12-01', paymentToAvoidInterest: '100',
   }
   assert.deepEqual(await createAccount(7, input), { id: 9 })
-  assert.deepEqual(calls[0].params, [7, 'Cartera', 'Efectivo', null, '250.50', null, null, null])
+  assert.deepEqual(calls[0].params, [7, 'Cartera', 'Efectivo', null, '250.50', null, null, null, null])
   await updateAccount(7, 9, input)
-  assert.deepEqual(calls[1].params, ['Cartera', 'Efectivo', null, '250.50', null, null, null, 9, 7])
+  assert.deepEqual(calls[1].params, ['Cartera', 'Efectivo', null, '250.50', null, null, null, null, 9, 7])
   assert.match(calls[1].sql, /WHERE id = \? AND id_usuario = \?/)
 })
 

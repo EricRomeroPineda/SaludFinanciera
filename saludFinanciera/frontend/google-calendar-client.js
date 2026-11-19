@@ -86,22 +86,37 @@ export async function googleEventId(namespace, key) {
   return `sf${[...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
-export async function googleEventBody(event, namespace, time) {
-  if (!validDate(event.date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) || event.reference) {
-    throw new Error('El recordatorio necesita una fecha exacta y una hora válida.')
+export async function googleEventBody(event, namespace, phase = 'due') {
+  if (!validDate(event.date) || !['due', 'previous'].includes(phase) || event.reference) {
+    throw new Error('El recordatorio necesita una fecha exacta y una fase válida.')
   }
-  const start = new Date(`${event.date}T${time}:00`)
+  const date = new Date(`${event.date}T12:00:00Z`)
+  if (phase === 'previous') date.setUTCDate(date.getUTCDate() - 1)
+  const start = new Date(`${date.toISOString().slice(0, 10)}T21:00:00`)
   const amount = event.amount == null ? 'Monto por definir' :
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(event.amount))
+  const deposit = event.kind === 'loan' && event.loanType === 'me_deben' ? null : event.depositDetails
+  const description = [
+    'Recordatorio de Salud Financiera.', `Concepto: ${event.label}`, `Tipo: ${event.typeLabel}`,
+    `Fecha límite: ${event.date}`, `Monto previsto: ${amount}`,
+    ...(deposit ? [`Datos de depósito: ${deposit}`] : []),
+    `Avisos: 09:00, 14:00 y 21:00 ${phase === 'previous' ? 'del día anterior' : 'del día límite'}.`,
+    'No registra un pago ni modifica tus saldos.',
+  ].map((line) => line.replace(/[&<>"]/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+  })[character])).join('\n')
   return {
-    summary: `${event.typeLabel} · ${event.label}`,
-    description: `Recordatorio de Salud Financiera.\n${amount}\nNo registra un pago ni modifica tus saldos.`,
+    summary: `${phase === 'previous' ? 'Mañana · ' : ''}${event.typeLabel} · ${event.label}`,
+    description,
     start: { dateTime: start.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     end: { dateTime: new Date(start.getTime() + 15 * 60000).toISOString(),
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     visibility: 'private', transparency: 'transparent',
-    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 1440 }, { method: 'popup', minutes: 0 }] },
-    extendedProperties: { private: { saludFinanciera: namespace, sourceKey: event.key } },
+    reminders: { useDefault: false, overrides: [
+      { method: 'popup', minutes: 720 }, { method: 'popup', minutes: 420 }, { method: 'popup', minutes: 0 },
+    ] },
+    extendedProperties: { private: { saludFinanciera: namespace,
+      sourceKey: phase === 'previous' ? `${event.key}:previous` : event.key } },
   }
 }
 
@@ -136,10 +151,11 @@ async function googleRequest(token, url, { method = 'GET', body, signal } = {}) 
   return response.json()
 }
 
-export async function syncGoogleReminder(token, namespace, event, time, signal) {
-  const id = await googleEventId(namespace, event.key)
+async function syncGoogleEvent(token, namespace, event, phase, signal) {
+  const key = phase === 'previous' ? `${event.key}:previous` : event.key
+  const id = await googleEventId(namespace, key)
   const url = `${eventsUrl}/${id}`
-  const body = await googleEventBody(event, namespace, time)
+  const body = await googleEventBody(event, namespace, phase)
   let existing
   try {
     existing = await googleRequest(token, url, { signal })
@@ -160,9 +176,21 @@ export async function syncGoogleReminder(token, namespace, event, time, signal) 
     throw new Error('El evento fue eliminado en Google. Restáuralo desde la papelera para volver a sincronizarlo.')
   }
   const metadata = existing.extendedProperties?.private
-  if (metadata?.saludFinanciera !== namespace || metadata.sourceKey !== event.key) {
+  if (metadata?.saludFinanciera !== namespace || metadata.sourceKey !== key) {
     throw new Error('El evento existente no pertenece a esta sincronización. No se modificó.')
   }
   await googleRequest(token, url, { method: 'PATCH', body, signal })
   return 'updated'
+}
+
+export async function syncGoogleReminder(token, namespace, event, signal) {
+  const due = await syncGoogleEvent(token, namespace, event, 'due', signal)
+  try {
+    const previous = await syncGoogleEvent(token, namespace, event, 'previous', signal)
+    return due === 'created' && previous === 'created' ? 'created' : 'updated'
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
+    throw Object.assign(new Error(`El evento del día límite ya está guardado; faltó el del día anterior: ${error.message}`),
+      { status: error.status })
+  }
 }

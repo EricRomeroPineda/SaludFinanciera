@@ -85,7 +85,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
   const [accounts] = await pool.execute(
     `SELECT id, nombre AS name, tipo AS type,
             DATE_FORMAT(fecha_limite_pago, '%Y-%m-%d') AS paymentDueDate,
-            pago_para_no_generar_intereses AS paymentToAvoidInterest
+            pago_para_no_generar_intereses AS paymentToAvoidInterest, datos_deposito AS depositDetails
      FROM cuenta WHERE id_usuario = ?`,
     [userId],
   )

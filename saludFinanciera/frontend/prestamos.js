@@ -62,6 +62,7 @@ class Loans extends LitElement {
     const input = {
       name: data.get('name'), commitmentDate: data.get('commitmentDate'),
       accountId: data.get('accountId') || null, notes: data.get('notes'),
+      depositDetails: data.get('depositDetails'),
       ...(!id ? {
         type: this.loanType, principal: data.get('principal'), startDate: data.get('startDate'),
         recordDisbursement: this.mode === 'new',
@@ -133,6 +134,10 @@ class Loans extends LitElement {
             </option>`)}
           </select>
         </label>
+        ${(item?.type || this.loanType) === 'debo' ? html`
+          <label>Datos de depósito del acreedor (opcional)<input name="depositDetails" maxlength="500"
+            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /></label>
+        ` : ''}
         <label>Notas<input name="notes" maxlength="500" .value=${item?.notes || ''} /></label>
         <p class="form-hint">${this.mode === 'legacy'
           ? 'No se creará un desembolso ni se modificará ninguna cuenta. Captura solo lo que queda por cobrar o pagar; los abonos nuevos reducirán ese monto.'
@@ -190,6 +195,7 @@ class Loans extends LitElement {
                   ${days < 0 ? `Compromiso vencido hace ${Math.abs(days)} días` : days === 0 ? 'El compromiso vence hoy' : `Faltan ${days} días para el compromiso`}
                 </p>` : ''}
                 ${item.notes ? html`<p class="plan-note">${item.notes}</p>` : ''}
+                ${item.type === 'debo' && item.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${item.depositDetails}</p>` : ''}
                 <div class="card-actions" ?hidden=${this.familyView}>
                   <button class="text-button" type="button" ?disabled=${this.busy || completed} @click=${() => this.registerPayment(item)}>Registrar abono</button>
                   <button class="text-button" type="button" ?disabled=${this.busy} @click=${() => this.openForm(item)}>Editar</button>

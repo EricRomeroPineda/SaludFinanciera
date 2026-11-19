@@ -21,6 +21,7 @@ export function calendarEvents(month, { accounts, subscriptions, plans, loans = 
     events.push({
       kind: 'card', date: account.paymentDueDate, label: account.name,
       destinationAccountId: account.id, amount: account.paymentToAvoidInterest,
+      ...(account.depositDetails ? { depositDetails: account.depositDetails } : {}),
     })
   }
   for (const subscription of subscriptions) {
@@ -30,6 +31,7 @@ export function calendarEvents(month, { accounts, subscriptions, plans, loans = 
     const reference = !subscription.startDate && !['semanal', 'mensual'].includes(frequency)
     recurring('subscription', subscription, reference ? 'mensual' : frequency, subscription.billingDay, {
       subscriptionId: subscription.id, amount: subscription.cost,
+      ...(subscription.depositDetails ? { depositDetails: subscription.depositDetails } : {}),
       reference,
     })
   }
@@ -37,6 +39,7 @@ export function calendarEvents(month, { accounts, subscriptions, plans, loans = 
     if (!plan.configured || plan.completed) continue
     recurring('plan', plan, plan.periodUnit, plan.contributionDay, {
       planId: plan.id, amount: plan.contribution,
+      ...(plan.depositDetails ? { depositDetails: plan.depositDetails } : {}),
     })
   }
   for (const loan of loans) {
@@ -45,6 +48,7 @@ export function calendarEvents(month, { accounts, subscriptions, plans, loans = 
       kind: 'loan', date: loan.commitmentDate,
       label: `${loan.name} · ${loan.type === 'me_deben' ? 'Me deben' : 'Yo debo'}`,
       loanId: loan.id, loanType: loan.type, amount: loan.remaining,
+      ...(loan.type === 'debo' && loan.depositDetails ? { depositDetails: loan.depositDetails } : {}),
       ...(loan.type === 'me_deben' ? { destinationAccountId: loan.accountId } : { originAccountId: loan.accountId }),
     })
   }

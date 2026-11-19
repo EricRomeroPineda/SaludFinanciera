@@ -1,10 +1,10 @@
 import { pool } from '../../server/db.js'
-import { invalid, requiredText, decimal, positiveId, requiredDate } from './validation.js'
+import { invalid, requiredText, decimal, positiveId, requiredDate, depositDetails } from './validation.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 
 export async function getPlans(userId) {
   const [rows] = await pool.execute(
-    `SELECT p.id, p.nombre AS name, p.meta AS goal,
+    `SELECT p.id, p.nombre AS name, p.meta AS goal, p.datos_deposito AS depositDetails,
             COALESCE(t.saved, 0) AS saved, p.meta - COALESCE(t.saved, 0) AS remaining,
             p.mostrar AS visible, p.unidad_periodo AS periodUnit,
             p.aportacion_periodo AS contribution, p.dia_aportacion AS contributionDay,
@@ -64,18 +64,19 @@ function planFields(input) {
   const visible = input.visible === undefined
     ? true
     : input.visible === true || input.visible === 1 || input.visible === '1'
-  return { name, goal, unitPeriod, contribution, contributionDay, startDate, visible }
+  return { name, goal, unitPeriod, contribution, contributionDay, startDate, visible,
+    depositDetails: depositDetails(input.depositDetails) }
 }
 
 export async function createPlan(userId, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `INSERT INTO plan_futuro
-       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, aportacion_periodo, dia_aportacion, fecha_inicio)
-     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, aportacion_periodo, dia_aportacion, fecha_inicio, datos_deposito)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.goal, fields.visible,
-      fields.unitPeriod, fields.contribution, fields.contributionDay, fields.startDate,
+      fields.unitPeriod, fields.contribution, fields.contributionDay, fields.startDate, fields.depositDetails,
     ],
   )
 
@@ -87,11 +88,11 @@ export async function updatePlan(userId, idValue, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `UPDATE plan_futuro
-     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, aportacion_periodo = ?, dia_aportacion = ?, fecha_inicio = ?
+     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, aportacion_periodo = ?, dia_aportacion = ?, fecha_inicio = ?, datos_deposito = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.goal, fields.visible, fields.unitPeriod,
-      fields.contribution, fields.contributionDay, fields.startDate, id, userId,
+      fields.contribution, fields.contributionDay, fields.startDate, fields.depositDetails, id, userId,
     ],
   )
   if (!result.affectedRows) throw invalid('No se encontró el plan de tu usuario.', 404)

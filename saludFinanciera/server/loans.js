@@ -1,5 +1,5 @@
 import { pool } from '../../server/db.js'
-import { decimal, invalid, positiveId, requiredDate, requiredText } from './validation.js'
+import { decimal, invalid, positiveId, requiredDate, requiredText, depositDetails } from './validation.js'
 import { saveMovementInTransaction } from './movements.js'
 
 export async function getLoans(userId) {
@@ -8,6 +8,7 @@ export async function getLoans(userId) {
             DATE_FORMAT(p.fecha_inicio, '%Y-%m-%d') AS startDate,
             DATE_FORMAT(p.fecha_compromiso, '%Y-%m-%d') AS commitmentDate,
             p.id_cuenta AS accountId, c.nombre AS accountName, p.anterior AS legacy, p.notas AS notes,
+            CASE WHEN p.tipo = 'debo' THEN p.datos_deposito ELSE NULL END AS depositDetails,
             COALESCE(a.paid, 0) AS paid, p.monto - COALESCE(a.paid, 0) AS remaining
      FROM prestamo p
      LEFT JOIN cuenta c ON c.id = p.id_cuenta AND c.id_usuario = p.id_usuario
@@ -56,15 +57,16 @@ export async function createLoan(userId, input) {
   if (!['me_deben', 'debo'].includes(input.type)) throw invalid('Selecciona Me deben o Yo debo.')
   if (typeof input.recordDisbursement !== 'boolean') throw invalid('Indica si el préstamo es nuevo o anterior.')
   const principal = decimal(input.principal, 'El monto')
+  const deposit = input.type === 'debo' ? depositDetails(input.depositDetails) : null
   const startDate = requiredDate(input.startDate, 'La fecha de inicio')
   if (commitmentDate < startDate) throw invalid('La fecha compromiso no puede ser anterior al inicio.')
   return transaction(async (connection) => {
     const accountId = await validateAccount(connection, userId, input.accountId)
     if (input.recordDisbursement && !accountId) throw invalid('Selecciona la cuenta de salida o destino del dinero.')
     const [result] = await connection.execute(
-      `INSERT INTO prestamo (id_usuario, persona, tipo, monto, fecha_inicio, fecha_compromiso, id_cuenta, anterior, notas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, input.type, principal, startDate, commitmentDate, accountId, input.recordDisbursement ? 0 : 1, notes],
+      `INSERT INTO prestamo (id_usuario, persona, tipo, monto, fecha_inicio, fecha_compromiso, id_cuenta, anterior, notas, datos_deposito)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name, input.type, principal, startDate, commitmentDate, accountId, input.recordDisbursement ? 0 : 1, notes, deposit],
     )
     let movementId = null
     if (input.recordDisbursement) {
@@ -85,15 +87,15 @@ export async function updateLoan(userId, id, input) {
   const { name, commitmentDate, notes } = details(input)
   return transaction(async (connection) => {
     const [rows] = await connection.execute(
-      `SELECT DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS startDate
+      `SELECT tipo AS type, DATE_FORMAT(fecha_inicio, '%Y-%m-%d') AS startDate
        FROM prestamo WHERE id = ? AND id_usuario = ? FOR UPDATE`, [id, userId],
     )
     if (!rows.length) throw invalid('No se encontró el préstamo de tu usuario.', 404)
     if (commitmentDate < rows[0].startDate) throw invalid('La fecha compromiso no puede ser anterior al inicio.')
     const accountId = await validateAccount(connection, userId, input.accountId)
     await connection.execute(
-      'UPDATE prestamo SET persona = ?, fecha_compromiso = ?, id_cuenta = ?, notas = ? WHERE id = ? AND id_usuario = ?',
-      [name, commitmentDate, accountId, notes, id, userId],
+      'UPDATE prestamo SET persona = ?, fecha_compromiso = ?, id_cuenta = ?, notas = ?, datos_deposito = ? WHERE id = ? AND id_usuario = ?',
+      [name, commitmentDate, accountId, notes, rows[0].type === 'debo' ? depositDetails(input.depositDetails) : null, id, userId],
     )
     return { ok: true, id }
   })

@@ -14,6 +14,14 @@ export function requiredText(value, label, maxLength) {
   return text
 }
 
+export function depositDetails(value) {
+  if (value == null) return null
+  if (typeof value !== 'string' || value.length > 500 || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw invalid('Los datos de depósito admiten hasta 500 caracteres de texto, sin caracteres de control.')
+  }
+  return value.trim() || null
+}
+
 export function decimal(value, label, allowZero = false) {
   const text = String(value ?? '').trim()
   if (!/^\d{1,13}(?:\.\d{1,2})?$/.test(text)) {

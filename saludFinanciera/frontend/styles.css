@@ -82,6 +82,7 @@
 .plan-progress progress::-webkit-progress-value { background: var(--green); border-radius: 99px; }
 .plan-progress progress::-moz-progress-bar { background: var(--green); border-radius: 99px; }
 .plan-note { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.deposit-details { overflow-wrap: anywhere; }
 .plan-card { cursor: pointer; }
 .plan-card.selected, .plan-card:focus-visible { border-color: var(--green); outline: 2px solid var(--green); }
 .plan-countdown { margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--transfer); border-left-width: 5px; border-radius: 9px; background: var(--transfer-bg); color: var(--transfer); font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }

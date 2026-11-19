@@ -116,6 +116,7 @@ class Subscriptions extends LitElement {
           paymentType: data.get('paymentType') || null,
           status: data.get('status'),
           startDate: data.get('startDate'),
+          depositDetails: data.get('depositDetails'),
         }),
       })
       this.items = [...this.items.filter((item) => item.id !== subscription.id), subscription]
@@ -231,6 +232,8 @@ class Subscriptions extends LitElement {
           <input name="status" maxlength="30" .value=${item?.status || 'activa'} required list="subscription-statuses" />
           <datalist id="subscription-statuses"><option value="activa"></option><option value="cancelada"></option></datalist>
         </label>
+        <label>Datos de depósito (opcional)<input name="depositDetails" maxlength="500"
+          placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /></label>
         <p class="form-hint">Monetizado se calcula sumando los importes de todos los movimientos vinculados a esta suscripción; no se captura manualmente.</p>
         <p class="form-hint">Mensual semanal: costo por cobro × 4 semanas. Estimación anual: costo por cobro × número de cobros al año. Semanal: 52; mensual: 12; trimestral: 4; semestral: 2; anual: 1. Para las demás frecuencias, el mensual es el anual ÷ 12.</p>
         <div class="form-actions">
@@ -297,6 +300,7 @@ class Subscriptions extends LitElement {
                     <div><dt>Tipo de pago</dt><dd>${item.paymentType === 'manual' ? 'Manual'
                       : item.paymentType === 'automatico' ? 'Automático (domiciliado)' : 'Sin definir'}</dd></div>
                   </dl>
+                  ${item.depositDetails ? html`<p class="form-hint deposit-details">Depósito: ${item.depositDetails}</p>` : ''}
                   <div class="subscription-actions">
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}

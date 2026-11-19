@@ -11,7 +11,7 @@ class GoogleCalendarSync extends LitElement {
     revision: { attribute: false }, loading: { state: true }, busy: { state: true },
     error: { state: true }, notice: { state: true }, config: { state: true },
     events: { state: true }, selected: { state: true }, results: { state: true },
-    ready: { state: true }, consent: { state: true }, time: { state: true },
+    ready: { state: true }, consent: { state: true },
   }
   static styles = css`
     :host { display: block; margin: 0 0 16px; }
@@ -37,9 +37,6 @@ class GoogleCalendarSync extends LitElement {
     .error { color: var(--negative); }
     .notice { color: var(--positive); }
     .consent { margin: 16px 0; }
-    .time { align-items: center; flex-wrap: wrap; }
-    input[type="time"] { padding: 6px; border: 1px solid var(--line); border-radius: 6px;
-      color: var(--ink); background: var(--surface); }
     code { overflow-wrap: anywhere; }
   `
 
@@ -48,7 +45,6 @@ class GoogleCalendarSync extends LitElement {
     this.events = []
     this.selected = new Set()
     this.results = {}
-    this.time = '09:00'
     this.error = ''
     this.notice = ''
     this.loading = false
@@ -126,10 +122,6 @@ class GoogleCalendarSync extends LitElement {
 
   async sync() {
     if (this.busy || !this.ready || !this.consent || !this.selected.size || this.familyView) return
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(this.time)) {
-      this.error = 'Selecciona una hora válida para el recordatorio.'
-      return
-    }
     this.busy = true
     this.error = ''
     this.notice = ''
@@ -145,7 +137,7 @@ class GoogleCalendarSync extends LitElement {
       for (const event of chosen) {
         if (signal.aborted || version !== this.version) return
         try {
-          const status = await syncGoogleReminder(token, this.config.namespace, event, this.time, signal)
+          const status = await syncGoogleReminder(token, this.config.namespace, event, signal)
           if (version !== this.version) return
           this.results = { ...this.results, [event.key]: { status } }
           this.selected = new Set([...this.selected].filter((key) => key !== event.key))
@@ -189,15 +181,13 @@ class GoogleCalendarSync extends LitElement {
             La guía está en el README del proyecto. No se necesita SQL ni el secreto del cliente.</p>
         ` : ''}
         ${this.config?.configured && !this.loading ? html`
-          <p>Se enviarán únicamente los marcadores seleccionados: nombre, tipo, fecha y monto.
+          <p>Se enviarán únicamente los marcadores seleccionados: nombre, tipo, fecha, monto y datos de depósito si existen.
             No se enviarán movimientos registrados ni imágenes. Elige tu cuenta Google en la ventana de autorización.</p>
-          <p>Se crearán eventos privados de 15 minutos en tu calendario principal, con avisos
-            <strong>un día antes y el mismo día</strong>, a la hora indicada.</p>
-          <label class="time">Hora del compromiso
-            <input aria-label="Hora del compromiso" type="time" .value=${this.time} ?disabled=${this.busy}
-              @input=${(event) => { this.time = event.currentTarget.value }} />
-            <small>Zona horaria: ${Intl.DateTimeFormat().resolvedOptions().timeZone}</small>
-          </label>
+          <p>Se crearán <strong>dos eventos privados por compromiso</strong> en tu calendario principal:
+            uno el día anterior y otro el día límite, cada uno a las 21:00 con avisos
+            a las <strong>09:00, 14:00 y 21:00</strong> de su día (seis avisos en total).
+            Google admite hasta cinco avisos por evento; por eso se separan en dos.</p>
+          <small>Zona horaria: ${Intl.DateTimeFormat().resolvedOptions().timeZone}</small>
           <p>Los avisos de fechas u horas ya pasadas no se envían retroactivamente.
             Las suscripciones sin fecha exacta de inicio están excluidas.</p>
           ${this.events.length ? html`
@@ -207,6 +197,8 @@ class GoogleCalendarSync extends LitElement {
                 @change=${(change) => this.select(event, change.currentTarget.checked)} />
                 <span class="details"><strong>${event.label}</strong>
                   <small>${event.date} · ${event.typeLabel} · ${event.amount == null ? 'Monto por definir' : currency.format(Number(event.amount))}</small>
+                  ${event.depositDetails && !(event.kind === 'loan' && event.loanType === 'me_deben')
+                    ? html`<small>Datos de depósito: ${event.depositDetails}</small>` : ''}
                   ${event.reference ? html`<small>Solo referencia: configura el inicio de la suscripción para enviarla.</small>` : ''}
                   ${this.results[event.key] ? html`<small class=${this.results[event.key].status === 'error' ? 'error' : 'notice'}>
                     ${this.results[event.key].status === 'created' ? 'Creado' : this.results[event.key].status === 'updated' ? 'Actualizado' : this.results[event.key].message}

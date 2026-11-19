@@ -3,6 +3,7 @@ import { pool } from '../../server/db.js'
 import { isCreditAccount } from '../account-types.js'
 import { getPlans } from './modules.js'
 import { getLoans } from './loans.js'
+import { depositDetails } from './validation.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -24,7 +25,7 @@ export async function getDashboardData(userId) {
     `SELECT id, nombre AS name, tipo AS type, total, disponible AS available,
             DATE_FORMAT(fecha_corte, '%Y-%m-%d') AS statementDate,
             DATE_FORMAT(fecha_limite_pago, '%Y-%m-%d') AS paymentDueDate,
-            pago_para_no_generar_intereses AS paymentToAvoidInterest
+            pago_para_no_generar_intereses AS paymentToAvoidInterest, datos_deposito AS depositDetails
      FROM cuenta
      WHERE id_usuario = ?
      ORDER BY nombre, id`,
@@ -138,7 +139,8 @@ function accountFields(input) {
     }
   }
 
-  return { name, type, total, available, statementDate, paymentDueDate, paymentToAvoidInterest }
+  return { name, type, total, available, statementDate, paymentDueDate, paymentToAvoidInterest,
+    depositDetails: depositDetails(input.depositDetails) }
 }
 
 export async function createAccount(userId, input) {
@@ -146,11 +148,11 @@ export async function createAccount(userId, input) {
   const [result] = await pool.execute(
     `INSERT INTO cuenta
        (id_usuario, nombre, tipo, total, disponible, fecha_corte,
-        fecha_limite_pago, pago_para_no_generar_intereses)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        fecha_limite_pago, pago_para_no_generar_intereses, datos_deposito)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.type, fields.total, fields.available,
-      fields.statementDate, fields.paymentDueDate, fields.paymentToAvoidInterest,
+      fields.statementDate, fields.paymentDueDate, fields.paymentToAvoidInterest, fields.depositDetails,
     ],
   )
 
@@ -162,11 +164,11 @@ export async function updateAccount(userId, id, input) {
   const [result] = await pool.execute(
     `UPDATE cuenta
      SET nombre = ?, tipo = ?, total = ?, disponible = ?, fecha_corte = ?,
-         fecha_limite_pago = ?, pago_para_no_generar_intereses = ?
+         fecha_limite_pago = ?, pago_para_no_generar_intereses = ?, datos_deposito = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.type, fields.total, fields.available, fields.statementDate,
-      fields.paymentDueDate, fields.paymentToAvoidInterest, id, userId,
+      fields.paymentDueDate, fields.paymentToAvoidInterest, fields.depositDetails, id, userId,
     ],
   )
   if (!result.affectedRows) {

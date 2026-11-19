@@ -1,10 +1,10 @@
 import { pool } from '../../server/db.js'
-import { invalid, requiredText, decimal, positiveId, requiredDate } from '../server/validation.js'
+import { invalid, requiredText, decimal, positiveId, requiredDate, depositDetails } from '../server/validation.js'
 import { calculateCosts, isWeekly } from './calculations.js'
 
 export async function getSubscriptions(userId, id = null) {
   const [rows] = await pool.execute(
-    `SELECT s.id, s.nombre AS name, s.costo AS cost,
+    `SELECT s.id, s.nombre AS name, s.costo AS cost, s.datos_deposito AS depositDetails,
             COALESCE((SELECT SUM(m.monto) FROM movimiento AS m
                       WHERE m.id_suscripcion = s.id AND m.id_usuario = s.id_usuario), 0) AS monetized,
             s.frecuencia AS frequency, s.tipo AS type, s.costo_mensual AS monthlyCost,
@@ -80,7 +80,8 @@ function subscriptionFields(input) {
   }
 
   const status = input.status == null ? 'activa' : requiredText(input.status, 'El estado', 30)
-  return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status, startDate }
+  return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status, startDate,
+    depositDetails: depositDetails(input.depositDetails) }
 }
 
 export async function createSubscription(userId, input) {
@@ -88,11 +89,11 @@ export async function createSubscription(userId, input) {
   const [result] = await pool.execute(
     `INSERT INTO suscripciones
        (id_usuario, nombre, costo, frecuencia, tipo, costo_mensual, monetizado,
-        dia_cobro, tipo_pago, estatus, fecha_inicio)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+        dia_cobro, tipo_pago, estatus, fecha_inicio, datos_deposito)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.cost, fields.frequency, fields.type,
-      fields.monthlyCost, fields.billingDay, fields.paymentType, fields.status, fields.startDate,
+      fields.monthlyCost, fields.billingDay, fields.paymentType, fields.status, fields.startDate, fields.depositDetails,
     ],
   )
 
@@ -105,11 +106,11 @@ export async function updateSubscription(userId, idValue, input) {
   const [result] = await pool.execute(
     `UPDATE suscripciones
      SET nombre = ?, costo = ?, frecuencia = ?, tipo = ?, costo_mensual = ?,
-         dia_cobro = ?, tipo_pago = ?, estatus = ?, fecha_inicio = ?
+         dia_cobro = ?, tipo_pago = ?, estatus = ?, fecha_inicio = ?, datos_deposito = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.cost, fields.frequency, fields.type, fields.monthlyCost,
-      fields.billingDay, fields.paymentType, fields.status, fields.startDate, id, userId,
+      fields.billingDay, fields.paymentType, fields.status, fields.startDate, fields.depositDetails, id, userId,
     ],
   )
   if (!result.affectedRows) throw invalid('No se encontró la suscripción de tu usuario.', 404)

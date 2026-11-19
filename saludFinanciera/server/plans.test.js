@@ -52,10 +52,10 @@ test('creating and editing plans persist the schedule but never accept a manual 
   assert.deepEqual(await createPlan(7, { ...input, saved: '999', monetizado: '999' }), { id: 8 })
   assert.match(calls[0].sql, /monetizado/)
   assert.match(calls[0].sql, /VALUES \(\?, \?, \?, 0,/)
-  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18'])
+  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18', null])
   await updatePlan(7, 8, { ...input, saved: '999', monetizado: '999' })
   assert.doesNotMatch(calls[1].sql, /monetizado\s*=/)
-  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18', 8, 7])
+  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18', null, 8, 7])
 })
 
 test('plan API rejects invalid amounts, units and contribution days before SQL', async (t) => {
@@ -75,7 +75,7 @@ test('plan API rejects invalid amounts, units and contribution days before SQL',
 
 test('weekly and monthly boundaries are supported and client periods are ignored', async (t) => {
   t.mock.method(pool, 'execute', async (sql, params) => {
-    assert.ok([1, 7, 31].includes(params.at(-2)))
+    assert.ok([1, 7, 31].includes(params.at(-3)))
     assert.doesNotMatch(sql, /periodos_faltantes/)
     return [{ insertId: 8 }]
   })
