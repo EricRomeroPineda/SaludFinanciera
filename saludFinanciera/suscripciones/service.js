@@ -1,5 +1,5 @@
 import { pool } from '../../server/db.js'
-import { invalid, requiredText, decimal, positiveId } from '../server/validation.js'
+import { invalid, requiredText, decimal, positiveId, requiredDate } from '../server/validation.js'
 import { calculateCosts, isWeekly } from './calculations.js'
 
 export async function getSubscriptions(userId, id = null) {
@@ -8,7 +8,8 @@ export async function getSubscriptions(userId, id = null) {
             COALESCE((SELECT SUM(m.monto) FROM movimiento AS m
                       WHERE m.id_suscripcion = s.id AND m.id_usuario = s.id_usuario), 0) AS monetized,
             s.frecuencia AS frequency, s.tipo AS type, s.costo_mensual AS monthlyCost,
-            s.dia_cobro AS billingDay, s.tipo_pago AS paymentType, s.estatus AS status
+            s.dia_cobro AS billingDay, s.tipo_pago AS paymentType, s.estatus AS status,
+            DATE_FORMAT(s.fecha_inicio, '%Y-%m-%d') AS startDate
      FROM suscripciones AS s
      WHERE s.id_usuario = ?${id == null ? '' : ' AND s.id = ?'}
      ORDER BY s.nombre, s.id`,
@@ -52,6 +53,7 @@ export async function syncMonetized(connection, userId, ids) {
 function subscriptionFields(input) {
   const name = requiredText(input.name, 'El nombre', 100)
   const cost = decimal(input.cost, 'El costo')
+  const startDate = requiredDate(input.startDate, 'La fecha de inicio')
   const frequency = requiredText(input.frequency, 'La frecuencia', 30)
   const type = String(input.type || '')
   if (!['servicio', 'suscripcion'].includes(type)) {
@@ -78,7 +80,7 @@ function subscriptionFields(input) {
   }
 
   const status = input.status == null ? 'activa' : requiredText(input.status, 'El estado', 30)
-  return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status }
+  return { name, cost, frequency, type, monthlyCost, billingDay, paymentType, status, startDate }
 }
 
 export async function createSubscription(userId, input) {
@@ -86,11 +88,11 @@ export async function createSubscription(userId, input) {
   const [result] = await pool.execute(
     `INSERT INTO suscripciones
        (id_usuario, nombre, costo, frecuencia, tipo, costo_mensual, monetizado,
-        dia_cobro, tipo_pago, estatus)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        dia_cobro, tipo_pago, estatus, fecha_inicio)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.cost, fields.frequency, fields.type,
-      fields.monthlyCost, fields.billingDay, fields.paymentType, fields.status,
+      fields.monthlyCost, fields.billingDay, fields.paymentType, fields.status, fields.startDate,
     ],
   )
 
@@ -103,11 +105,11 @@ export async function updateSubscription(userId, idValue, input) {
   const [result] = await pool.execute(
     `UPDATE suscripciones
      SET nombre = ?, costo = ?, frecuencia = ?, tipo = ?, costo_mensual = ?,
-         dia_cobro = ?, tipo_pago = ?, estatus = ?
+         dia_cobro = ?, tipo_pago = ?, estatus = ?, fecha_inicio = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.cost, fields.frequency, fields.type, fields.monthlyCost,
-      fields.billingDay, fields.paymentType, fields.status, id, userId,
+      fields.billingDay, fields.paymentType, fields.status, fields.startDate, id, userId,
     ],
   )
   if (!result.affectedRows) throw invalid('No se encontró la suscripción de tu usuario.', 404)

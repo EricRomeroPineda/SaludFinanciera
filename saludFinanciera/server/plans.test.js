@@ -5,7 +5,7 @@ import { createPlan, getPlans, lockPlans, syncPlanSavings, updatePlan } from './
 import { deleteMovement, getRelatedMovements, saveMovement } from './movements.js'
 
 const input = {
-  name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00', contributionDay: '18', visible: true,
+  name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00', contributionDay: '18', startDate: '2026-11-18', visible: true,
 }
 
 test('related plan movements query the complete history for the authenticated user and selected plan', async (t) => {
@@ -52,10 +52,10 @@ test('creating and editing plans persist the schedule but never accept a manual 
   assert.deepEqual(await createPlan(7, { ...input, saved: '999', monetizado: '999' }), { id: 8 })
   assert.match(calls[0].sql, /monetizado/)
   assert.match(calls[0].sql, /VALUES \(\?, \?, \?, 0,/)
-  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', '100.00', 18])
+  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18'])
   await updatePlan(7, 8, { ...input, saved: '999', monetizado: '999' })
   assert.doesNotMatch(calls[1].sql, /monetizado\s*=/)
-  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', '100.00', 18, 8, 7])
+  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', '100.00', 18, '2026-11-18', 8, 7])
 })
 
 test('plan API rejects invalid amounts, units and contribution days before SQL', async (t) => {
@@ -65,6 +65,7 @@ test('plan API rejects invalid amounts, units and contribution days before SQL',
     { contribution: -1 }, { contribution: '0.001' }, { contributionDay: '' },
     { contributionDay: 0 }, { contributionDay: 32 }, { contributionDay: 1.5 },
     { unitPeriod: 'semana', contributionDay: 8 }, { unitPeriod: 'anio' }, { unitPeriod: null },
+    { startDate: null }, { startDate: '' }, { startDate: '2026-02-29' },
   ]) {
     await assert.rejects(createPlan(7, { ...input, ...changes }), { statusCode: 400 })
     await assert.rejects(updatePlan(7, 8, { ...input, ...changes }), { statusCode: 400 })
@@ -74,7 +75,7 @@ test('plan API rejects invalid amounts, units and contribution days before SQL',
 
 test('weekly and monthly boundaries are supported and client periods are ignored', async (t) => {
   t.mock.method(pool, 'execute', async (sql, params) => {
-    assert.ok([1, 7, 31].includes(params.at(-1)))
+    assert.ok([1, 7, 31].includes(params.at(-2)))
     assert.doesNotMatch(sql, /periodos_faltantes/)
     return [{ insertId: 8 }]
   })

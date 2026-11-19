@@ -1,5 +1,5 @@
 import { pool } from '../../server/db.js'
-import { invalid, requiredText, decimal, positiveId } from './validation.js'
+import { invalid, requiredText, decimal, positiveId, requiredDate } from './validation.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 
 export async function getPlans(userId) {
@@ -8,6 +8,7 @@ export async function getPlans(userId) {
             COALESCE(t.saved, 0) AS saved, p.meta - COALESCE(t.saved, 0) AS remaining,
             p.mostrar AS visible, p.unidad_periodo AS periodUnit,
             p.aportacion_periodo AS contribution, p.dia_aportacion AS contributionDay,
+            DATE_FORMAT(p.fecha_inicio, '%Y-%m-%d') AS startDate,
             DATE_FORMAT(t.lastContributionDate, '%Y-%m-%d') AS lastContributionDate
      FROM plan_futuro AS p
      LEFT JOIN (
@@ -47,6 +48,7 @@ export async function syncPlanSavings(connection, userId, ids) {
 function planFields(input) {
   const name = requiredText(input.name, 'El nombre de la meta', 100)
   const goal = decimal(input.goal, 'La meta')
+  const startDate = requiredDate(input.startDate, 'La fecha de inicio')
   const unitPeriod = input.unitPeriod
   if (!['semana', 'mes'].includes(unitPeriod)) {
     throw invalid('Selecciona un periodo semanal o mensual.')
@@ -62,18 +64,18 @@ function planFields(input) {
   const visible = input.visible === undefined
     ? true
     : input.visible === true || input.visible === 1 || input.visible === '1'
-  return { name, goal, unitPeriod, contribution, contributionDay, visible }
+  return { name, goal, unitPeriod, contribution, contributionDay, startDate, visible }
 }
 
 export async function createPlan(userId, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `INSERT INTO plan_futuro
-       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, aportacion_periodo, dia_aportacion)
-     VALUES (?, ?, ?, 0, ?, ?, ?, ?)`,
+       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, aportacion_periodo, dia_aportacion, fecha_inicio)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.goal, fields.visible,
-      fields.unitPeriod, fields.contribution, fields.contributionDay,
+      fields.unitPeriod, fields.contribution, fields.contributionDay, fields.startDate,
     ],
   )
 
@@ -85,11 +87,11 @@ export async function updatePlan(userId, idValue, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `UPDATE plan_futuro
-     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, aportacion_periodo = ?, dia_aportacion = ?
+     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, aportacion_periodo = ?, dia_aportacion = ?, fecha_inicio = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.goal, fields.visible, fields.unitPeriod,
-      fields.contribution, fields.contributionDay, id, userId,
+      fields.contribution, fields.contributionDay, fields.startDate, id, userId,
     ],
   )
   if (!result.affectedRows) throw invalid('No se encontró el plan de tu usuario.', 404)

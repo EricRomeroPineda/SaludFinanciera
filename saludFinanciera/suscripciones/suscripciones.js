@@ -102,6 +102,7 @@ class Subscriptions extends LitElement {
           billingDay: data.get('billingDay') || null,
           paymentType: data.get('paymentType') || null,
           status: data.get('status'),
+          startDate: data.get('startDate'),
         }),
       })
       this.items = [...this.items.filter((item) => item.id !== subscription.id), subscription]
@@ -174,6 +175,9 @@ class Subscriptions extends LitElement {
             <option value="servicio" .selected=${item?.type === 'servicio'}>Servicio</option>
           </select>
         </label>
+        <label>Fecha de inicio
+          <input name="startDate" type="date" min="1000-01-01" max="9999-12-31" .value=${item?.startDate || ''} required />
+        </label>
         <label>Costo por cobro
           <input name="cost" type="number" min="0.01" max="9999999999999.99" step="0.01" .value=${item?.cost ?? ''}
             @input=${(event) => { this.formCost = event.target.value }} required />
@@ -227,9 +231,9 @@ class Subscriptions extends LitElement {
     if (item.status.toLowerCase() !== 'activa') {
       return html`<p class="billing-indicator">Sin próximo cobro: ${item.status}</p>`
     }
-    const days = daysUntilBilling(item.frequency, item.billingDay, this.today)
+    const days = daysUntilBilling(item.frequency, item.billingDay, this.today, item.startDate)
     if (days == null) return html`<p class="billing-indicator">Configura el día de cobro para ver cuánto falta.</p>`
-    const longerPeriod = !['semanal', 'mensual'].includes(String(item.frequency).trim().toLowerCase())
+    const longerPeriod = !item.startDate && !['semanal', 'mensual'].includes(String(item.frequency).trim().toLowerCase())
     return html`
       <div class="billing-indicator billing-countdown ${days === 0 ? 'billing-today' : days <= 2 ? 'billing-soon' : ''}"
         role="status">
@@ -267,6 +271,7 @@ class Subscriptions extends LitElement {
                   <p class="subscription-price">${money.format(item.cost)} <small>· ${item.frequency}</small></p>
                   ${this.renderBillingIndicator(item)}
                   <dl>
+                    <div><dt>Fecha de inicio</dt><dd>${item.startDate || 'Sin definir; configura al editar'}</dd></div>
                     <div class="annual-cost"><dt>Costo estimado por 1 año</dt><dd>${item.annualCost == null ? 'Revisa la frecuencia' : money.format(item.annualCost)}</dd></div>
                     ${String(item.frequency).trim().toLowerCase() !== 'mensual' ? html`
                       <div><dt>Costo mensual</dt><dd>${item.monthlyCost == null ? 'Sin calcular' : money.format(item.monthlyCost)}</dd></div>

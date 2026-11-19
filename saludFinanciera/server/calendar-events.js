@@ -1,18 +1,19 @@
 import { isCreditAccount } from '../account-types.js'
+import { nextScheduledDate } from '../schedule.js'
 
 export function calendarEvents(month, { accounts, subscriptions, plans }) {
   const [year, monthNumber] = month.split('-').map(Number)
   const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
   const events = []
-  const recurring = (kind, item, weekly, day, extra = {}) => {
-    day = Number(day)
-    if (!Number.isInteger(day) || day < 1 || day > (weekly ? 7 : 31)) return
-    const dates = weekly
-      ? Array.from({ length: lastDay }, (_, index) => index + 1)
-        .filter((date) => (new Date(Date.UTC(year, monthNumber - 1, date)).getUTCDay() || 7) === day)
-      : [Math.min(day, lastDay)]
-    for (const date of dates) {
-      events.push({ kind, date: `${month}-${String(date).padStart(2, '0')}`, label: item.name, ...extra })
+  const recurring = (kind, item, frequency, day, extra = {}) => {
+    let from = new Date(Date.UTC(year, monthNumber - 1, 1))
+    const end = new Date(Date.UTC(year, monthNumber - 1, lastDay))
+    let date = nextScheduledDate(frequency, day, from, item.startDate)
+    while (date && date <= end) {
+      events.push({ kind, date: date.toISOString().slice(0, 10), label: item.name, ...extra })
+      from = new Date(date)
+      from.setUTCDate(from.getUTCDate() + 1)
+      date = nextScheduledDate(frequency, day, from, item.startDate)
     }
   }
   for (const account of accounts) {
@@ -26,14 +27,15 @@ export function calendarEvents(month, { accounts, subscriptions, plans }) {
     if (String(subscription.status).toLowerCase() !== 'activa') continue
     const frequency = String(subscription.frequency).trim().toLowerCase()
     if (!['semanal', 'mensual', 'trimestral', 'semestral', 'anual'].includes(frequency)) continue
-    recurring('subscription', subscription, frequency === 'semanal', subscription.billingDay, {
+    const reference = !subscription.startDate && !['semanal', 'mensual'].includes(frequency)
+    recurring('subscription', subscription, reference ? 'mensual' : frequency, subscription.billingDay, {
       subscriptionId: subscription.id, amount: subscription.cost,
-      reference: !['semanal', 'mensual'].includes(frequency),
+      reference,
     })
   }
   for (const plan of plans) {
     if (!plan.configured || plan.completed) continue
-    recurring('plan', plan, plan.periodUnit === 'semana', plan.contributionDay, {
+    recurring('plan', plan, plan.periodUnit, plan.contributionDay, {
       planId: plan.id, amount: plan.contribution,
     })
   }

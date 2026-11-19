@@ -1,3 +1,5 @@
+import { parseScheduleDate } from '../schedule.js'
+
 export function invalid(message, statusCode = 400) {
   const error = new Error(message)
   error.statusCode = statusCode
@@ -27,3 +29,7 @@ export function positiveId(value, label) {
   return id
 }
 
+export function requiredDate(value, label) {
+  if (!parseScheduleDate(value)) throw invalid(`${label} debe ser una fecha válida (AAAA-MM-DD).`)
+  return value
+}

@@ -11,23 +11,18 @@ export function calculatePlanProjection(plan, today = new Date()) {
     return { configured, completed, periodsRemaining, nextContributionDate: null, estimatedCompletionDate: null }
   }
 
-  const current = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+  let current = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+  const start = parseScheduleDate(plan.startDate)
+  if (start && start > current) current = start
   // Un movimiento en el periodo actual consume esa fecha; los abonos adicionales siguen permitidos.
   const last = /^\d{4}-\d{2}-\d{2}$/.test(plan.lastContributionDate || '')
     ? new Date(`${plan.lastContributionDate}T00:00:00Z`) : null
-  const anchor = last && last >= current ? last : current
+  const anchor = new Date(last && last >= current ? last : current)
   const exclusive = Boolean(last && last >= current)
-  let next
-  if (plan.periodUnit === 'semana') {
-    next = new Date(anchor)
-    let offset = (day - (anchor.getUTCDay() || 7) + 7) % 7
-    if (exclusive && offset === 0) offset = 7
-    next.setUTCDate(next.getUTCDate() + offset)
-  } else {
-    next = monthlyDate(anchor.getUTCFullYear(), anchor.getUTCMonth(), day)
-    if (next < anchor || (exclusive && next.getTime() === anchor.getTime())) {
-      next = monthlyDate(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, day)
-    }
+  if (exclusive) anchor.setUTCDate(anchor.getUTCDate() + 1)
+  const next = nextScheduledDate(plan.periodUnit, day, anchor, plan.startDate)
+  if (!next) {
+    return { configured, completed, periodsRemaining, nextContributionDate: null, estimatedCompletionDate: null }
   }
   const end = plan.periodUnit === 'semana'
     ? new Date(next.getTime() + (periodsRemaining - 1) * 7 * 86400000)
@@ -48,3 +43,4 @@ function dateText(date) {
   return Number.isNaN(date.getTime()) || date.getUTCFullYear() > 9999
     ? null : date.toISOString().slice(0, 10)
 }
+import { nextScheduledDate, parseScheduleDate } from './schedule.js'

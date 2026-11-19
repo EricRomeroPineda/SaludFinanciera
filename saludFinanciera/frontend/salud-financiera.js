@@ -230,6 +230,7 @@ class SaludFinanciera extends LitElement {
           unitPeriod: formData.get('unitPeriod') || null,
           contribution: formData.get('contribution'),
           contributionDay: formData.get('contributionDay'),
+          startDate: formData.get('startDate'),
           visible: formData.has('visible'),
         }),
       })
@@ -750,6 +751,8 @@ class SaludFinanciera extends LitElement {
               </select>
             </label>
             <label>Aportación por periodo<input name="contribution" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.contribution ?? ''} required /></label>
+            <label>Fecha de inicio<input name="startDate" type="date" min="1000-01-01" max="9999-12-31"
+              .value=${this.editingPlan?.startDate || ''} required /></label>
             ${this.planUnit === 'semana' ? html`
               <label>Día de aportación
                 <select name="contributionDay" required>
@@ -811,6 +814,7 @@ class SaludFinanciera extends LitElement {
         </div>
         ${projection.configured ? html`
           <dl class="card-dates">
+            <div><dt>Fecha de inicio</dt><dd>${plan.startDate ? this.formatDate(plan.startDate) : 'Sin definir; configura al editar'}</dd></div>
             <div><dt>Aportación ${plan.periodUnit === 'semana' ? 'semanal' : 'mensual'}</dt><dd>${this.formatMoney(plan.contribution)}</dd></div>
             <div><dt>Día de aportación</dt><dd>${plan.periodUnit === 'semana' ? weekdays[Number(plan.contributionDay) - 1] : `Día ${plan.contributionDay} de cada mes`}</dd></div>
             <div><dt>${periodsLabel}</dt><dd>${projection.periodsRemaining}</dd></div>

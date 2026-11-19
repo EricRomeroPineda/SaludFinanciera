@@ -73,7 +73,7 @@ for (const editing of [false, true]) {
   test(`plan ${editing ? 'edit' : 'create'} sends the schedule and reloads the calculated data`, async (t) => {
     const form = new Map([
       ['name', 'Vacaciones'], ['goal', '300.00'], ['unitPeriod', 'mes'],
-      ['contribution', '100.00'], ['contributionDay', '18'], ['visible', 'on'],
+      ['contribution', '100.00'], ['contributionDay', '18'], ['startDate', '2026-11-18'], ['visible', 'on'],
     ])
     t.mock.method(globalThis, 'FormData', function () { return form })
     let request
@@ -90,7 +90,7 @@ for (const editing of [false, true]) {
     assert.equal(request.path, editing ? '/api/plans/8' : '/api/plans')
     assert.equal(request.options.method, editing ? 'PUT' : 'POST')
     assert.deepEqual(JSON.parse(request.options.body), {
-      name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00', contributionDay: '18', visible: true,
+      name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00', contributionDay: '18', startDate: '2026-11-18', visible: true,
     })
     assert.equal(ctx.error, '')
     assert.equal(ctx.showPlanForm, false)
