@@ -13,9 +13,26 @@ import {
 } from './modules.js'
 import { getCalendarData } from './calendar.js'
 import { createCategory } from './categories.js'
+import { getFamilyView } from './family-view.js'
 
 export async function handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson }) {
   const route = `${request.method} ${url.pathname}`
+  const view = url.searchParams.get('view')
+  if (view && !['individual', 'family'].includes(view)) {
+    throw Object.assign(new Error('Selecciona una vista válida.'), { statusCode: 400 })
+  }
+  if (view === 'family') {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    if (request.method !== 'GET') {
+      throw Object.assign(new Error('La vista familiar es de solo consulta. Cambia a Individual para registrar o editar.'), { statusCode: 403 })
+    }
+    const resource = { '/api/dashboard': 'dashboard', '/api/calendar': 'calendar',
+      '/api/subscriptions': 'subscriptions', '/api/movements': 'movements' }[url.pathname]
+    if (!resource) return false
+    sendJson(response, 200, await getFamilyView(userId, resource, url))
+    return true
+  }
   if (await handleSubscriptionRoute(request, response, url, { getUserId, readJson, sendJson })) return true
   if (route === 'GET /api/dashboard') {
     const userId = await getUserId(request, response)

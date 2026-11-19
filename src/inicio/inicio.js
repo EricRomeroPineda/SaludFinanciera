@@ -6,6 +6,7 @@ import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import { isValidPhoto, themes } from '../../shared/profile.js'
 import defaultAvatar from '../assets/default-avatar.svg'
+import './familia.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -380,6 +381,7 @@ class Inicio extends LitElement {
           ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
           ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
           ${this.renderProfile()}
+          <family-settings></family-settings>
         </main>
       ` : html`
         ${this.error ? html`<div class="error-message" role="alert">${this.error}</div>` : ''}

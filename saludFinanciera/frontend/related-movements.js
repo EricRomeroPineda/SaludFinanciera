@@ -10,6 +10,7 @@ class RelatedMovements extends LitElement {
   static styles = [unsafeCSS(sharedStyles), unsafeCSS(financeStyles), unsafeCSS(styles)]
   static properties = {
     relation: { type: String },
+    familyView: { type: Boolean },
     relationId: { type: Number },
     label: { type: String },
     items: { state: true },
@@ -26,7 +27,7 @@ class RelatedMovements extends LitElement {
   }
 
   updated(changed) {
-    if (changed.has('relation') || changed.has('relationId')) this.load()
+    if (changed.has('relation') || changed.has('relationId') || changed.has('familyView')) this.load()
   }
 
   async load() {
@@ -36,7 +37,7 @@ class RelatedMovements extends LitElement {
     this.items = []
     try {
       const { movements } = await apiRequest(
-        `/api/movements?relation=${encodeURIComponent(this.relation)}&id=${encodeURIComponent(this.relationId)}`,
+        `/api/movements?relation=${encodeURIComponent(this.relation)}&id=${encodeURIComponent(this.relationId)}${this.familyView ? '&view=family' : ''}`,
       )
       if (version === this.requestVersion) this.items = movements
     } catch (error) {

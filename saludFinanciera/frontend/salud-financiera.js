@@ -40,6 +40,7 @@ class SaludFinanciera extends LitElement {
   static styles = [unsafeCSS(sharedStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
   static properties = {
     dashboard: { state: true },
+    familyView: { state: true },
     activeTab: { state: true },
     selectedCard: { state: true },
     today: { state: true },
@@ -71,6 +72,7 @@ class SaludFinanciera extends LitElement {
   constructor() {
     super()
     this.dashboard = null
+    this.familyView = false
     this.activeTab = 'overview'
     this.selectedCard = null
     this.today = new Date()
@@ -126,15 +128,31 @@ class SaludFinanciera extends LitElement {
   }
 
   async loadDashboard() {
+    const version = this.dashboardLoadVersion = (this.dashboardLoadVersion || 0) + 1
     this.loading = true
     this.error = ''
     try {
       await this.refreshDashboard()
     } catch (error) {
-      this.error = error.message
+      if (version === this.dashboardLoadVersion) this.error = error.message
     } finally {
-      this.loading = false
+      if (version === this.dashboardLoadVersion) this.loading = false
     }
+  }
+
+  changeView(event) {
+    this.familyView = event.currentTarget.value === 'family'
+    this.dashboard = null
+    this.selectedCard = null
+    this.selectedPlan = null
+    this.editingAccount = null
+    this.editingPlan = null
+    this.showAccountForm = false
+    this.showPlanForm = false
+    this.showMovementForm = false
+    this.showCategoryForm = false
+    this.pendingDeletePlan = null
+    this.loadDashboard()
   }
 
   async handleSubscriptionsChanged() {
@@ -167,7 +185,16 @@ class SaludFinanciera extends LitElement {
           <div>
             <p class="eyebrow">SALUD FINANCIERA</p>
             <h1>${title}</h1>
-            <p>La información que ves pertenece a tu usuario.</p>
+            <p>${this.familyView ? `Consulta familiar${this.dashboard?.family ? ` · ${this.dashboard.family.name}` : ''}. Los nombres identifican al propietario de cada registro.`
+              : 'La información que ves pertenece a tu usuario.'}</p>
+            <label>Vista
+              <select .value=${this.familyView ? 'family' : 'individual'} @change=${this.changeView} ?disabled=${this.submitting}>
+                <option value="individual">Individual</option>
+                <option value="family">Familiar · Solo consulta</option>
+              </select>
+            </label>
+            ${this.familyView ? html`<p>Para registrar, editar o eliminar, cambia a Individual.
+              Administra los integrantes y las invitaciones en Mi perfil → Mi familia.</p>` : ''}
           </div>
         </div>
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
@@ -181,7 +208,7 @@ class SaludFinanciera extends LitElement {
         </nav>
         ${this.activeTab === 'debtors' ? this.renderDebtors()
           : this.loading ? html`<p class="empty-state" role="status">Cargando información financiera…</p>`
-            : this.dashboard ? this.renderActiveTab() : html`
+            : this.dashboard ? keyed(this.familyView, this.renderActiveTab()) : html`
               <div class="empty-state">
                 <p>No se pudo cargar tu información financiera.</p>
                 <button class="quiet-button" type="button" @click=${this.loadDashboard}>Reintentar</button>
@@ -197,7 +224,7 @@ class SaludFinanciera extends LitElement {
     switch (this.activeTab) {
       case 'cards': return this.renderCards()
       case 'accounts': return this.renderAccounts()
-      case 'subscriptions': return html`<finance-subscriptions @subscriptions-changed=${this.handleSubscriptionsChanged}></finance-subscriptions>`
+      case 'subscriptions': return html`<finance-subscriptions .familyView=${this.familyView} @subscriptions-changed=${this.handleSubscriptionsChanged}></finance-subscriptions>`
       case 'plans': return this.renderPlans()
       case 'movements': return this.renderMovements()
       default: return this.renderOverview()
@@ -382,7 +409,9 @@ class SaludFinanciera extends LitElement {
   }
 
   async refreshDashboard() {
-    this.dashboard = await apiRequest('/api/dashboard')
+    const version = this.dashboardRequestVersion = (this.dashboardRequestVersion || 0) + 1
+    const data = await apiRequest(`/api/dashboard${this.familyView ? '?view=family' : ''}`)
+    if (version === this.dashboardRequestVersion) this.dashboard = data
   }
 
   async handleCreateAccount(event) {
@@ -585,7 +614,7 @@ class SaludFinanciera extends LitElement {
       <section class="data-card">
         <div class="section-heading">
           <div><p class="eyebrow">REGISTROS DE TU USUARIO</p><h2>Mis cuentas</h2></div>
-          <button class="primary-button compact-button" type="button" @click=${() => {
+          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${() => {
             this.showAccountForm = !this.showAccountForm
             this.editingAccount = null
             this.newAccountType = ''
@@ -606,7 +635,7 @@ class SaludFinanciera extends LitElement {
                   <td>${this.formatMoney(account.available)}</td>
                   <td>${account.total == null ? '—' : this.formatMoney(account.total)}</td>
                   <td>${this.formatDate(account.paymentDueDate)}</td>
-                  <td class="row-actions">
+                  <td class="row-actions" ?hidden=${this.familyView}>
                     <button class="text-button" type="button" @click=${() => {
                       this.startAccountEdit(account)
                     }}>Editar</button>
@@ -670,7 +699,7 @@ class SaludFinanciera extends LitElement {
       <section>
         <div class="section-heading">
           <h2>Mis tarjetas</h2>
-          <button class="primary-button compact-button" type="button" @click=${this.startCardCreation}>+ Nueva tarjeta</button>
+          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${this.startCardCreation}>+ Nueva tarjeta</button>
         </div>
         <div class="card-type-columns">
           ${groups.map((group) => html`
@@ -684,7 +713,7 @@ class SaludFinanciera extends LitElement {
         </div>
         ${cards.some((card) => card.id === this.selectedCard?.id) ? html`
           <finance-related-movements relation="account"
-            .relationId=${this.selectedCard.id} .label=${this.selectedCard.name}></finance-related-movements>
+            .familyView=${this.familyView} .relationId=${this.selectedCard.id} .label=${this.selectedCard.name}></finance-related-movements>
         ` : ''}
       </section>
     `
@@ -764,7 +793,7 @@ class SaludFinanciera extends LitElement {
                         : this.formatMoney(card.paymentToAvoidInterest)}</dd>
                     </div>
                   </dl>` : ''}
-                  <div class="card-actions">
+                  <div class="card-actions" ?hidden=${this.familyView}>
                     ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
                     <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
                     <button class="card-trash-button" type="button" aria-label=${`Eliminar ${card.name}`}
@@ -784,7 +813,7 @@ class SaludFinanciera extends LitElement {
       <section class="data-card">
         <div class="section-heading">
           <div><p class="eyebrow">METAS FINANCIERAS</p><h2>Planes futuros</h2></div>
-          <button class="primary-button compact-button" type="button" @click=${() => {
+          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${() => {
             this.editingPlan = null
             this.planUnit = ''
             this.showPlanForm = !this.showPlanForm
@@ -882,7 +911,7 @@ class SaludFinanciera extends LitElement {
           </dl>
         ` : html`<p class="plan-note">Edita el plan para configurar la frecuencia semanal o mensual, el día y la aportación esperada.</p>`}
         ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
-        <div class="card-actions">
+        <div class="card-actions" ?hidden=${this.familyView}>
           <button class="text-button" type="button" ?disabled=${this.submitting}
             @click=${() => this.startPlanMovement(plan)}>Registrar movimiento</button>
           <button class="text-button" type="button" @click=${() => {
@@ -918,7 +947,7 @@ class SaludFinanciera extends LitElement {
     const plan = plans.find((item) => item.id === this.selectedPlan?.id)
     return plan ? keyed(this.dashboard, html`
       <finance-related-movements relation="plan"
-        .relationId=${plan.id} .label=${plan.name}></finance-related-movements>
+        .familyView=${this.familyView} .relationId=${plan.id} .label=${plan.name}></finance-related-movements>
     `) : ''
   }
 
@@ -927,7 +956,7 @@ class SaludFinanciera extends LitElement {
       <section>
         <div class="section-heading">
           <div><p class="eyebrow">ACTIVIDAD MENSUAL</p><h2>Registro de movimientos</h2></div>
-          <div class="movement-toolbar">
+          <div class="movement-toolbar" ?hidden=${this.familyView}>
             <button class="quiet-button compact-button" type="button" @click=${() => {
               this.showCategoryForm = !this.showCategoryForm
               this.categoryError = ''
@@ -938,7 +967,7 @@ class SaludFinanciera extends LitElement {
           </div>
         </div>
         ${this.showCategoryForm && !this.showMovementForm ? this.renderCategoryForm() : ''}
-        <financial-calendar .revision=${this.dashboard}
+        <financial-calendar .familyView=${this.familyView} .revision=${this.dashboard}
           @register-movement=${(event) => this.openCalendarMovement(event.detail)}
           @edit-movement=${(event) => this.startMovementEdit(event.detail)}
           @delete-movement=${(event) => this.handleDeleteMovement(event.detail.id)}></financial-calendar>
@@ -1141,7 +1170,7 @@ class SaludFinanciera extends LitElement {
             <strong>${this.formatMoney(item.amount)}</strong>
             <small>${this.formatDate(item.date)}</small>
           </span>
-          ${actions ? html`
+          ${actions && !this.familyView ? html`
             <span class="movement-actions">
               <button class="text-button" type="button" @click=${() => this.startMovementEdit(item)}>Editar</button>
               <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteMovement(item.id)} aria-label="Eliminar movimiento">×</button>

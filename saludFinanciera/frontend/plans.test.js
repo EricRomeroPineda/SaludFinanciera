@@ -144,7 +144,7 @@ test('opening edit brings the start date into view in both modules', () => {
       },
     }
     prototype.updated.call({
-      ...flags, renderRoot: { querySelector: () => form },
+      ...flags, started: true, renderRoot: { querySelector: () => form },
     }, new Map([[changed, null]]))
     assert.equal(scrolled, true)
     assert.equal(focused, true)

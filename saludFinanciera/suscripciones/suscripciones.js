@@ -14,6 +14,7 @@ class Subscriptions extends LitElement {
   static styles = [unsafeCSS(sharedStyles), unsafeCSS(financeStyles), unsafeCSS(responsiveStyles), unsafeCSS(styles)]
   static properties = {
     items: { state: true },
+    familyView: { type: Boolean },
     loading: { state: true },
     submitting: { state: true },
     showForm: { state: true },
@@ -45,7 +46,6 @@ class Subscriptions extends LitElement {
 
   connectedCallback() {
     super.connectedCallback()
-    this.load()
     this.clock = window.setInterval(() => { this.today = new Date() }, 60000)
   }
 
@@ -55,6 +55,10 @@ class Subscriptions extends LitElement {
   }
 
   updated(changed) {
+    if (changed.has('familyView') || !this.started) {
+      this.started = true
+      this.load()
+    }
     if (this.showForm && (changed.has('editing') || changed.has('showForm'))) {
       const form = this.renderRoot.querySelector('#subscription-form')
       form?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -75,8 +79,9 @@ class Subscriptions extends LitElement {
   }
 
   async refresh() {
-    const { subscriptions } = await apiRequest('/api/subscriptions')
-    this.items = subscriptions
+    const version = this.requestVersion = (this.requestVersion || 0) + 1
+    const { subscriptions } = await apiRequest(`/api/subscriptions${this.familyView ? '?view=family' : ''}`)
+    if (version === this.requestVersion) this.items = subscriptions
   }
 
   notifyChange() {
@@ -258,7 +263,7 @@ class Subscriptions extends LitElement {
       <section>
         <div class="section-heading">
           <h2>Suscripciones y servicios</h2>
-          <button class="primary-button compact-button" type="button" ?disabled=${this.submitting}
+          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
             @click=${() => this.showForm ? (this.showForm = false) : this.openForm()}>
             ${this.showForm ? 'Cerrar formulario' : '+ Agregar suscripción'}
           </button>
@@ -296,8 +301,8 @@ class Subscriptions extends LitElement {
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}
                       @click=${() => { this.selectedSubscription = item }}>Ver movimientos</button>
-                    <button class="text-button" type="button" ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>
-                    <button class="trash-button" type="button" ?disabled=${this.submitting}
+                    <button class="text-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>
+                    <button class="trash-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
                       aria-label=${`Eliminar ${item.name}`} title="Eliminar suscripción" @click=${() => this.requestDelete(item)}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
@@ -310,7 +315,7 @@ class Subscriptions extends LitElement {
           ` : html`<p class="empty-state">No tienes suscripciones registradas. Usa «Agregar suscripción» para crear la primera.</p>`}
         ${this.items.some((item) => item.id === this.selectedSubscription?.id) ? html`
           <finance-related-movements relation="subscription"
-            .relationId=${this.selectedSubscription.id} .label=${this.selectedSubscription.name}></finance-related-movements>
+            .familyView=${this.familyView} .relationId=${this.selectedSubscription.id} .label=${this.selectedSubscription.name}></finance-related-movements>
         ` : ''}
         ${!this.loading && this.error ? html`<button class="quiet-button" type="button" ?disabled=${this.submitting} @click=${this.load}>Actualizar lista</button>` : ''}
         <dialog class="delete-dialog" aria-labelledby="delete-subscription-title"

@@ -154,13 +154,14 @@ test('finance module owns its navigation and debtor placeholder outside the orch
   const state = {
     activeTab: 'debtors',
     renderDebtors: () => 'debtors-placeholder',
+    renderPlanDeleteDialog: () => '',
   }
   const template = Finance.prototype.render.call(state)
   const text = (value) => Array.isArray(value) ? value.map(text).join(' ')
     : value?.strings ? `${value.strings.join(' ')} ${value.values.map(text).join(' ')}`
       : typeof value === 'string' ? value : ''
   const markup = text(template)
-  for (const label of ['Panorama', 'Tarjetas', 'Planes futuros', 'Registro de movimientos', 'Suscripciones', 'Deudores']) {
+  for (const label of ['Panorama', 'Tarjetas', 'Planes futuros', 'Movimiento', 'Suscripciones', 'Deudores']) {
     assert.ok(markup.includes(label))
   }
   assert.ok(markup.includes('debtors-placeholder'))

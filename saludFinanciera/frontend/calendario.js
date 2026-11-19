@@ -24,6 +24,7 @@ class FinancialCalendar extends LitElement {
     loading: { state: true },
     revision: { attribute: false },
     scope: { state: true },
+    familyView: { type: Boolean },
   }
 
   constructor() {
@@ -39,7 +40,7 @@ class FinancialCalendar extends LitElement {
   }
 
   updated(changed) {
-    if (changed.has('revision') || !this.started) {
+    if (changed.has('revision') || changed.has('familyView') || !this.started) {
       this.started = true
       this.loadMonth()
     }
@@ -52,7 +53,7 @@ class FinancialCalendar extends LitElement {
     this.error = ''
     this.data = null
     try {
-      const data = await apiRequest(`/api/calendar?month=${encodeURIComponent(month)}&scope=${this.scope}`)
+      const data = await apiRequest(`/api/calendar?month=${encodeURIComponent(month)}&scope=${this.scope}${this.familyView ? '&view=family' : ''}`)
       if (version !== this.requestVersion) return
       this.data = data
       const selectedDayNumber = Number(this.selectedDay.slice(-2))
@@ -104,12 +105,14 @@ class FinancialCalendar extends LitElement {
   }
 
   requestMovement(event = null) {
+    if (this.familyView) return
     this.dispatchEvent(new CustomEvent('register-movement', {
       detail: { date: this.selectedDay, event }, bubbles: true, composed: true,
     }))
   }
 
   movementAction(action, movement) {
+    if (this.familyView) return
     this.dispatchEvent(new CustomEvent(action, { detail: movement, bubbles: true, composed: true }))
   }
 
@@ -144,8 +147,10 @@ class FinancialCalendar extends LitElement {
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
                       <td class="monthly-actions">
-                        <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
-                        <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
+                        ${!this.familyView ? html`
+                          <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
+                          <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
+                        ` : 'Solo consulta'}
                       </td>
                     </tr>
                   `)}</tbody>
@@ -226,7 +231,7 @@ class FinancialCalendar extends LitElement {
         <section class="day-card">
           <h2 class="day-title">${dayFormat.format(selectedDate)}</h2>
           <p class="day-total">${this.loading || this.error ? 'Consulta del día pendiente' : selected ? `${selected.count} movimiento${selected.count === 1 ? '' : 's'} en este día` : '0 movimientos registrados en este día'}</p>
-          <button class="calendar-primary" type="button" @click=${() => this.requestMovement()}>+ Registrar movimiento en este día</button>
+          ${!this.familyView ? html`<button class="calendar-primary" type="button" @click=${() => this.requestMovement()}>+ Registrar movimiento en este día</button>` : ''}
           ${scheduled.some((event) => event.date === this.selectedDay) ? html`
             <div class="scheduled-list">
               <h3>Programado para este día</h3>
@@ -236,7 +241,7 @@ class FinancialCalendar extends LitElement {
                   <div><strong>${event.label}</strong><small>${eventLabels[event.kind]} · ${event.amount == null ? 'Monto por definir' : this.formatMoney(event.amount)}</small>
                     ${event.reference ? html`<small>Referencia al día de cobro; falta el mes de inicio de la frecuencia.</small>` : ''}
                   </div>
-                  <button class="calendar-action" type="button" @click=${() => this.requestMovement(event)}>Registrar</button>
+                  ${!this.familyView ? html`<button class="calendar-action" type="button" @click=${() => this.requestMovement(event)}>Registrar</button>` : ''}
                 </article>
               `)}
             </div>
