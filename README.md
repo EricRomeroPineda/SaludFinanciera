@@ -33,7 +33,7 @@ El registro y **Guardar perfil** leen la URL directamente del formulario y la gu
 ## Carpetas principales
 
 - `saludFinanciera/`: módulo financiero completo, separado del login y del orquestador.
-- `saludFinanciera/frontend/`: componente `salud-financiera`, flujo financiero, estilos propios y calendario conservado sin pestaña visible.
+- `saludFinanciera/frontend/`: componente `salud-financiera`, flujo financiero, estilos propios y calendario integrado en Movimiento.
 - `saludFinanciera/server/`: rutas y consultas de panorama/cuentas, movimientos, suscripciones, planes y calendario. Conserva las URL `/api/dashboard`, `/api/accounts`, `/api/movements`, `/api/subscriptions`, `/api/plans` y `/api/calendar`.
 - `saludFinanciera/suscripciones/`: formulario y tarjetas de suscripciones, estilos, rutas y servicio MySQL de este flujo.
 - `src/inicio/inicio.js`: orquestador de menú, login/registro, perfil y barra de usuario; monta el módulo financiero.
@@ -43,7 +43,7 @@ El registro y **Guardar perfil** leen la URL directamente del formulario y la gu
 - `server/auth.js`: registro, autenticación y sesiones.
 - `server/db.js`: pool MySQL configurado con variables de entorno.
 
-La barra financiera muestra **Panorama, Tarjetas, Movimiento, Planes futuros, Suscripciones y Deudores**. Deudores es un estado vacío preparado para desarrollo posterior: no registra ni guarda datos. Cuentas ya no ocupa una pestaña; su gestión se conserva desde **Panorama → Cuentas → Ver todas** y desde la creación de tarjetas.
+La barra financiera muestra **Panorama, Movimiento, Tarjetas, Planes futuros, Suscripciones y Deudores**. Deudores es un estado vacío preparado para desarrollo posterior: no registra ni guarda datos. Cuentas ya no ocupa una pestaña; su gestión se conserva desde **Panorama → Cuentas → Ver todas** y desde la creación de tarjetas.
 
 Al seleccionar una tarjeta bancaria o una suscripción, aparece debajo una tabla con fecha, operación, origen, destino, categoría, suscripción y monto. En tarjetas bancarias se pulsa la tarjeta (o se usa Enter/Espacio al enfocarla), sin botón «Ver movimientos»; las suscripciones conservan ese botón adicional. Las tarjetas bancarias incluyen movimientos donde su cuenta es origen o destino; las suscripciones incluyen los vinculados por `id_suscripcion`. Se consulta todo el historial relacionado del usuario autenticado, sin el límite de 250 del panorama. Si no existen registros se muestra **No hay movimientos**; los errores de consulta se muestran con opción de reintentar.
 
@@ -60,6 +60,18 @@ El visor bancario usa el mismo formato visual de Suscripciones: cuadrícula adap
 Las tarjetas se separan en dos mitades: **Nómina / Débito** a la izquierda y **Crédito** a la derecha; en móvil se apilan. La papelera solicita confirmación y mantiene la restricción de no eliminar cuentas con movimientos. Solo crédito muestra una barra de **disponible / límite máximo**: verde por encima de 50 %, azul entre más de 20 % y 50 %, y alerta hasta 20 %. Si el límite no permite calcular un porcentaje se solicita configurarlo. El aviso de pago usa la fecha límite registrada y la fecha local actual, se actualiza cada minuto y distingue días restantes, vencimiento hoy y fecha vencida; no adelanta automáticamente la fecha al mes siguiente ni determina si ya se cubrió el pago.
 
 Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `server/` y `src/`, y reinicia el backend: las consultas financieras ya no están en los archivos antiguos de `server/`.
+
+## Movimiento y calendario
+
+Movimiento está junto a Panorama. El calendario navega por mes y permite seleccionar un día para consultar cuántos movimientos se registraron, sus ingresos/gastos y su detalle. **Registrar movimiento en este día** abre un modal con esa fecha; **Nuevo movimiento** usa hoy. El modal permite gasto, ingreso y transferencia, con sus cuentas, categoría y relaciones existentes. Los accesos desde tarjetas y planes también abren este modal. Guardar o eliminar actualiza el calendario, el resumen diario y el registro mensual sin perder el mes seleccionado.
+
+La leyenda distingue **azul: pago de tarjeta**, **verde: aportación a plan**, **violeta: suscripción/servicio**. Los puntos son fechas previstas, no pagos realizados; el número del día cuenta únicamente movimientos reales. Al seleccionar un día, sus compromisos previstos tienen un botón Registrar que precarga la fecha y la relación correspondiente: plan o suscripción como gasto, pago de tarjeta como transferencia hacia la tarjeta. El usuario confirma cuenta de origen e importe antes de guardar. No se crean movimientos automáticamente.
+
+Las tarjetas de crédito usan su fecha límite exacta registrada, sin repetirla artificialmente cada mes ni inferir que esté pagada. Los planes pendientes y configurados muestran el día semanal/mensual, independientemente de Mostrar en Panorama; las suscripciones activas muestran su día de cobro. Los días 29–31 se ajustan al último día del mes cuando es necesario. Para suscripciones trimestrales, semestrales y anuales se indica explícitamente que es una referencia al día configurado, pues no existe un mes inicial con el que calcular vencimientos exactos. Los marcadores se generan con la configuración actual, no son un historial de cuotas.
+
+Debajo aparece **Registro general** del mes visible, con todos sus movimientos (sin límite de 250), fecha, operación, origen, destino, categoría, plan, suscripción, monto y acciones de editar/eliminar. El backend filtra por usuario autenticado y por el intervalo del mes. Los errores muestran opción de reintentar, no se presentan como meses vacíos.
+
+**Registrar categoría**, tanto en Movimiento como dentro del modal, solicita nombre y tipo ingreso/gasto. Usa `POST /api/categories` autenticado y las columnas existentes `id`, `id_ahorros`, `nombre`, `tipo`, insertando `id_ahorros = NULL`. Las categorías son **compartidas**, como el catálogo existente; no se presume una columna de usuario que la tabla no tiene. Se rechazan nombres vacíos, tipos inválidos y duplicados con el mismo nombre/tipo en el catálogo sin ahorro. Las nuevas categorías se incorporan al selector del formulario (filtrado por operación); no requieren migración.
 
 ## Planes futuros
 

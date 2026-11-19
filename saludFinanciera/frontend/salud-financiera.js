@@ -22,6 +22,11 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', {
 })
 const weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
+function localDateInput() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 function isCardAccount(account) {
   const type = String(account.type || '')
     .normalize('NFD')
@@ -54,6 +59,10 @@ class SaludFinanciera extends LitElement {
     formLimit: { state: true },
     formAvailable: { state: true },
     newMovementDefaults: { state: true },
+    showCategoryForm: { state: true },
+    categoryError: { state: true },
+    categoryNotice: { state: true },
+    createdCategory: { state: true },
   }
 
   constructor() {
@@ -81,6 +90,10 @@ class SaludFinanciera extends LitElement {
     this.movementOperation = 'expense'
     this.editingMovement = null
     this.error = ''
+    this.showCategoryForm = false
+    this.categoryError = ''
+    this.categoryNotice = ''
+    this.createdCategory = null
   }
 
   connectedCallback() {
@@ -92,6 +105,14 @@ class SaludFinanciera extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     window.clearInterval(this.cardClock)
+  }
+
+  updated(changed) {
+    if (changed.has('showMovementForm')) {
+      const dialog = this.renderRoot.querySelector('#movement-dialog')
+      if (this.showMovementForm && dialog && !dialog.open) dialog.showModal()
+      else if (!this.showMovementForm && dialog?.open) dialog.close()
+    }
   }
 
   async loadDashboard() {
@@ -118,8 +139,8 @@ class SaludFinanciera extends LitElement {
   render() {
     const tabs = [
       ['overview', 'Panorama'],
-      ['cards', 'Tarjetas'],
       ['movements', 'Movimiento'],
+      ['cards', 'Tarjetas'],
       ['plans', 'Planes futuros'],
       ['subscriptions', 'Suscripciones'],
       ['debtors', 'Deudores'],
@@ -157,6 +178,7 @@ class SaludFinanciera extends LitElement {
               </div>
             `}
         ${this.renderPlanDeleteDialog()}
+        ${this.dashboard ? this.renderMovementDialog() : ''}
       </main>
     `
   }
@@ -281,6 +303,7 @@ class SaludFinanciera extends LitElement {
   startPlanMovement(plan) {
     this.error = ''
     this.editingMovement = null
+    this.createdCategory = null
     this.movementOperation = 'expense'
     this.newMovementDefaults = { planId: plan.id, planName: plan.name }
     this.showMovementForm = true
@@ -301,7 +324,8 @@ class SaludFinanciera extends LitElement {
       destinationAccountId: formData.get('destinationAccountId') || null,
       categoryId: formData.get('categoryId') || null,
       planId: formData.get('planId') || null,
-      subscriptionId: formData.get('subscriptionId') || this.editingMovement?.subscriptionId || null,
+      subscriptionId: this.movementOperation === 'expense'
+        ? formData.get('subscriptionId') || null : this.editingMovement?.subscriptionId || null,
     }
     const editingId = this.editingMovement?.id
 
@@ -333,6 +357,8 @@ class SaludFinanciera extends LitElement {
   }
 
   startMovementEdit(movement) {
+    this.error = ''
+    this.createdCategory = null
     this.newMovementDefaults = null
     this.movementOperation = movement.originAccountId && movement.destinationAccountId
       ? 'transfer'
@@ -407,6 +433,7 @@ class SaludFinanciera extends LitElement {
   startCardPayment(card) {
     this.movementOperation = 'transfer'
     this.editingMovement = null
+    this.createdCategory = null
     this.newMovementDefaults = { destinationAccountId: card.id, cardName: card.name }
     this.showMovementForm = true
     this.activeTab = 'movements'
@@ -835,22 +862,119 @@ class SaludFinanciera extends LitElement {
   }
 
   renderMovements() {
-    const items = this.dashboard.movements
     return html`
-      <section class="data-card">
+      <section>
         <div class="section-heading">
-          <div><p class="eyebrow">HISTORIAL</p><h2>Registro de movimientos</h2></div>
-          <button class="primary-button compact-button" type="button" @click=${() => {
-            this.editingMovement = null
-            this.newMovementDefaults = null
-            this.movementOperation = 'expense'
-            this.showMovementForm = !this.showMovementForm
-          }}>${this.showMovementForm ? 'Cancelar' : '+ Nuevo movimiento'}</button>
+          <div><p class="eyebrow">ACTIVIDAD MENSUAL</p><h2>Registro de movimientos</h2></div>
+          <div class="movement-toolbar">
+            <button class="quiet-button compact-button" type="button" @click=${() => {
+              this.showCategoryForm = !this.showCategoryForm
+              this.categoryError = ''
+              this.categoryNotice = ''
+            }}>${this.showCategoryForm ? 'Cerrar categorías' : '+ Registrar categoría'}</button>
+            <button class="primary-button compact-button" type="button"
+              @click=${() => this.openCalendarMovement({ date: localDateInput() })}>+ Nuevo movimiento</button>
+          </div>
         </div>
-        ${this.showMovementForm ? this.renderMovementForm() : ''}
-        ${items.length
-          ? this.renderMovementList(items, true)
-          : this.emptyMessage('No tienes movimientos registrados.')}
+        ${this.showCategoryForm && !this.showMovementForm ? this.renderCategoryForm() : ''}
+        <financial-calendar .revision=${this.dashboard}
+          @register-movement=${(event) => this.openCalendarMovement(event.detail)}
+          @edit-movement=${(event) => this.startMovementEdit(event.detail)}
+          @delete-movement=${(event) => this.handleDeleteMovement(event.detail.id)}></financial-calendar>
+      </section>
+    `
+  }
+
+  openCalendarMovement({ date, event = null }) {
+    this.error = ''
+    this.createdCategory = null
+    this.editingMovement = null
+    this.movementOperation = event?.kind === 'card' ? 'transfer' : 'expense'
+    this.newMovementDefaults = {
+      date,
+      planId: event?.planId,
+      subscriptionId: event?.subscriptionId,
+      destinationAccountId: event?.destinationAccountId,
+      amount: event?.amount,
+      planName: event?.kind === 'plan' ? event.label : null,
+      cardName: event?.kind === 'card' ? event.label : null,
+    }
+    this.showMovementForm = true
+  }
+
+  closeMovementDialog() {
+    if (this.submitting) return
+    this.showMovementForm = false
+    this.editingMovement = null
+    this.newMovementDefaults = null
+    this.createdCategory = null
+  }
+
+  renderMovementDialog() {
+    return html`
+      <dialog id="movement-dialog" class="movement-dialog" aria-labelledby="movement-dialog-title"
+        @cancel=${(event) => {
+          event.preventDefault()
+          this.closeMovementDialog()
+        }}>
+        <div class="section-heading">
+          <h2 id="movement-dialog-title">${this.editingMovement ? 'Editar movimiento' : 'Registrar movimiento'}</h2>
+          <button class="quiet-button compact-button" type="button" ?disabled=${this.submitting}
+            @click=${this.closeMovementDialog}>Cerrar</button>
+        </div>
+        ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
+        ${this.showMovementForm ? keyed(this.editingMovement?.id ?? this.newMovementDefaults ?? 'new', this.renderMovementForm()) : ''}
+        <button class="text-button" type="button" @click=${() => {
+          this.showCategoryForm = !this.showCategoryForm
+          this.categoryError = ''
+          this.categoryNotice = ''
+        }}>${this.showCategoryForm ? 'Cerrar categorías' : '+ Registrar categoría'}</button>
+        ${this.showCategoryForm ? this.renderCategoryForm() : ''}
+      </dialog>
+    `
+  }
+
+  async handleCreateCategory(event) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    this.submitting = true
+    this.categoryError = ''
+    this.categoryNotice = ''
+    try {
+      const { category } = await apiRequest('/api/categories', {
+        method: 'POST', body: JSON.stringify({ name: data.get('name'), type: data.get('type') }),
+      })
+      this.dashboard = {
+        ...this.dashboard,
+        categories: [...this.dashboard.categories, category]
+          .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name, 'es')),
+      }
+      this.createdCategory = category
+      this.categoryNotice = `Categoría «${category.name}» registrada.`
+      form.reset()
+    } catch (error) {
+      this.categoryError = error.message
+    } finally {
+      this.submitting = false
+    }
+  }
+
+  renderCategoryForm() {
+    return html`
+      <section class="category-panel">
+        <h3>Registrar categoría</h3>
+        <p class="form-hint">Las categorías de ingreso y gasto son compartidas por la aplicación; no son exclusivas de tu usuario.</p>
+        ${this.categoryError ? html`<p class="error-message" role="alert">${this.categoryError}</p>` : ''}
+        ${this.categoryNotice ? html`<p class="success-message" role="status">${this.categoryNotice}</p>` : ''}
+        <form class="module-form" @submit=${this.handleCreateCategory}>
+          <label>Nombre de categoría<input name="name" maxlength="100" required /></label>
+          <label>Tipo<select name="type" required>
+            <option value="gasto" ?selected=${this.movementOperation !== 'income'}>Gasto</option>
+            <option value="ingreso" ?selected=${this.movementOperation === 'income'}>Ingreso</option>
+          </select></label>
+          <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.submitting ? 'Guardando…' : 'Guardar categoría'}</button></div>
+        </form>
       </section>
     `
   }
@@ -858,6 +982,9 @@ class SaludFinanciera extends LitElement {
   renderMovementForm() {
     const movement = this.editingMovement || {}
     const planId = movement.planId || (!this.editingMovement ? this.newMovementDefaults?.planId : null)
+    const subscriptionId = movement.subscriptionId || (!this.editingMovement ? this.newMovementDefaults?.subscriptionId : null)
+    const categoryId = this.createdCategory?.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
+      ? this.createdCategory.id : movement.categoryId
     const originAccountId = movement.originAccountId || this.newMovementDefaults?.originAccountId
     const destinationAccountId = movement.destinationAccountId
       || this.newMovementDefaults?.destinationAccountId
@@ -886,8 +1013,8 @@ class SaludFinanciera extends LitElement {
             <option value="transfer" ?selected=${this.movementOperation === 'transfer'}>Transferencia</option>
           </select>
         </label>
-        <label>Fecha<input name="date" type="date" .value=${movement.date || new Date().toISOString().slice(0, 10)} required /></label>
-        <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount || ''} required /></label>
+        <label>Fecha<input name="date" type="date" .value=${movement.date || this.newMovementDefaults?.date || localDateInput()} required /></label>
+        <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount ?? this.newMovementDefaults?.amount ?? ''} required /></label>
         ${this.movementOperation !== 'income' ? html`
           <label>Cuenta de origen
             <select name="originAccountId" required .value=${String(originAccountId || '')}>
@@ -906,17 +1033,17 @@ class SaludFinanciera extends LitElement {
         ` : ''}
         ${this.movementOperation !== 'transfer' ? html`
           <label>Categoría
-            <select name="categoryId" .value=${String(movement.categoryId || '')}>
-              <option value="" ?selected=${!movement.categoryId}>Sin categoría</option>
-              ${categories.map((category) => html`<option value=${category.id} ?selected=${Number(movement.categoryId) === Number(category.id)}>${category.name}</option>`)}
+            <select name="categoryId" .value=${String(categoryId || '')}>
+              <option value="" ?selected=${!categoryId}>Sin categoría</option>
+              ${categories.map((category) => html`<option value=${category.id} ?selected=${Number(categoryId) === Number(category.id)}>${category.name}</option>`)}
             </select>
           </label>
         ` : ''}
         ${this.movementOperation === 'expense' ? html`
           <label>Suscripción relacionada (opcional)
-            <select name="subscriptionId" .value=${String(movement.subscriptionId || '')}>
-              <option value="" ?selected=${!movement.subscriptionId}>Sin suscripción</option>
-              ${this.dashboard.subscriptions.map((subscription) => html`<option value=${subscription.id} ?selected=${Number(movement.subscriptionId) === Number(subscription.id)}>${subscription.name}</option>`)}
+            <select name="subscriptionId" .value=${String(subscriptionId || '')}>
+              <option value="" ?selected=${!subscriptionId}>Sin suscripción</option>
+              ${this.dashboard.subscriptions.map((subscription) => html`<option value=${subscription.id} ?selected=${Number(subscriptionId) === Number(subscription.id)}>${subscription.name}</option>`)}
             </select>
           </label>
           <label>Aportación a plan (opcional)

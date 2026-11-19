@@ -1,4 +1,7 @@
 import { pool } from '../../server/db.js'
+import { getSubscriptions } from '../suscripciones/service.js'
+import { getPlans } from './modules.js'
+import { calendarEvents } from './calendar-events.js'
 
 function invalid(message) {
   const error = new Error(message)
@@ -13,7 +16,7 @@ export async function getCalendarData(userId, month) {
   const [yearText, monthText] = month.split('-')
   const year = Number(yearText)
   const monthNumber = Number(monthText)
-  if (monthNumber < 1 || monthNumber > 12) throw invalid('El mes no es válido.')
+  if (year < 1000 || year > 9998 || monthNumber < 1 || monthNumber > 12) throw invalid('El mes no es válido.')
 
   const start = `${month}-01`
   const endDate = new Date(Date.UTC(year, monthNumber, 1))
@@ -51,6 +54,9 @@ export async function getCalendarData(userId, month) {
   const [movements] = await pool.execute(
     `SELECT m.id, m.monto AS amount,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
+            m.id_categoria AS categoryId, m.id_plan_futuro AS planId,
+            m.id_suscripcion AS subscriptionId,
+            m.id_cuenta_origen AS originAccountId, m.id_cuenta_destino AS destinationAccountId,
             cat.nombre AS category, cat.tipo AS categoryType,
             plan.nombre AS planName, sub.nombre AS subscriptionName,
             origin.nombre AS originAccount, destination.nombre AS destinationAccount
@@ -69,8 +75,19 @@ export async function getCalendarData(userId, month) {
     [userId, start, end],
   )
 
+  const [accounts] = await pool.execute(
+    `SELECT id, nombre AS name, tipo AS type,
+            DATE_FORMAT(fecha_limite_pago, '%Y-%m-%d') AS paymentDueDate,
+            pago_para_no_generar_intereses AS paymentToAvoidInterest
+     FROM cuenta WHERE id_usuario = ?`,
+    [userId],
+  )
+  const subscriptions = await getSubscriptions(userId)
+  const plans = await getPlans(userId)
+
   return {
     month,
+    events: calendarEvents(month, { accounts, subscriptions, plans }),
     days: days.map((item) => ({
       ...item,
       count: Number(item.count),
