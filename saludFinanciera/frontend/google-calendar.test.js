@@ -77,7 +77,7 @@ test('Google payload is private, includes deposit details and schedules 09:00, 1
   assert.equal(body.visibility, 'private')
   assert.equal(body.transparency, 'transparent')
   assert.deepEqual(body.reminders, { useDefault: false, overrides: [
-    { method: 'popup', minutes: 720 }, { method: 'popup', minutes: 420 }, { method: 'popup', minutes: 0 },
+    { method: 'popup', minutes: 1440 }, { method: 'popup', minutes: 0 },
   ] })
   assert.equal(new Date(body.start.dateTime).getHours(), 21)
   assert.match(body.description, /Datos de depósito: Cuenta 001234, Banco prueba/)
@@ -87,14 +87,15 @@ test('Google payload is private, includes deposit details and schedules 09:00, 1
   assert.equal(body.attachments, undefined)
   assert.equal(body.attendees, undefined)
   const previous = await googleEventBody(reminder, namespace, 'previous')
-  assert.match(previous.summary, /^Mañana/)
+  assert.match(previous.summary, /^09:00/)
   assert.equal(previous.extendedProperties.private.sourceKey, `${reminder.key}:previous`)
-  const notices = [previous, body].flatMap((event) => event.reminders.overrides.map((notice) => {
+  const afternoon = await googleEventBody(reminder, namespace, 'afternoon')
+  const notices = [previous, afternoon, body].flatMap((event) => event.reminders.overrides.map((notice) => {
     const date = new Date(Date.parse(event.start.dateTime) - notice.minutes * 60000)
     return `${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
   }))
-  assert.deepEqual(notices, ['24 9:00', '24 14:00', '24 21:00', '25 9:00', '25 14:00', '25 21:00'])
-  for (const phase of ['previous', 'due']) {
+  assert.deepEqual(notices, ['24 9:00', '25 9:00', '24 14:00', '25 14:00', '24 21:00', '25 21:00'])
+  for (const phase of ['previous', 'afternoon', 'due']) {
     const omitted = await googleEventBody({ ...reminder, loanType: 'me_deben', depositDetails: 'Private account' }, namespace, phase)
     assert.doesNotMatch(omitted.description, /Private account|Datos de depósito/)
   }
@@ -104,7 +105,7 @@ test('Google payload is private, includes deposit details and schedules 09:00, 1
   await assert.rejects(googleEventBody(reminder, namespace, 'invalid'), /fase válida/)
 })
 
-test('first send creates two events; retry updates the same IDs including the original pre-upgrade due event', async (t) => {
+test('first send creates three events; retry updates the same IDs including the original pre-upgrade due event', async (t) => {
   const calls = []
   const existing = new Map()
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -120,43 +121,75 @@ test('first send creates two events; retry updates the same IDs including the or
   assert.equal(await syncGoogleReminder('test-token', namespace, reminder), 'created')
   const originalIds = [...existing.keys()]
   assert.ok(originalIds.includes(await googleEventId(namespace, reminder.key)))
-  assert.equal(existing.size, 2)
+  assert.equal(existing.size, 3)
   assert.equal(await syncGoogleReminder('test-token', namespace, { ...reminder, amount: 50 }), 'updated')
   assert.deepEqual([...existing.keys()], originalIds)
-  assert.deepEqual(calls.map(({ options }) => options.method), ['GET', 'POST', 'GET', 'POST', 'GET', 'PATCH', 'GET', 'PATCH'])
+  assert.deepEqual(calls.map(({ options }) => options.method),
+    ['GET', 'POST', 'GET', 'POST', 'GET', 'POST', 'GET', 'PATCH', 'GET', 'PATCH', 'GET', 'PATCH'])
   for (const event of existing.values()) assert.match(event.description, /50\.00/)
 })
 
-test('a failed previous-day event leaves an explicit partial result; retry completes the pair without duplicating the due event', async (t) => {
+test('a failed afternoon event leaves an explicit partial result; retry completes all three without duplicates', async (t) => {
   const saved = new Map()
   let failPrevious = true
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     const id = url.split('/').pop()
     if (options.method === 'GET') return saved.has(id) ? response(saved.get(id)) : response({}, 404)
     const body = JSON.parse(options.body)
-    if (body.extendedProperties.private.sourceKey.endsWith(':previous') && failPrevious) return response({}, 500)
+    if (body.extendedProperties.private.sourceKey.endsWith(':afternoon') && failPrevious) return response({}, 500)
     saved.set(body.id || id, { ...saved.get(id), ...body })
     return response(body)
   })
-  await assert.rejects(syncGoogleReminder('t', namespace, reminder), /día límite ya está guardado.*faltó el del día anterior/)
+  await assert.rejects(syncGoogleReminder('t', namespace, reminder), /guardaron los eventos de 09:00.*desde las 14:00/)
   assert.equal(saved.size, 1)
   failPrevious = false
   assert.equal(await syncGoogleReminder('t', namespace, reminder), 'updated')
-  assert.equal(saved.size, 2)
+  assert.equal(saved.size, 3)
   assert.equal(await syncGoogleReminder('t', namespace, reminder), 'updated')
-  assert.equal(saved.size, 2)
+  assert.equal(saved.size, 3)
 })
 
-test('previous-day event crosses month/year, leap-day and daylight-saving boundaries without changing local notification hours', async () => {
+test('resending a legacy pair moves the previous-day event and creates only the missing 14:00 event', async (t) => {
+  const saved = new Map()
+  for (const key of [reminder.key, `${reminder.key}:previous`]) {
+    saved.set(await googleEventId(namespace, key), {
+      start: { dateTime: '2026-11-24T21:00:00Z' },
+      extendedProperties: { private: { saludFinanciera: namespace, sourceKey: key } },
+    })
+  }
+  let inserted = 0
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const id = url.split('/').pop()
+    if (options.method === 'GET') return saved.has(id) ? response(saved.get(id)) : response({}, 404)
+    const body = JSON.parse(options.body)
+    if (options.method === 'POST') inserted++
+    saved.set(body.id || id, { ...saved.get(id), ...body })
+    return response(body)
+  })
+  assert.equal(await syncGoogleReminder('t', namespace, reminder), 'updated')
+  assert.equal(saved.size, 3)
+  assert.equal(inserted, 1)
+  const starts = [...saved.values()].map((event) => new Date(event.start.dateTime))
+  assert.deepEqual(starts.map((date) => date.getHours()).sort((a, b) => a - b), [9, 14, 21])
+  assert.ok(starts.every((date) => date.getDate() === 25))
+  await syncGoogleReminder('t', namespace, reminder)
+  assert.equal(inserted, 1)
+})
+
+test('previous-day notifications cross month/year, leap-day and daylight-saving boundaries at the same local hour', async () => {
   for (const [date, expected] of [
     ['2027-01-01', '2026-12-31'], ['2028-03-01', '2028-02-29'], ['2027-03-01', '2027-02-28'],
-    ['2027-03-15', '2027-03-14'], ['2027-11-08', '2027-11-07'],
+    ['2027-03-14', '2027-03-13'], ['2027-11-07', '2027-11-06'],
   ]) {
-    const event = await googleEventBody({ ...reminder, date }, namespace, 'previous')
-    const start = new Date(event.start.dateTime)
-    assert.equal(`${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`, expected)
-    assert.deepEqual(event.reminders.overrides.map((notice) => new Date(start.getTime() - notice.minutes * 60000).getHours()), [9, 14, 21])
-    assert.ok(event.reminders.overrides.length <= 5, 'Google allows at most five overrides per event')
+    for (const [phase, hour] of [['previous', 9], ['afternoon', 14], ['due', 21]]) {
+      const event = await googleEventBody({ ...reminder, date }, namespace, phase)
+      const start = new Date(event.start.dateTime)
+      const prior = new Date(start.getTime() - event.reminders.overrides[0].minutes * 60000)
+      assert.equal(`${prior.getFullYear()}-${String(prior.getMonth() + 1).padStart(2, '0')}-${String(prior.getDate()).padStart(2, '0')}`, expected)
+      assert.equal(start.getHours(), hour)
+      assert.equal(prior.getHours(), hour)
+      assert.equal(event.reminders.overrides[1].minutes, 0)
+    }
   }
 })
 
@@ -167,7 +200,8 @@ test('lost insert responses and concurrent conflicts retry the same ID; unrelate
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     if (options.method === 'GET') {
       gets++
-      const sourceKey = url.endsWith(await googleEventId(namespace, reminder.key)) ? reminder.key : `${reminder.key}:previous`
+      const sourceKey = (await Promise.all([reminder.key, `${reminder.key}:previous`, `${reminder.key}:afternoon`]
+        .map(async (key) => ({ key, id: await googleEventId(namespace, key) })))).find((item) => url.endsWith(item.id)).key
       return gets === 1 ? response({}, 404) :
         response({ ...existing, extendedProperties: { private: { saludFinanciera: namespace, sourceKey } } })
     }
@@ -176,7 +210,7 @@ test('lost insert responses and concurrent conflicts retry the same ID; unrelate
     return response({})
   })
   assert.equal(await syncGoogleReminder('t', namespace, reminder), 'updated')
-  assert.equal(patches, 2)
+  assert.equal(patches, 3)
   t.mock.method(globalThis, 'fetch', async () => response({ extendedProperties: { private: { saludFinanciera: 'someone-else' } } }))
   await assert.rejects(syncGoogleReminder('t', namespace, reminder), /no pertenece/)
   t.mock.method(globalThis, 'fetch', async () => response({ status: 'cancelled' }))
@@ -264,7 +298,9 @@ test('sync keeps successful results, leaves failed events selected and retries o
   assert.equal(state.token, undefined)
   fail = false
   await state.sync()
-  assert.deepEqual(posts, [reminder.key, `${reminder.key}:previous`, other.key, other.key, `${other.key}:previous`])
+  assert.deepEqual(posts, [`${reminder.key}:previous`, `${reminder.key}:afternoon`, reminder.key,
+    `${other.key}:previous`, `${other.key}:afternoon`, other.key,
+    `${other.key}:previous`, `${other.key}:afternoon`, other.key])
   assert.equal(state.selected.size, 0)
 })
 

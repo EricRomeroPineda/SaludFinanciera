@@ -183,10 +183,9 @@ class GoogleCalendarSync extends LitElement {
         ${this.config?.configured && !this.loading ? html`
           <p>Se enviarán únicamente los marcadores seleccionados: nombre, tipo, fecha, monto y datos de depósito si existen.
             No se enviarán movimientos registrados ni imágenes. Elige tu cuenta Google en la ventana de autorización.</p>
-          <p>Se crearán <strong>dos eventos privados por compromiso</strong> en tu calendario principal:
-            uno el día anterior y otro el día límite, cada uno a las 21:00 con avisos
-            a las <strong>09:00, 14:00 y 21:00</strong> de su día (seis avisos en total).
-            Google admite hasta cinco avisos por evento; por eso se separan en dos.</p>
+          <p>Se crearán <strong>tres eventos privados por compromiso</strong> el día límite en tu calendario principal,
+            a las <strong>09:00, 14:00 y 21:00</strong>.
+            Cada evento avisa un día antes a su misma hora y al comenzar (seis avisos en total).</p>
           <small>Zona horaria: ${Intl.DateTimeFormat().resolvedOptions().timeZone}</small>
           <p>Los avisos de fechas u horas ya pasadas no se envían retroactivamente.
             Las suscripciones sin fecha exacta de inicio están excluidas.</p>
@@ -207,6 +206,7 @@ class GoogleCalendarSync extends LitElement {
             `)}</ul>
           ` : html`<p>No hay marcadores previstos para este mes.</p>`}
           <p>Volver a enviar actualiza los eventos de esta aplicación, sin duplicarlos.
+            Los dos eventos del formato anterior se reutilizan y se agrega el horario faltante.
             No se eliminan eventos: si liquidas una deuda, cancelas una suscripción o cambia el número de aportaciones,
             revisa y elimina en Google los recordatorios que ya no correspondan.</p>
           <label class="consent"><input type="checkbox" .checked=${this.consent} ?disabled=${this.busy}

@@ -85,7 +85,7 @@ test('Google preview explicitly discloses deposit sharing and both days of fixed
   assert.ok(markup.includes(deposit))
   assert.doesNotMatch(markup, /DO NOT SHARE|type="time"/)
   assert.match(markup, /09:00, 14:00 y 21:00/)
-  assert.match(markup, /dos eventos privados/)
+  assert.match(markup, /tres eventos privados/)
   assert.match(markup, /seis avisos en total/)
   assert.match(markup, /datos de depósito si existen/)
 })

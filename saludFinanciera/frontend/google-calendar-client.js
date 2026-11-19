@@ -86,13 +86,26 @@ export async function googleEventId(namespace, key) {
   return `sf${[...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`
 }
 
+const slots = [
+  { phase: 'previous', time: '09:00' },
+  { phase: 'afternoon', time: '14:00' },
+  { phase: 'due', time: '21:00' },
+]
+
+function slotKey(event, phase) {
+  // Reuse both legacy IDs, moving the former previous-day event onto the due date at 09:00.
+  return phase === 'due' ? event.key : `${event.key}:${phase}`
+}
+
 export async function googleEventBody(event, namespace, phase = 'due') {
-  if (!validDate(event.date) || !['due', 'previous'].includes(phase) || event.reference) {
+  const slot = slots.find((item) => item.phase === phase)
+  if (!validDate(event.date) || !slot || event.reference) {
     throw new Error('El recordatorio necesita una fecha exacta y una fase válida.')
   }
-  const date = new Date(`${event.date}T12:00:00Z`)
-  if (phase === 'previous') date.setUTCDate(date.getUTCDate() - 1)
-  const start = new Date(`${date.toISOString().slice(0, 10)}T21:00:00`)
+  const start = new Date(`${event.date}T${slot.time}:00`)
+  const previous = new Date(start)
+  previous.setDate(previous.getDate() - 1)
+  const previousMinutes = Math.round((start.getTime() - previous.getTime()) / 60000)
   const amount = event.amount == null ? 'Monto por definir' :
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(event.amount))
   const deposit = event.kind === 'loan' && event.loanType === 'me_deben' ? null : event.depositDetails
@@ -100,23 +113,24 @@ export async function googleEventBody(event, namespace, phase = 'due') {
     'Recordatorio de Salud Financiera.', `Concepto: ${event.label}`, `Tipo: ${event.typeLabel}`,
     `Fecha límite: ${event.date}`, `Monto previsto: ${amount}`,
     ...(deposit ? [`Datos de depósito: ${deposit}`] : []),
-    `Avisos: 09:00, 14:00 y 21:00 ${phase === 'previous' ? 'del día anterior' : 'del día límite'}.`,
+    `Horario de este evento: ${slot.time} del día límite.`,
+    'Avisos: un día antes a esta hora y al comenzar el evento.',
     'No registra un pago ni modifica tus saldos.',
   ].map((line) => line.replace(/[&<>"]/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
   })[character])).join('\n')
   return {
-    summary: `${phase === 'previous' ? 'Mañana · ' : ''}${event.typeLabel} · ${event.label}`,
+    summary: `${slot.time} · ${event.typeLabel} · ${event.label}`,
     description,
     start: { dateTime: start.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     end: { dateTime: new Date(start.getTime() + 15 * 60000).toISOString(),
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     visibility: 'private', transparency: 'transparent',
     reminders: { useDefault: false, overrides: [
-      { method: 'popup', minutes: 720 }, { method: 'popup', minutes: 420 }, { method: 'popup', minutes: 0 },
+      { method: 'popup', minutes: previousMinutes }, { method: 'popup', minutes: 0 },
     ] },
     extendedProperties: { private: { saludFinanciera: namespace,
-      sourceKey: phase === 'previous' ? `${event.key}:previous` : event.key } },
+      sourceKey: slotKey(event, phase) } },
   }
 }
 
@@ -152,7 +166,7 @@ async function googleRequest(token, url, { method = 'GET', body, signal } = {}) 
 }
 
 async function syncGoogleEvent(token, namespace, event, phase, signal) {
-  const key = phase === 'previous' ? `${event.key}:previous` : event.key
+  const key = slotKey(event, phase)
   const id = await googleEventId(namespace, key)
   const url = `${eventsUrl}/${id}`
   const body = await googleEventBody(event, namespace, phase)
@@ -184,13 +198,18 @@ async function syncGoogleEvent(token, namespace, event, phase, signal) {
 }
 
 export async function syncGoogleReminder(token, namespace, event, signal) {
-  const due = await syncGoogleEvent(token, namespace, event, 'due', signal)
-  try {
-    const previous = await syncGoogleEvent(token, namespace, event, 'previous', signal)
-    return due === 'created' && previous === 'created' ? 'created' : 'updated'
-  } catch (error) {
-    if (error.name === 'AbortError') throw error
-    throw Object.assign(new Error(`El evento del día límite ya está guardado; faltó el del día anterior: ${error.message}`),
-      { status: error.status })
+  const completed = []
+  let allCreated = true
+  for (const slot of slots) {
+    try {
+      const result = await syncGoogleEvent(token, namespace, event, slot.phase, signal)
+      allCreated &&= result === 'created'
+      completed.push(slot.time)
+    } catch (error) {
+      if (error.name === 'AbortError' || !completed.length) throw error
+      throw Object.assign(new Error(`Ya se guardaron los eventos de ${completed.join(', ')}; faltó completar desde las ${slot.time}: ${error.message}`),
+        { status: error.status })
+    }
   }
+  return allCreated ? 'created' : 'updated'
 }
