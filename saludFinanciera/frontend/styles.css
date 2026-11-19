@@ -127,7 +127,8 @@ td strong { color: var(--ink); }
 .form-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .status-tag { padding: 5px 9px; border-radius: 99px; background: var(--positive-bg); color: var(--positive); font-size: 10px; font-weight: 700; }
 
-.movement-list li { display: flex; align-items: center; gap: 11px; padding: 12px 0; border-top: 1px solid var(--line); }
+.movement-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; padding: 12px 0; border-top: 1px solid var(--line); }
+.movement-list movement-evidence { flex: 0 0 100%; min-width: 0; }
 .movement-mark { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 50%; font-size: 15px; font-weight: 700; }
 .movement-mark.income { background: var(--positive-bg); color: var(--positive); }
 .movement-mark.expense { background: var(--negative-bg); color: var(--negative); }

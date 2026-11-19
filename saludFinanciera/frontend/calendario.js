@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
+import './movement-evidence.js'
 import calendarStyles from './calendario.css?inline'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
@@ -138,7 +139,7 @@ class FinancialCalendar extends LitElement {
             : items.length ? html`
               <div class="monthly-table-scroll" tabindex="0" role="region" aria-label="Registro general de movimientos">
                 <table>
-                  <thead><tr><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Plan</th><th>Suscripción</th><th>Monto</th><th>Acciones</th></tr></thead>
+                  <thead><tr><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Plan</th><th>Suscripción</th><th>Monto</th><th>Evidencia</th><th>Acciones</th></tr></thead>
                   <tbody>${items.map((item) => html`
                     <tr>
                       <td><button class="calendar-action" type="button" aria-label=${`Ver movimientos del ${item.date}`}
@@ -147,6 +148,7 @@ class FinancialCalendar extends LitElement {
                       <td>${movementOrigin(item)}</td><td>${movementDestination(item)}</td>
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
+                      <td><movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence></td>
                       <td class="monthly-actions">
                         ${!this.familyView && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
@@ -266,6 +268,7 @@ class FinancialCalendar extends LitElement {
                             : movement.originAccount || movement.destinationAccount || movement.planName || 'Sin cuenta relacionada'}</small>
                         </span>
                         <span class="movement-value ${income ? 'income' : transfer ? '' : 'expense'}">${this.formatMoney(movement.amount)}</span>
+                        <movement-evidence .movementId=${movement.id} .readOnly=${this.familyView}></movement-evidence>
                       </article>
                     `
                   })}

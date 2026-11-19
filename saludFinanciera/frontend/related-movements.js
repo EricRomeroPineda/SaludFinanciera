@@ -4,6 +4,7 @@ import { movementLabel, movementOrigin, movementDestination } from '../movement-
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from './styles.css?inline'
 import styles from './related-movements.css?inline'
+import './movement-evidence.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 
@@ -59,7 +60,7 @@ class RelatedMovements extends LitElement {
           ` : this.items.length ? html`
             <div class="table-scroll" tabindex="0" role="region" aria-label="Detalle de movimientos">
               <table>
-                <thead><tr><th>ID movimiento</th><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Suscripción</th><th>Monto</th></tr></thead>
+                <thead><tr><th>ID movimiento</th><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Suscripción</th><th>Monto</th><th>Evidencia</th></tr></thead>
                 <tbody>${this.items.map((item) => html`
                   <tr>
                     <td>${item.id}</td>
@@ -70,6 +71,7 @@ class RelatedMovements extends LitElement {
                     <td>${item.category || 'Sin categoría'}</td>
                     <td>${item.subscriptionName || '—'}</td>
                     <td class="amount">${money.format(item.amount)}</td>
+                    <td><movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence></td>
                   </tr>
                 `)}</tbody>
               </table>

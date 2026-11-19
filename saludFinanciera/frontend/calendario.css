@@ -70,7 +70,8 @@
 .day-title { margin: 0; font-size: 15px; }
 .day-total { margin: 5px 0 16px; color: var(--muted); font-size: 11px; }
 .day-list { display: grid; gap: 8px; max-height: 340px; overflow: auto; }
-.day-movement { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
+.day-movement { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
+.day-movement movement-evidence { flex: 0 0 100%; min-width: 0; }
 .movement-sign { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--muted); font-weight: 700; }
 .movement-sign.income { background: var(--positive-bg); color: var(--positive); }
 .movement-sign.expense { background: var(--negative-bg); color: var(--negative); }

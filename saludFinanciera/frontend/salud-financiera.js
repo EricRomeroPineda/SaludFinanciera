@@ -11,6 +11,7 @@ import responsiveStyles from './responsive.css?inline'
 import './calendario.js'
 import './related-movements.js'
 import './prestamos.js'
+import './movement-evidence.js'
 import '../suscripciones/suscripciones.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
@@ -60,6 +61,7 @@ class SaludFinanciera extends LitElement {
     movementOperation: { state: true },
     movementLoanId: { state: true },
     editingMovement: { state: true },
+    pendingEvidenceMovementId: { state: true },
     error: { state: true },
     editingAccount: { state: true },
     newAccountType: { state: true },
@@ -100,6 +102,7 @@ class SaludFinanciera extends LitElement {
     this.movementOperation = 'expense'
     this.movementLoanId = null
     this.editingMovement = null
+    this.pendingEvidenceMovementId = null
     this.error = ''
     this.showCategoryForm = false
     this.categoryError = ''
@@ -145,6 +148,7 @@ class SaludFinanciera extends LitElement {
   }
 
   changeView(event) {
+    this.pendingEvidenceMovementId = null
     this.familyView = event.currentTarget.value === 'family'
     this.dashboard = null
     this.selectedCard = null
@@ -344,6 +348,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startPlanMovement(plan) {
+    this.pendingEvidenceMovementId = null
     this.error = ''
     this.editingMovement = null
     this.createdCategory = null
@@ -355,6 +360,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startLoanPayment(loan) {
+    this.pendingEvidenceMovementId = null
     this.error = ''
     this.editingMovement = null
     this.createdCategory = null
@@ -385,19 +391,35 @@ class SaludFinanciera extends LitElement {
         ? formData.get('subscriptionId') || null : this.editingMovement?.subscriptionId || null,
       ...(this.movementLoanId ? { loanId: this.movementLoanId, loanKind: 'abono', categoryId: null, planId: null, subscriptionId: null } : {}),
     }
-    const editingId = this.editingMovement?.id
+    const editingId = this.pendingEvidenceMovementId || this.editingMovement?.id
+    const evidence = this.renderRoot?.querySelector('#movement-evidence')
+    if (evidence?.busy) {
+      this.error = 'Espera a que termine la carga de imágenes antes de guardar el movimiento.'
+      this.submitting = false
+      return
+    }
+    let savedId
 
     try {
-      await apiRequest(editingId ? `/api/movements/${editingId}` : '/api/movements', {
+      const result = await apiRequest(editingId ? `/api/movements/${editingId}` : '/api/movements', {
         method: editingId ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       })
+      savedId = result.id || editingId
+      if (evidence?.pending.length) await evidence.uploadPending(savedId)
       this.showMovementForm = false
+      this.pendingEvidenceMovementId = null
       this.editingMovement = null
       this.newMovementDefaults = null
       await this.refreshDashboard()
     } catch (error) {
-      this.error = error.message
+      if (savedId && evidence?.pending.length) {
+        // Keep the existing form and pending files so a retry never creates a second movement.
+        this.pendingEvidenceMovementId = savedId
+        this.error = `El movimiento #${savedId} ya se guardó, pero faltó subir evidencia: ${error.message}. Puedes reintentar sin duplicarlo.`
+      } else {
+        this.error = error.message
+      }
     } finally {
       this.submitting = false
     }
@@ -415,6 +437,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startMovementEdit(movement) {
+    this.pendingEvidenceMovementId = null
     if (movement.loanKind === 'desembolso') {
       this.error = 'El desembolso inicial es fijo; sus abonos sí se pueden editar.'
       return
@@ -496,6 +519,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startCardPayment(card) {
+    this.pendingEvidenceMovementId = null
     this.movementLoanId = null
     this.movementOperation = 'transfer'
     this.editingMovement = null
@@ -1002,6 +1026,7 @@ class SaludFinanciera extends LitElement {
   }
 
   openCalendarMovement({ date, event = null }) {
+    this.pendingEvidenceMovementId = null
     if (event?.kind === 'loan') {
       const loan = this.dashboard.loans.find((item) => Number(item.id) === Number(event.loanId))
       if (!loan) {
@@ -1029,13 +1054,27 @@ class SaludFinanciera extends LitElement {
     this.showMovementForm = true
   }
 
-  closeMovementDialog() {
+  async closeMovementDialog() {
     if (this.submitting) return
+    if (this.renderRoot?.querySelector('#movement-evidence')?.busy) {
+      this.error = 'Espera a que termine la carga de imágenes antes de cerrar.'
+      return
+    }
+    const savedId = this.pendingEvidenceMovementId
     this.showMovementForm = false
+    this.pendingEvidenceMovementId = null
     this.editingMovement = null
     this.newMovementDefaults = null
     this.createdCategory = null
     this.movementLoanId = null
+    if (savedId) {
+      this.error = ''
+      try {
+        await this.refreshDashboard()
+      } catch (error) {
+        this.error = `El movimiento #${savedId} está guardado, pero no se pudo actualizar el panorama: ${error.message}`
+      }
+    }
   }
 
   renderMovementDialog() {
@@ -1197,6 +1236,8 @@ class SaludFinanciera extends LitElement {
             </select>
           </label>
         ` : ''}
+        <movement-evidence id="movement-evidence" class="form-hint"
+          .movementId=${this.pendingEvidenceMovementId || movement.id || null} .expanded=${true} .locked=${this.submitting}></movement-evidence>
         <div class="form-actions">
           <button class="primary-button compact-button" ?disabled=${this.submitting}>
             ${this.submitting ? 'Guardando…' : this.editingMovement ? 'Guardar cambios' : 'Registrar movimiento'}
@@ -1230,6 +1271,7 @@ class SaludFinanciera extends LitElement {
               <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteMovement(item.id)} aria-label="Eliminar movimiento">×</button>
             </span>
           ` : ''}
+          <movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence>
         </li>
       `
     })}</ul>`

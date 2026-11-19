@@ -24,6 +24,7 @@ function ledger(t) {
     release() {},
     async execute(sql, params) {
       calls.push({ sql, params })
+      if (sql.includes('FROM movimiento_evidencia')) return [[]]
       if (sql.startsWith('INSERT INTO prestamo')) {
         const [userId, name, type, principal, startDate, commitmentDate, accountId, legacy, notes] = params
         const id = state.nextLoan++

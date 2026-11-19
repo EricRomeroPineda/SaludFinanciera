@@ -139,6 +139,7 @@ function mockMovementConnection(t, { oldPlanId = null, failSync = false } = {}) 
     release() { calls.push({ sql: 'RELEASE' }) },
     async execute(sql, params) {
       calls.push({ sql, params })
+      if (sql.includes('FROM movimiento_evidencia')) return [[]]
       if (sql.includes('FROM movimiento WHERE id =')) {
         return [[{ id: 15, id_plan_futuro: oldPlanId, id_suscripcion: null,
           id_cuenta_origen: 2, id_cuenta_destino: null, monto: '50.00' }]]

@@ -2,6 +2,7 @@ import { pool } from '../../server/db.js'
 import { lockSubscriptions, syncMonetized } from '../suscripciones/service.js'
 import { lockPlans, syncPlanSavings } from './modules.js'
 import { lockLoans, validateLoanMovement } from './loan-ledger.js'
+import { removeEvidenceFiles } from '../../server/evidence-files.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -297,6 +298,7 @@ export async function saveMovement(userId, input, movementId = null) {
 
 export async function deleteMovement(userId, movementId) {
   const connection = await pool.getConnection()
+  let evidenceFiles = []
 
   try {
     await connection.beginTransaction()
@@ -313,6 +315,10 @@ export async function deleteMovement(userId, movementId) {
     await lockSubscriptions(connection, userId, [rows[0].id_suscripcion])
     await lockPlans(connection, userId, [rows[0].id_plan_futuro])
     await reverseMovement(connection, userId, rows[0])
+    const [evidence] = await connection.execute(
+      'SELECT archivo FROM movimiento_evidencia WHERE id_movimiento = ?', [movementId],
+    )
+    evidenceFiles = evidence.map((item) => item.archivo)
     await connection.execute(
       'DELETE FROM movimiento WHERE id = ? AND id_usuario = ?',
       [movementId, userId],
@@ -320,11 +326,12 @@ export async function deleteMovement(userId, movementId) {
     await syncMonetized(connection, userId, [rows[0].id_suscripcion])
     await syncPlanSavings(connection, userId, [rows[0].id_plan_futuro])
     await connection.commit()
-    return { ok: true, id: movementId }
   } catch (error) {
     await connection.rollback()
     throw error
   } finally {
     connection.release()
   }
+  await removeEvidenceFiles(evidenceFiles)
+  return { ok: true, id: movementId }
 }

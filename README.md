@@ -13,6 +13,16 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Evidencia opcional en movimientos
+
+Antes de usar esta versión, respalda la base y ejecuta una sola vez `server/migrations/006-movement-evidence.sql` en la base configurada en `.env`; crea `movimiento_evidencia`, relacionada con `movimiento.id`. Ejecuta `npm ci` para instalar las dependencias actualizadas y reinicia el servidor (`npm run serve` recompila también el frontend). No hay cambios en las credenciales ni en la configuración de MySQL.
+
+Al crear o editar un movimiento puedes adjuntar hasta **5 imágenes JPG, PNG o WebP**, de **5 MB y 20 megapíxeles como máximo cada una**, sin animación. Ninguna imagen es obligatoria. Se validan decodificándolas y se convierten a WebP de calidad 90, corrigiendo orientación y eliminando metadatos (incluida ubicación); no son una copia idéntica del archivo original. Los archivos se guardan en `storage/evidence/`, fuera de `dist` y de Git, con nombres aleatorios. La carpeta se crea automáticamente y el usuario que ejecuta Node debe poder escribir en ella. **Respalda esa carpeta junto con MySQL**; copiar solo la base no conserva las imágenes. El acceso es mediante `/api/movements/:id/evidence`, con sesión y comprobación de propiedad o membresía familiar actual en cada lectura. No son enlaces públicos ni se permiten modificaciones de las imágenes de otros usuarios.
+
+El botón **Evidencia (opcional)** aparece en el registro general, el detalle diario del calendario y los historiales de tarjetas, planes, suscripciones y préstamos. Permite consultar imágenes, abrirlas en otra pestaña y, en vista individual, agregar o eliminar las propias, incluso de desembolsos cuyo monto es fijo. La familia solo puede consultarlas. Adjuntar/quitar evidencia no altera montos ni saldos; eliminar el movimiento elimina sus referencias y después sus archivos. Un error de limpieza en disco se registra explícitamente en la consola como `[EVIDENCIA]`.
+
+El movimiento se guarda antes de subir sus imágenes. Si falla una subida, el formulario avisa que el movimiento ya está guardado, conserva las imágenes pendientes y permite reintentar sin crear otro movimiento ni volver a subir las imágenes que sí finalizaron. No cierres el formulario mientras haya archivos pendientes; si lo cierras, puedes adjuntarlos después desde el registro ya guardado. Las imágenes seleccionadas solo en el navegador aún no son un respaldo.
+
 ## Perfil, temas y recuperación
 
 La barra de secciones no muestra Calendario ni Mi perfil para ahorrar espacio. El perfil sigue disponible al pulsar el nombre o la foto del usuario en la barra superior.
