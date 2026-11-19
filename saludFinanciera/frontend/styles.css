@@ -13,6 +13,10 @@
 .metric-card p { margin: 0 0 13px; color: var(--muted); font-size: 12px; }
 .metric-card strong { display: block; overflow: hidden; color: var(--ink); font-size: clamp(20px, 2.5vw, 27px); letter-spacing: -0.7px; text-overflow: ellipsis; white-space: nowrap; }
 .metric-card small { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; }
+.metric-positive { --metric-color: var(--positive); }
+.metric-transfer { --metric-color: var(--transfer); }
+.metric-negative { --metric-color: var(--negative); }
+.metric-card:is(.metric-positive, .metric-transfer, .metric-negative) :is(p, strong) { color: var(--metric-color); }
 .overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 16px; }
 .data-card { min-width: 0; padding: 21px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }

@@ -464,10 +464,10 @@ class SaludFinanciera extends LitElement {
     const period = this.overviewPeriod || `${this.today.getFullYear()}-${String(this.today.getMonth() + 1).padStart(2, '0')}`
     const totals = calculateAccountSummary(accounts, period, this.overviewScope)
     const metrics = [
-      ['Saldo disponible', this.formatMoney(totals.available), 'Actual · Débito + efectivo'],
-      ['Disponible con crédito', this.formatMoney(totals.availableWithCredit), 'Actual · Débito + efectivo + crédito sin utilizar'],
+      ['Saldo disponible', this.formatMoney(totals.available), 'Actual · Débito + efectivo', 'positive'],
+      ['Disponible con crédito', this.formatMoney(totals.availableWithCredit), 'Actual · Débito + efectivo + crédito sin utilizar', 'transfer'],
       ['Deuda total', this.formatMoney(totals.debt), totals.missingLimits
-        ? `Actual · ${totals.missingLimits} créditos sin límite: no incluidos` : 'Actual · Crédito utilizado'],
+        ? `Actual · ${totals.missingLimits} créditos sin límite: no incluidos` : 'Actual · Crédito utilizado', 'negative'],
       ['Pago para no generar intereses', this.formatMoney(totals.payment),
         `Vencimiento en ${this.overviewScope === 'year' ? period.slice(0, 4) : period}`],
       ['Suscripciones activas', summary.activeSubscriptionsCount, `${this.formatMoney(summary.monthlySubscriptionTotal)} al mes`],
@@ -513,8 +513,8 @@ class SaludFinanciera extends LitElement {
         ${totals.missingPayments ? html`<p class="form-hint">${totals.missingPayments} créditos sin fecha límite o importe de pago: no incluidos en el pago del periodo.</p>` : ''}
       </section>
       <section class="metric-grid" aria-label="Resumen">
-        ${metrics.map(([label, value, detail]) => html`
-          <article class="metric-card">
+        ${metrics.map(([label, value, detail, tone]) => html`
+          <article class=${`metric-card${tone ? ` metric-${tone}` : ''}`}>
             <p>${label}</p>
             <strong>${value}</strong>
             <small>${detail}</small>
