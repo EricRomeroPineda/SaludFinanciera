@@ -1,5 +1,6 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
+import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from './styles.css?inline'
 import styles from './related-movements.css?inline'
@@ -58,13 +59,14 @@ class RelatedMovements extends LitElement {
           ` : this.items.length ? html`
             <div class="table-scroll" tabindex="0" role="region" aria-label="Detalle de movimientos">
               <table>
-                <thead><tr><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Suscripción</th><th>Monto</th></tr></thead>
+                <thead><tr><th>ID movimiento</th><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Suscripción</th><th>Monto</th></tr></thead>
                 <tbody>${this.items.map((item) => html`
                   <tr>
+                    <td>${item.id}</td>
                     <td>${item.date || 'Sin fecha'}</td>
-                    <td>${item.originAccountId && item.destinationAccountId ? 'Transferencia' : item.originAccountId ? 'Gasto' : 'Ingreso'}</td>
-                    <td>${item.originAccount || '—'}</td>
-                    <td>${item.destinationAccount || '—'}</td>
+                    <td>${movementLabel(item)}</td>
+                    <td>${movementOrigin(item)}</td>
+                    <td>${movementDestination(item)}</td>
                     <td>${item.category || 'Sin categoría'}</td>
                     <td>${item.subscriptionName || '—'}</td>
                     <td class="amount">${money.format(item.amount)}</td>

@@ -1,6 +1,7 @@
 import { pool } from '../../server/db.js'
 import { lockSubscriptions, syncMonetized } from '../suscripciones/service.js'
 import { lockPlans, syncPlanSavings } from './modules.js'
+import { lockLoans, validateLoanMovement } from './loan-ledger.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -16,20 +17,22 @@ function normalizeId(value, label) {
 }
 
 export async function getRelatedMovements(userId, relation, value) {
-  if (!['account', 'subscription', 'plan'].includes(relation)) {
+  if (!['account', 'subscription', 'plan', 'loan'].includes(relation)) {
     throw invalid('La relación de movimientos no es válida.')
   }
   const id = normalizeId(value, 'El identificador')
   if (!id) throw invalid('El identificador es obligatorio.')
   const condition = relation === 'account'
     ? '(m.id_cuenta_origen = ? OR m.id_cuenta_destino = ?)'
-    : relation === 'plan' ? 'm.id_plan_futuro = ?' : 'm.id_suscripcion = ?'
+    : relation === 'plan' ? 'm.id_plan_futuro = ?'
+      : relation === 'loan' ? 'm.id_prestamo = ?' : 'm.id_suscripcion = ?'
   const [movements] = await pool.execute(
     `SELECT m.id, m.monto AS amount,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             cat.nombre AS category,
             origin.nombre AS originAccount, destination.nombre AS destinationAccount,
             sub.nombre AS subscriptionName,
+            m.id_prestamo AS loanId, m.clase_prestamo AS loanKind, loan.persona AS loanName,
             m.id_cuenta_origen AS originAccountId,
             m.id_cuenta_destino AS destinationAccountId
      FROM movimiento AS m
@@ -40,6 +43,7 @@ export async function getRelatedMovements(userId, relation, value) {
        ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
      LEFT JOIN suscripciones AS sub
        ON sub.id = m.id_suscripcion AND sub.id_usuario = m.id_usuario
+     LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
      WHERE m.id_usuario = ? AND ${condition}
      ORDER BY m.fecha DESC, m.id DESC`,
     relation === 'account' ? [userId, id, id] : [userId, id],
@@ -193,81 +197,96 @@ function parseMovement(input) {
     categoryId: normalizeId(input.categoryId, 'La categoría'),
     planId: normalizeId(input.planId, 'El plan'),
     subscriptionId: normalizeId(input.subscriptionId, 'La suscripción'),
+    loanId: normalizeId(input.loanId, 'El préstamo'),
+    loanKind: input.loanId ? String(input.loanKind || 'abono') : input.loanKind || null,
   }
 }
 
-export async function saveMovement(userId, input, movementId = null) {
+export async function saveMovementInTransaction(connection, userId, input, movementId = null, allowDisbursement = false) {
   const movement = parseMovement(input || {})
-  const connection = await pool.getConnection()
+  let oldSubscriptionId = null
+  let oldPlanId = null
 
-  try {
-    await connection.beginTransaction()
-    let oldSubscriptionId = null
-    let oldPlanId = null
-
-    if (movementId) {
-      const [oldRows] = await connection.execute(
-        'SELECT id, id_suscripcion, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
-        [movementId, userId],
-      )
-      if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
-      oldSubscriptionId = oldRows[0].id_suscripcion
-      oldPlanId = oldRows[0].id_plan_futuro
-      await lockSubscriptions(connection, userId, [oldSubscriptionId, movement.subscriptionId])
-      await lockPlans(connection, userId, [oldPlanId, movement.planId])
-      await reverseMovement(connection, userId, oldRows[0])
-    } else {
-      await lockSubscriptions(connection, userId, [movement.subscriptionId])
-      await lockPlans(connection, userId, [movement.planId])
+  if (movementId) {
+    const [oldRows] = await connection.execute(
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      [movementId, userId],
+    )
+    if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
+    if (oldRows[0].clase_prestamo === 'desembolso') {
+      throw invalid('El desembolso inicial es fijo y no se puede editar desde movimientos.', 409)
     }
+    const loans = await lockLoans(connection, userId, [oldRows[0].id_prestamo, movement.loanId])
+    await validateLoanMovement(connection, userId, movement, loans, movementId, allowDisbursement)
+    oldSubscriptionId = oldRows[0].id_suscripcion
+    oldPlanId = oldRows[0].id_plan_futuro
+    await lockSubscriptions(connection, userId, [oldSubscriptionId, movement.subscriptionId])
+    await lockPlans(connection, userId, [oldPlanId, movement.planId])
+    await reverseMovement(connection, userId, oldRows[0])
+  } else {
+    const loans = await lockLoans(connection, userId, [movement.loanId])
+    await validateLoanMovement(connection, userId, movement, loans, null, allowDisbursement)
+    await lockSubscriptions(connection, userId, [movement.subscriptionId])
+    await lockPlans(connection, userId, [movement.planId])
+  }
 
-    await applyMovement(connection, userId, movement)
-    const values = [
-      userId,
-      movement.planId,
-      movement.subscriptionId,
-      movement.categoryId,
-      movement.originId,
-      movement.destinationId,
-      movement.amount,
-    ]
+  await applyMovement(connection, userId, movement)
+  const values = [
+    userId,
+    movement.planId,
+    movement.subscriptionId,
+    movement.categoryId,
+    movement.originId,
+    movement.destinationId,
+    movement.amount,
+  ]
 
-    let id
-    if (movementId) {
-      await connection.execute(
-        `UPDATE movimiento
+  let id
+  if (movementId) {
+    await connection.execute(
+      `UPDATE movimiento
          SET id_plan_futuro = ?, id_suscripcion = ?, id_categoria = ?,
              id_cuenta_origen = ?, id_cuenta_destino = ?, monto = ?,
-             fecha = COALESCE(?, CURRENT_TIMESTAMP)
+             fecha = COALESCE(?, CURRENT_TIMESTAMP), id_prestamo = ?, clase_prestamo = ?
          WHERE id = ? AND id_usuario = ?`,
-        [
-          movement.planId,
-          movement.subscriptionId,
-          movement.categoryId,
-          movement.originId,
-          movement.destinationId,
-          movement.amount,
-          movement.date,
-          movementId,
-          userId,
-        ],
-      )
-      id = movementId
-    } else {
-      const [result] = await connection.execute(
-        `INSERT INTO movimiento
+      [
+        movement.planId,
+        movement.subscriptionId,
+        movement.categoryId,
+        movement.originId,
+        movement.destinationId,
+        movement.amount,
+        movement.date,
+        movement.loanId,
+        movement.loanKind,
+        movementId,
+        userId,
+      ],
+    )
+    id = movementId
+  } else {
+    const [result] = await connection.execute(
+      `INSERT INTO movimiento
            (id_usuario, id_plan_futuro, id_suscripcion, id_categoria,
-            id_cuenta_origen, id_cuenta_destino, monto, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`,
-        [...values, movement.date],
-      )
-      id = result.insertId
-    }
+            id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?)`,
+      [...values, movement.date, movement.loanId, movement.loanKind],
+    )
+    id = result.insertId
+  }
 
-    await syncMonetized(connection, userId, [oldSubscriptionId, movement.subscriptionId])
-    await syncPlanSavings(connection, userId, [oldPlanId, movement.planId])
+  await syncMonetized(connection, userId, [oldSubscriptionId, movement.subscriptionId])
+  await syncPlanSavings(connection, userId, [oldPlanId, movement.planId])
+  return { ok: true, id }
+}
+
+export async function saveMovement(userId, input, movementId = null) {
+  const connection = await pool.getConnection()
+  try {
+    await connection.beginTransaction()
+    const result = await saveMovementInTransaction(connection, userId, input, movementId)
     await connection.commit()
-    return { ok: true, id }
+    return result
   } catch (error) {
     await connection.rollback()
     throw error
@@ -282,11 +301,15 @@ export async function deleteMovement(userId, movementId) {
   try {
     await connection.beginTransaction()
     const [rows] = await connection.execute(
-      'SELECT id, id_suscripcion, id_plan_futuro, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!rows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
+    if (rows[0].clase_prestamo === 'desembolso') {
+      throw invalid('El desembolso inicial es fijo y no se puede eliminar desde movimientos.', 409)
+    }
 
+    await lockLoans(connection, userId, [rows[0].id_prestamo])
     await lockSubscriptions(connection, userId, [rows[0].id_suscripcion])
     await lockPlans(connection, userId, [rows[0].id_plan_futuro])
     await reverseMovement(connection, userId, rows[0])

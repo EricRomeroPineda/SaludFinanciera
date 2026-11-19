@@ -3,12 +3,14 @@ import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
 import { calculateAccountSummary } from '../account-summary.js'
+import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import './calendario.js'
 import './related-movements.js'
+import './prestamos.js'
 import '../suscripciones/suscripciones.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
@@ -56,6 +58,7 @@ class SaludFinanciera extends LitElement {
     selectedPlan: { state: true },
     pendingDeletePlan: { state: true },
     movementOperation: { state: true },
+    movementLoanId: { state: true },
     editingMovement: { state: true },
     error: { state: true },
     editingAccount: { state: true },
@@ -95,6 +98,7 @@ class SaludFinanciera extends LitElement {
     this.selectedPlan = null
     this.pendingDeletePlan = null
     this.movementOperation = 'expense'
+    this.movementLoanId = null
     this.editingMovement = null
     this.error = ''
     this.showCategoryForm = false
@@ -152,6 +156,7 @@ class SaludFinanciera extends LitElement {
     this.showMovementForm = false
     this.showCategoryForm = false
     this.pendingDeletePlan = null
+    this.movementLoanId = null
     this.loadDashboard()
   }
 
@@ -206,8 +211,7 @@ class SaludFinanciera extends LitElement {
             >${label}</button>
           `)}
         </nav>
-        ${this.activeTab === 'debtors' ? this.renderDebtors()
-          : this.loading ? html`<p class="empty-state" role="status">Cargando información financiera…</p>`
+        ${this.loading ? html`<p class="empty-state" role="status">Cargando información financiera…</p>`
             : this.dashboard ? keyed(this.familyView, this.renderActiveTab()) : html`
               <div class="empty-state">
                 <p>No se pudo cargar tu información financiera.</p>
@@ -227,16 +231,17 @@ class SaludFinanciera extends LitElement {
       case 'subscriptions': return html`<finance-subscriptions .familyView=${this.familyView} @subscriptions-changed=${this.handleSubscriptionsChanged}></finance-subscriptions>`
       case 'plans': return this.renderPlans()
       case 'movements': return this.renderMovements()
+      case 'debtors': return this.renderDebtors()
       default: return this.renderOverview()
     }
   }
 
   renderDebtors() {
     return html`
-      <section class="data-card">
-        <div class="section-heading"><h2>Deudores</h2></div>
-        <p class="empty-state">Esta sección estará disponible próximamente. Todavía no permite registrar ni guardar deudores.</p>
-      </section>
+      <finance-loans .items=${this.dashboard.loans || []} .accounts=${this.dashboard.accounts}
+        .familyView=${this.familyView}
+        @loans-changed=${this.loadDashboard}
+        @loan-payment=${(event) => this.startLoanPayment(event.detail)}></finance-loans>
     `
   }
 
@@ -343,9 +348,23 @@ class SaludFinanciera extends LitElement {
     this.editingMovement = null
     this.createdCategory = null
     this.movementOperation = 'expense'
+    this.movementLoanId = null
     this.newMovementDefaults = { planId: plan.id, planName: plan.name }
     this.showMovementForm = true
     this.activeTab = 'movements'
+  }
+
+  startLoanPayment(loan) {
+    this.error = ''
+    this.editingMovement = null
+    this.createdCategory = null
+    this.movementLoanId = loan.id
+    this.movementOperation = loan.type === 'me_deben' ? 'income' : 'expense'
+    this.newMovementDefaults = {
+      amount: loan.remaining,
+      ...(loan.type === 'me_deben' ? { destinationAccountId: loan.accountId } : { originAccountId: loan.accountId }),
+    }
+    this.showMovementForm = true
   }
 
   async handleSaveMovement(event) {
@@ -364,6 +383,7 @@ class SaludFinanciera extends LitElement {
       planId: formData.get('planId') || null,
       subscriptionId: this.movementOperation === 'expense'
         ? formData.get('subscriptionId') || null : this.editingMovement?.subscriptionId || null,
+      ...(this.movementLoanId ? { loanId: this.movementLoanId, loanKind: 'abono', categoryId: null, planId: null, subscriptionId: null } : {}),
     }
     const editingId = this.editingMovement?.id
 
@@ -395,6 +415,11 @@ class SaludFinanciera extends LitElement {
   }
 
   startMovementEdit(movement) {
+    if (movement.loanKind === 'desembolso') {
+      this.error = 'El desembolso inicial es fijo; sus abonos sí se pueden editar.'
+      return
+    }
+    this.movementLoanId = movement.loanId || null
     this.error = ''
     this.createdCategory = null
     this.newMovementDefaults = null
@@ -471,6 +496,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startCardPayment(card) {
+    this.movementLoanId = null
     this.movementOperation = 'transfer'
     this.editingMovement = null
     this.createdCategory = null
@@ -976,6 +1002,7 @@ class SaludFinanciera extends LitElement {
   }
 
   openCalendarMovement({ date, event = null }) {
+    this.movementLoanId = null
     this.error = ''
     this.createdCategory = null
     this.editingMovement = null
@@ -998,6 +1025,7 @@ class SaludFinanciera extends LitElement {
     this.editingMovement = null
     this.newMovementDefaults = null
     this.createdCategory = null
+    this.movementLoanId = null
   }
 
   renderMovementDialog() {
@@ -1083,6 +1111,7 @@ class SaludFinanciera extends LitElement {
       return category.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
     })
     const accounts = this.dashboard.accounts
+    const loan = (this.dashboard.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId))
 
     return html`
       <form class="movement-form" @submit=${this.handleSaveMovement}>
@@ -1092,17 +1121,32 @@ class SaludFinanciera extends LitElement {
         ${this.newMovementDefaults?.planName
           ? html`<p class="form-hint">Registra una aportación para ${this.newMovementDefaults.planName}; se descontará de la cuenta de origen y se sumará al monetizado del plan.</p>`
           : ''}
+        ${loan ? html`<p class="form-hint">Abono a ${loan.name}. Pendiente: ${this.formatMoney(loan.remaining)}.
+          ${loan.type === 'me_deben' ? 'El dinero regresará a tu cuenta.' : 'El dinero saldrá de tu cuenta para pagar la deuda.'}</p>` : ''}
         <label>Operación
           <select
             name="operation"
             .value=${this.movementOperation}
-            @change=${(event) => { this.movementOperation = event.currentTarget.value }}
+            @change=${(event) => { this.movementOperation = event.currentTarget.value; this.movementLoanId = null }}
           >
-            <option value="expense">Gasto</option>
-            <option value="income" ?selected=${this.movementOperation === 'income'}>Ingreso</option>
+            <option value="expense">${loan ? 'Pago de abono · Salida de cuenta' : 'Gasto'}</option>
+            <option value="income" ?selected=${this.movementOperation === 'income'}>${loan ? 'Cobro de abono · Entrada a cuenta' : 'Ingreso'}</option>
             <option value="transfer" ?selected=${this.movementOperation === 'transfer'}>Transferencia</option>
           </select>
         </label>
+        ${this.movementOperation !== 'transfer' ? html`
+          <label>Abono a préstamo (opcional)
+            <select name="loanId" .value=${String(this.movementLoanId || '')} @change=${(event) => {
+              this.movementLoanId = event.currentTarget.value ? Number(event.currentTarget.value) : null
+            }}>
+              <option value="" ?selected=${!this.movementLoanId}>Sin préstamo</option>
+              ${(this.dashboard.loans || []).filter((item) =>
+                (this.movementOperation === 'income' ? item.type === 'me_deben' : item.type === 'debo') &&
+                (Number(item.remaining) > 0 || item.id === movement.loanId)
+              ).map((item) => html`<option value=${item.id} ?selected=${Number(this.movementLoanId) === Number(item.id)}>${item.name} · ${this.formatMoney(item.remaining)} pendiente</option>`)}
+            </select>
+          </label>
+        ` : ''}
         <label>Fecha<input name="date" type="date" .value=${movement.date || this.newMovementDefaults?.date || localDateInput()} required /></label>
         <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount ?? this.newMovementDefaults?.amount ?? ''} required /></label>
         ${this.movementOperation !== 'income' ? html`
@@ -1121,7 +1165,7 @@ class SaludFinanciera extends LitElement {
             </select>
           </label>
         ` : ''}
-        ${this.movementOperation !== 'transfer' ? html`
+        ${this.movementOperation !== 'transfer' && !loan ? html`
           <label>Categoría
             <select name="categoryId" .value=${String(categoryId || '')}>
               <option value="" ?selected=${!categoryId}>Sin categoría</option>
@@ -1129,7 +1173,7 @@ class SaludFinanciera extends LitElement {
             </select>
           </label>
         ` : ''}
-        ${this.movementOperation === 'expense' ? html`
+        ${this.movementOperation === 'expense' && !loan ? html`
           <label>Suscripción relacionada (opcional)
             <select name="subscriptionId" .value=${String(subscriptionId || '')}>
               <option value="" ?selected=${!subscriptionId}>Sin suscripción</option>
@@ -1154,15 +1198,15 @@ class SaludFinanciera extends LitElement {
 
   renderMovementList(items, actions = false) {
     return html`<ul class="movement-list">${items.map((item) => {
-      const isTransfer = item.originAccount && item.destinationAccount
-      const isIncome = item.categoryType === 'ingreso' ||
-        (!item.originAccountId && Boolean(item.destinationAccountId))
+      const isTransfer = item.loanId || (item.originAccount && item.destinationAccount)
+      const isIncome = !item.loanId && (item.categoryType === 'ingreso' ||
+        (!item.originAccountId && Boolean(item.destinationAccountId)))
       return html`
         <li>
           <span class="movement-mark ${isIncome ? 'income' : isTransfer ? 'transfer' : 'expense'}">${isIncome ? '+' : isTransfer ? '↔' : '−'}</span>
           <span class="movement-description">
-            <strong>${item.category || item.planName || item.subscriptionName || 'Movimiento'}</strong>
-            <small>${item.originAccount && item.destinationAccount
+            <strong>${item.loanId ? movementLabel(item) : item.category || item.planName || item.subscriptionName || 'Movimiento'}</strong>
+            <small>${item.loanId ? `${movementOrigin(item)} → ${movementDestination(item)}` : item.originAccount && item.destinationAccount
               ? `${item.originAccount} → ${item.destinationAccount}`
               : item.originAccount || item.destinationAccount || item.planName || item.subscriptionName || 'Sin cuenta relacionada'}</small>
           </span>

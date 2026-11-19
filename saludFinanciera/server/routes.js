@@ -14,6 +14,7 @@ import {
 import { getCalendarData } from './calendar.js'
 import { createCategory } from './categories.js'
 import { getFamilyView } from './family-view.js'
+import { createLoan, deleteLoan, getLoans, updateLoan } from './loans.js'
 
 export async function handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson }) {
   const route = `${request.method} ${url.pathname}`
@@ -28,12 +29,31 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
       throw Object.assign(new Error('La vista familiar es de solo consulta. Cambia a Individual para registrar o editar.'), { statusCode: 403 })
     }
     const resource = { '/api/dashboard': 'dashboard', '/api/calendar': 'calendar',
-      '/api/subscriptions': 'subscriptions', '/api/movements': 'movements' }[url.pathname]
+      '/api/subscriptions': 'subscriptions', '/api/movements': 'movements', '/api/loans': 'loans' }[url.pathname]
     if (!resource) return false
     sendJson(response, 200, await getFamilyView(userId, resource, url))
     return true
   }
   if (await handleSubscriptionRoute(request, response, url, { getUserId, readJson, sendJson })) return true
+  if (url.pathname === '/api/loans' && ['GET', 'POST'].includes(request.method)) {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    sendJson(response, request.method === 'POST' ? 201 : 200, request.method === 'POST'
+      ? await createLoan(userId, await readJson(request)) : { loans: await getLoans(userId) })
+    return true
+  }
+  const loanRoute = /^\/api\/loans\/(\d+)$/.exec(url.pathname)
+  if (loanRoute && ['PUT', 'DELETE'].includes(request.method)) {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    const id = Number(loanRoute[1])
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw Object.assign(new Error('El préstamo no es válido.'), { statusCode: 400 })
+    }
+    sendJson(response, 200, request.method === 'PUT'
+      ? await updateLoan(userId, id, await readJson(request)) : await deleteLoan(userId, id))
+    return true
+  }
   if (route === 'GET /api/dashboard') {
     const userId = await getUserId(request, response)
     if (!userId) return true

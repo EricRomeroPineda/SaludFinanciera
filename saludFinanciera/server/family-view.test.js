@@ -11,6 +11,7 @@ function mockFamilyData(t, linked = true) {
     if (sql.includes('SELECT f.id')) return [linked ? [{ id: 4, name: 'Luna', creatorId: 7 }] : []]
     if (sql.includes('SELECT u.id')) return [[{ id: 7, name: 'Ana' }, { id: 8, name: 'Luis' }]]
     if (sql.includes('FROM suscripciones AS s') || sql.includes('FROM plan_futuro AS p')) return [[]]
+    if (sql.includes('FROM prestamo p')) return [[{ id: params[0] * 10, name: 'Deudor', type: 'me_deben', principal: '100', paid: '20', remaining: '80' }]]
     if (sql.includes('COUNT(*) AS count') && sql.includes('GROUP BY DATE')) {
       return [[{ day: '2026-11-18', count: '1', income: '0.10', expenses: '0.20' }]]
     }
@@ -35,6 +36,7 @@ test('family dashboard combines only current members and tags financial owners',
   assert.deepEqual(data.accounts.map((account) => account.ownerId), [7, 8])
   assert.equal(data.summary.accountsCount, 2)
   assert.equal(data.summary.availableTotal, 20)
+  assert.deepEqual(data.loans.map((loan) => loan.name), ['Deudor · Ana', 'Deudor · Luis'])
   assert.deepEqual(data.movements.map((item) => item.id), [8, 7])
   for (const call of calls.filter(({ sql }) => /FROM cuenta|SELECT m.id/.test(sql))) {
     assert.ok([7, 8].includes(call.params[0]))

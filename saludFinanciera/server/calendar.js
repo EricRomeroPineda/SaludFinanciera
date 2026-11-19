@@ -29,12 +29,12 @@ export async function getCalendarData(userId, month, scope = 'month') {
     `SELECT DATE_FORMAT(m.fecha, '%Y-%m-%d') AS day,
             COUNT(*) AS count,
             SUM(CASE
-              WHEN cat.tipo = 'ingreso'
-                OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL)
+              WHEN m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
+                OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL))
               THEN m.monto ELSE 0 END) AS income,
             SUM(CASE
-              WHEN cat.tipo = 'gasto'
-                OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL)
+              WHEN m.id_prestamo IS NULL AND (cat.tipo = 'gasto'
+                OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL))
               THEN m.monto ELSE 0 END) AS expenses
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
@@ -49,7 +49,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
             SUM(m.monto) AS total, COUNT(*) AS count
      FROM movimiento AS m
      INNER JOIN categorias AS cat ON cat.id = m.id_categoria
-     WHERE m.id_usuario = ? AND m.fecha >= ? AND m.fecha < ?
+     WHERE m.id_usuario = ? AND m.fecha >= ? AND m.fecha < ? AND m.id_prestamo IS NULL
      GROUP BY cat.id, cat.nombre, cat.tipo
      ORDER BY total DESC, cat.nombre`,
     [userId, start, end],
@@ -63,7 +63,8 @@ export async function getCalendarData(userId, month, scope = 'month') {
             m.id_cuenta_origen AS originAccountId, m.id_cuenta_destino AS destinationAccountId,
             cat.nombre AS category, cat.tipo AS categoryType,
             plan.nombre AS planName, sub.nombre AS subscriptionName,
-            origin.nombre AS originAccount, destination.nombre AS destinationAccount
+            origin.nombre AS originAccount, destination.nombre AS destinationAccount,
+            m.id_prestamo AS loanId, m.clase_prestamo AS loanKind, loan.persona AS loanName
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
      LEFT JOIN plan_futuro AS plan
@@ -74,6 +75,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
        ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+     LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
      WHERE m.id_usuario = ?${movementCondition}
      ORDER BY m.fecha DESC, m.id DESC`,
     movementParams,

@@ -1,5 +1,6 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
+import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import calendarStyles from './calendario.css?inline'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
@@ -142,15 +143,15 @@ class FinancialCalendar extends LitElement {
                     <tr>
                       <td><button class="calendar-action" type="button" aria-label=${`Ver movimientos del ${item.date}`}
                         @click=${() => this.showMovementDate(item.date)}>${item.date}</button></td>
-                      <td>${item.originAccountId && item.destinationAccountId ? 'Transferencia' : item.originAccountId ? 'Gasto' : 'Ingreso'}</td>
-                      <td>${item.originAccount || '—'}</td><td>${item.destinationAccount || '—'}</td>
+                      <td>${movementLabel(item)}</td>
+                      <td>${movementOrigin(item)}</td><td>${movementDestination(item)}</td>
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
                       <td class="monthly-actions">
-                        ${!this.familyView ? html`
+                        ${!this.familyView && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
                           <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
-                        ` : 'Solo consulta'}
+                        ` : item.loanKind === 'desembolso' ? 'Desembolso fijo' : 'Solo consulta'}
                       </td>
                     </tr>
                   `)}</tbody>
@@ -252,16 +253,16 @@ class FinancialCalendar extends LitElement {
                 ${(this.data?.movements || [])
                   .filter((movement) => movement.date === this.selectedDay)
                   .map((movement) => {
-                    const transfer = movement.originAccount && movement.destinationAccount
-                    const income = movement.categoryType === 'ingreso' ||
-                      (!movement.originAccount && Boolean(movement.destinationAccount))
+                    const transfer = movement.loanId || (movement.originAccount && movement.destinationAccount)
+                    const income = !movement.loanId && (movement.categoryType === 'ingreso' ||
+                      (!movement.originAccount && Boolean(movement.destinationAccount)))
                     return html`
                       <article class="day-movement">
                         <span class="movement-sign ${income ? 'income' : transfer ? '' : 'expense'}">${income ? '+' : transfer ? '↔' : '−'}</span>
                         <span class="movement-text">
-                          <strong>${movement.category || movement.planName || movement.subscriptionName || 'Movimiento'}</strong>
+                          <strong>${movement.loanId ? movementLabel(movement) : movement.category || movement.planName || movement.subscriptionName || 'Movimiento'}</strong>
                           <small>${transfer
-                            ? `${movement.originAccount} → ${movement.destinationAccount}`
+                            ? `${movementOrigin(movement)} → ${movementDestination(movement)}`
                             : movement.originAccount || movement.destinationAccount || movement.planName || 'Sin cuenta relacionada'}</small>
                         </span>
                         <span class="movement-value ${income ? 'income' : transfer ? '' : 'expense'}">${this.formatMoney(movement.amount)}</span>

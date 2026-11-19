@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { pool } from '../../server/db.js'
-import { createAccount, updateAccount } from './dashboard.js'
+import { createAccount, deleteAccount, updateAccount } from './dashboard.js'
 
 test('cash creation and editing persist only name, type and available balance', async (t) => {
   const calls = []
@@ -28,4 +28,25 @@ test('cash still requires a valid available balance and credit retains its requi
   await assert.rejects(createAccount(7, {
     name: 'Credito', type: 'Tarjeta de crédito', available: '250',
   }), { statusCode: 400 })
+})
+
+test('an account suggested by a loan cannot be deleted with a misleading database error', async (t) => {
+  let rolledBack = false
+  t.mock.method(pool, 'getConnection', async () => ({
+    beginTransaction: async () => {},
+    commit: () => assert.fail('Must not delete'),
+    rollback: async () => { rolledBack = true },
+    release() {},
+    execute: async (sql, params) => {
+      assert.doesNotMatch(sql, /^DELETE/)
+      if (sql.includes('COUNT(*)')) return [[{ count: 0 }]]
+      if (sql.includes('FROM prestamo')) {
+        assert.deepEqual(params, [7, 2])
+        return [[{ id: 8 }]]
+      }
+      return [[{ id: 2 }]]
+    },
+  }))
+  await assert.rejects(deleteAccount(7, 2), { statusCode: 409 })
+  assert.equal(rolledBack, true)
 })

@@ -43,7 +43,19 @@ El registro y **Guardar perfil** leen la URL directamente del formulario y la gu
 - `server/auth.js`: registro, autenticación y sesiones.
 - `server/db.js`: pool MySQL configurado con variables de entorno.
 
-La barra financiera muestra **Panorama, Movimiento, Tarjetas, Planes futuros, Suscripciones y Deudores**. Deudores es un estado vacío preparado para desarrollo posterior: no registra ni guarda datos. Cuentas ya no ocupa una pestaña; su gestión se conserva desde **Panorama → Cuentas → Ver todas** y desde la creación de tarjetas.
+La barra financiera muestra **Panorama, Movimiento, Tarjetas, Planes futuros, Suscripciones y Deudores**. Cuentas ya no ocupa una pestaña; su gestión se conserva desde **Panorama → Cuentas → Ver todas** y desde la creación de tarjetas.
+
+### Deudores: préstamos y abonos
+
+Antes de ejecutar esta versión, respalda la base y aplica una sola vez `server/migrations/005-loans.sql` en la base configurada en el servidor. Crea `prestamo`, relacionado con usuario y cuenta, y añade `movimiento.id_prestamo` y `movimiento.clase_prestamo` (`desembolso` / `abono`). Reinicia el backend. La relación es de un préstamo a muchos movimientos: cada desembolso o abono conserva su propio `movimiento.id`, visible en el historial, sin duplicar transacciones.
+
+Deudores permite registrar persona, **Me deben / Yo debo**, monto, fecha de inicio, fecha compromiso, tarjeta/efectivo y notas. En un préstamo **Nuevo**, Me deben descuenta el monto de la cuenta y lo registra como dinero por cobrar; Yo debo agrega el monto a la cuenta elegida y registra la obligación. Ambas operaciones crean automáticamente el desembolso y el préstamo en una misma transacción; si falla el saldo o la cuenta no pertenece al usuario, se revierte todo. En un préstamo **Anterior** no hay movimiento inicial ni cambios de saldo: se captura lo pendiente al comenzar el seguimiento, sin recrear abonos históricos.
+
+Las tarjetas muestran el monto registrado fijo, abonado, pendiente, fechas y cuenta sugerida. Registrar abono abre el modal de movimientos: Me deben recibe dinero en una cuenta propia; Yo debo lo descuenta de una cuenta propia. También se puede elegir un préstamo al registrar o editar un ingreso/salida desde Movimiento. Los abonos se suman desde todos los movimientos del préstamo y usuario, excluyendo el desembolso; no se permite exceder el pendiente ni usar una fecha anterior al inicio. Las cuentas se actualizan transaccionalmente y editar, reasignar o eliminar un abono revierte su efecto anterior antes de aplicar el nuevo; eliminarlo reabre el pendiente correspondiente.
+
+Los préstamos y abonos son traslados entre una cuenta y el saldo por cobrar/pagar, no ingresos o gastos ordinarios: se identifican por nombre y clase en el registro, el detalle diario y los historiales, cuentan como actividad pero no inflan los totales ordinarios de ingresos/gastos del calendario. No pueden compartir movimiento con categoría, plan o suscripción. El desembolso inicial, tipo, monto original y fecha de inicio son fijos; se pueden editar persona, compromiso, cuenta sugerida y notas. La papelera solo elimina préstamos sin movimientos, para conservar el historial; una cuenta sugerida en un préstamo debe desvincularse antes de eliminarla. El resumen de deuda de Panorama conserva su definición de crédito utilizado; los préstamos por pagar/cobrar se consultan en Deudores.
+
+Al pulsar una tarjeta de préstamo o usar Enter/Espacio aparece su tabla completa de movimientos. La vista familiar combina los préstamos de los integrantes identificando al propietario y conserva la restricción de solo consulta. Registrar, abonar, editar y eliminar sigue requiriendo la vista individual y la propiedad en el servidor.
 
 ### Familia y consulta conjunta
 

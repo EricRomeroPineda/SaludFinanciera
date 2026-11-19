@@ -2,6 +2,7 @@ import { getSubscriptions } from '../suscripciones/service.js'
 import { pool } from '../../server/db.js'
 import { isCreditAccount } from '../account-types.js'
 import { getPlans } from './modules.js'
+import { getLoans } from './loans.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -49,7 +50,8 @@ export async function getDashboardData(userId) {
             m.id_cuenta_destino AS destinationAccountId,
             cat.nombre AS category, cat.tipo AS categoryType,
             plan.nombre AS planName, sub.nombre AS subscriptionName,
-            origin.nombre AS originAccount, destination.nombre AS destinationAccount
+            origin.nombre AS originAccount, destination.nombre AS destinationAccount,
+            m.id_prestamo AS loanId, m.clase_prestamo AS loanKind, loan.persona AS loanName
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
      LEFT JOIN plan_futuro AS plan
@@ -60,6 +62,7 @@ export async function getDashboardData(userId) {
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
        ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+     LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
      WHERE m.id_usuario = ?
      ORDER BY m.fecha DESC, m.id DESC
      LIMIT 250`,
@@ -83,6 +86,7 @@ export async function getDashboardData(userId) {
     plans,
     categories,
     movements,
+    loans: await getLoans(userId),
     summary: {
       accountsCount: accounts.length,
       availableTotal,
@@ -188,6 +192,12 @@ export async function deleteAccount(userId, id) {
     )
     if (Number(references[0].count) > 0) {
       throw invalid('No se puede eliminar una cuenta que tiene movimientos asociados.', 409)
+    }
+    const [loans] = await connection.execute(
+      'SELECT id FROM prestamo WHERE id_usuario = ? AND id_cuenta = ? LIMIT 1', [userId, id],
+    )
+    if (loans.length) {
+      throw invalid('La cuenta está configurada en un préstamo. Cambia su cuenta sugerida antes de eliminarla.', 409)
     }
 
     await connection.execute('DELETE FROM cuenta WHERE id = ? AND id_usuario = ?', [id, userId])
