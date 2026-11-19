@@ -58,7 +58,7 @@ test('weekly cards, overfunding and legacy plans have explicit states', () => {
 
 test('plan forms capture contribution and scheduled day, never manual savings or periods', () => {
   const markup = text(handlers.renderPlans.call(state({ showPlanForm: true, editingPlan: plan })))
-  for (const name of ['name', 'goal', 'unitPeriod', 'contribution', 'contributionDay', 'visible']) {
+  for (const name of ['name', 'goal', 'unitPeriod', 'contribution', 'contributionDay', 'startDate', 'visible']) {
     assert.ok(markup.includes(`name="${name}"`))
   }
   assert.doesNotMatch(markup, /name="(?:saved|monetized|monetizado|remaining|periodsRemaining|firstContributionDate)"/)
@@ -67,6 +67,48 @@ test('plan forms capture contribution and scheduled day, never manual savings or
   assert.match(weekly, /Lunes/)
   assert.match(weekly, /Domingo/)
   assert.match(weekly, /<select name="contributionDay"/)
+})
+
+test('editing either module exposes the start date first, including existing records without a date', () => {
+  const subscriptions = components.get('finance-subscriptions').prototype
+  for (const startDate of [null, '2026-11-18']) {
+    const planMarkup = text(handlers.renderPlans.call(state({
+      showPlanForm: true, editingPlan: { ...plan, startDate },
+    })))
+    const subscriptionMarkup = text(subscriptions.renderForm.call({
+      editing: { id: 8, name: 'Internet', frequency: 'Mensual', startDate },
+      formCost: '100', formFrequency: 'Mensual',
+    }))
+    for (const markup of [planMarkup, subscriptionMarkup]) {
+      assert.ok(markup.indexOf('name="startDate"') < markup.indexOf('name="name"'))
+      assert.match(markup, /Editar/)
+      assert.match(markup, /name="startDate" type="date"[^>]*required/)
+      if (startDate) assert.ok(markup.includes(`.value=${startDate}`))
+    }
+  }
+})
+
+test('opening edit brings the start date into view in both modules', () => {
+  const subscriptions = components.get('finance-subscriptions').prototype
+  for (const [prototype, changed, flags] of [
+    [handlers, 'editingPlan', { showPlanForm: true }],
+    [subscriptions, 'editing', { showForm: true }],
+  ]) {
+    let scrolled = false
+    let focused = false
+    const form = {
+      scrollIntoView() { scrolled = true },
+      querySelector(selector) {
+        assert.equal(selector, '[name="startDate"]')
+        return { focus() { focused = true } }
+      },
+    }
+    prototype.updated.call({
+      ...flags, renderRoot: { querySelector: () => form },
+    }, new Map([[changed, null]]))
+    assert.equal(scrolled, true)
+    assert.equal(focused, true)
+  }
 })
 
 for (const editing of [false, true]) {

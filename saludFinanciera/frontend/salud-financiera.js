@@ -108,6 +108,11 @@ class SaludFinanciera extends LitElement {
   }
 
   updated(changed) {
+    if (this.showPlanForm && (changed.has('editingPlan') || changed.has('showPlanForm'))) {
+      const form = this.renderRoot.querySelector('#plan-form')
+      form?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      form?.querySelector('[name="startDate"]')?.focus({ preventScroll: true })
+    }
     if (changed.has('showMovementForm')) {
       const dialog = this.renderRoot.querySelector('#movement-dialog')
       if (this.showMovementForm && dialog && !dialog.open) dialog.showModal()
@@ -739,7 +744,12 @@ class SaludFinanciera extends LitElement {
           </button>
         </div>
         ${this.showPlanForm ? html`
-          <form class="module-form" @submit=${this.handleCreatePlan}>
+          <form id="plan-form" class="module-form" @submit=${this.handleCreatePlan}>
+            <h3 class="form-hint">${this.editingPlan ? `Editar plan: ${this.editingPlan.name}` : 'Nuevo plan'}</h3>
+            <label>Fecha de inicio<input name="startDate" type="date" min="1000-01-01" max="9999-12-31"
+              .value=${this.editingPlan?.startDate || ''} required />
+              <small>Desde esta fecha se programan las aportaciones.</small>
+            </label>
             <label>Nombre de la meta<input name="name" maxlength="100" .value=${this.editingPlan?.name || ''} required /></label>
             <label>Monto objetivo<input name="goal" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.goal || ''} required /></label>
             <label>Unidad de periodo
@@ -751,8 +761,6 @@ class SaludFinanciera extends LitElement {
               </select>
             </label>
             <label>Aportación por periodo<input name="contribution" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.contribution ?? ''} required /></label>
-            <label>Fecha de inicio<input name="startDate" type="date" min="1000-01-01" max="9999-12-31"
-              .value=${this.editingPlan?.startDate || ''} required /></label>
             ${this.planUnit === 'semana' ? html`
               <label>Día de aportación
                 <select name="contributionDay" required>

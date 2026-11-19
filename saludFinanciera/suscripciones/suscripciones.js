@@ -54,6 +54,14 @@ class Subscriptions extends LitElement {
     window.clearInterval(this.clock)
   }
 
+  updated(changed) {
+    if (this.showForm && (changed.has('editing') || changed.has('showForm'))) {
+      const form = this.renderRoot.querySelector('#subscription-form')
+      form?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      form?.querySelector('[name="startDate"]')?.focus({ preventScroll: true })
+    }
+  }
+
   async load() {
     this.loading = true
     this.error = ''
@@ -165,7 +173,12 @@ class Subscriptions extends LitElement {
     const options = item?.frequency && !frequencies.includes(item.frequency)
       ? [item.frequency, ...frequencies] : frequencies
     return html`
-      <form class="module-form" @submit=${this.save}>
+      <form id="subscription-form" class="module-form" @submit=${this.save}>
+        <h3 class="form-hint">${item ? `Editar suscripción: ${item.name}` : 'Nueva suscripción'}</h3>
+        <label>Fecha de inicio
+          <input name="startDate" type="date" min="1000-01-01" max="9999-12-31" .value=${item?.startDate || ''} required />
+          <small>Desde esta fecha se programan los cobros.</small>
+        </label>
         <label>Nombre
           <input name="name" maxlength="100" .value=${item?.name || ''} required />
         </label>
@@ -174,9 +187,6 @@ class Subscriptions extends LitElement {
             <option value="suscripcion" .selected=${!item || item.type === 'suscripcion'}>Suscripción</option>
             <option value="servicio" .selected=${item?.type === 'servicio'}>Servicio</option>
           </select>
-        </label>
-        <label>Fecha de inicio
-          <input name="startDate" type="date" min="1000-01-01" max="9999-12-31" .value=${item?.startDate || ''} required />
         </label>
         <label>Costo por cobro
           <input name="cost" type="number" min="0.01" max="9999999999999.99" step="0.01" .value=${item?.cost ?? ''}
