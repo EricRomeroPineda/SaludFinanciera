@@ -2,6 +2,7 @@ import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
+import { calculateAccountSummary } from '../account-summary.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
@@ -42,6 +43,8 @@ class SaludFinanciera extends LitElement {
     activeTab: { state: true },
     selectedCard: { state: true },
     today: { state: true },
+    overviewPeriod: { state: true },
+    overviewScope: { state: true },
     loading: { state: true },
     submitting: { state: true },
     showAccountForm: { state: true },
@@ -71,6 +74,8 @@ class SaludFinanciera extends LitElement {
     this.activeTab = 'overview'
     this.selectedCard = null
     this.today = new Date()
+    this.overviewPeriod = ''
+    this.overviewScope = 'month'
     this.loading = true
     this.submitting = false
     this.showAccountForm = false
@@ -456,14 +461,57 @@ class SaludFinanciera extends LitElement {
 
   renderOverview() {
     const { summary, accounts, subscriptions, plans, movements } = this.dashboard
+    const period = this.overviewPeriod || `${this.today.getFullYear()}-${String(this.today.getMonth() + 1).padStart(2, '0')}`
+    const totals = calculateAccountSummary(accounts, period, this.overviewScope)
     const metrics = [
-      ['Saldo disponible', this.formatMoney(summary.availableTotal), `${summary.accountsCount} cuentas`],
+      ['Saldo disponible', this.formatMoney(totals.available), 'Actual · Débito + efectivo'],
+      ['Disponible con crédito', this.formatMoney(totals.availableWithCredit), 'Actual · Débito + efectivo + crédito sin utilizar'],
+      ['Deuda total', this.formatMoney(totals.debt), totals.missingLimits
+        ? `Actual · ${totals.missingLimits} créditos sin límite: no incluidos` : 'Actual · Crédito utilizado'],
+      ['Pago para no generar intereses', this.formatMoney(totals.payment),
+        `Vencimiento en ${this.overviewScope === 'year' ? period.slice(0, 4) : period}`],
       ['Suscripciones activas', summary.activeSubscriptionsCount, `${this.formatMoney(summary.monthlySubscriptionTotal)} al mes`],
       ['Planes futuros', summary.plansCount, 'Metas registradas'],
       ['Movimientos recientes', summary.movementsCount, 'Hasta 250 registros'],
     ]
 
     return html`
+      <section class="data-card" aria-label="Periodo de consulta">
+        <div class="section-heading">
+          <h2>Panorama</h2>
+          <label>Consultar
+            <select .value=${this.overviewScope || 'month'} @change=${(event) => {
+              this.overviewScope = event.currentTarget.value
+            }}>
+              <option value="month">Mes</option>
+              <option value="year">Año completo</option>
+            </select>
+          </label>
+          ${this.overviewScope === 'year' ? html`
+            <label>Año<input type="number" min="1000" max="9999" step="1"
+              .value=${period.slice(0, 4)} @change=${(event) => {
+                if (event.currentTarget.checkValidity() && event.currentTarget.value) {
+                  this.overviewPeriod = `${event.currentTarget.value.padStart(4, '0')}-${period.slice(5, 7)}`
+                }
+              }} required /></label>
+          ` : html`
+            <label>Mes y año<input type="month" min="1000-01" max="9999-12"
+              .value=${period} @change=${(event) => {
+                if (event.currentTarget.checkValidity() && event.currentTarget.value) {
+                  this.overviewPeriod = event.currentTarget.value
+                }
+              }} required /></label>
+          `}
+          <button class="text-button" type="button" @click=${() => {
+            this.overviewPeriod = ''
+            this.overviewScope = 'month'
+          }}>Mes actual</button>
+        </div>
+        <p class="form-hint">El periodo filtra únicamente el pago para no generar intereses por fecha límite.
+          Saldos y deuda son actuales. Los pagos son importes capturados, no un historial ni una confirmación de pago;
+          al actualizar los datos de una tarjeta se reemplazan sus valores anteriores.</p>
+        ${totals.missingPayments ? html`<p class="form-hint">${totals.missingPayments} créditos sin fecha límite o importe de pago: no incluidos en el pago del periodo.</p>` : ''}
+      </section>
       <section class="metric-grid" aria-label="Resumen">
         ${metrics.map(([label, value, detail]) => html`
           <article class="metric-card">

@@ -51,6 +51,28 @@ test('cash is selectable, editable and visible with only an available balance', 
     assert.doesNotMatch(card, /Fecha de corte|Fecha límite|Registrar pago|Saldo utilizado|Límite máximo/)
 })
 
+test('overview period controls switch monthly and annual payment totals without changing current balances', () => {
+  const ctx = state({
+    dashboard: {
+      plans: [], subscriptions: [], movements: [], summary: {},
+      accounts: [{ type: 'Crédito', name: 'Banco', available: '10', total: '100',
+        paymentDueDate: '2026-12-01', paymentToAvoidInterest: '90' }],
+    },
+  })
+  let markup = text(ctx.renderOverview())
+  assert.match(markup, /type="month"/)
+  assert.match(markup, /Vencimiento en 2026-11/)
+  assert.match(markup, /Disponible con crédito/)
+  assert.match(markup, /Deuda total/)
+  ctx.overviewPeriod = '2026-12'
+  markup = text(ctx.renderOverview())
+  assert.match(markup, /Vencimiento en 2026-12/)
+  ctx.overviewScope = 'year'
+  markup = text(ctx.renderOverview())
+  assert.match(markup, /type="number" min="1000" max="9999"/)
+  assert.match(markup, /Vencimiento en 2026</)
+})
+
 test('plan viewer renders cards, calculated progress and monthly dates rather than a table', () => {
   const markup = text(handlers.renderPlans.call(state()))
   assert.match(markup, /class="plan-card /)
