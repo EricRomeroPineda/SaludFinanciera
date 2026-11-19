@@ -153,6 +153,9 @@ export const server = createServer(async (request, response) => {
     const statusCode = error.statusCode || 500
     if (statusCode >= 500) {
       console.error(`[API] Error ${route}: ${error.code || error.message}`)
+      if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage) {
+        console.error(`[DB] ${error.sqlMessage}`)
+      }
     }
     sendJson(response, statusCode, {
       error: statusCode >= 500 ? 'Ocurrió un error interno.' : error.message,
