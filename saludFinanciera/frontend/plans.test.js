@@ -113,6 +113,29 @@ test('panorama respects visibility while the plans viewer retains hidden plans',
   assert.match(text(ctx.renderPlans()), /Plan oculto/)
 })
 
+test('panorama limits the summary to four visible plans and reserves details and actions for the plans screen', () => {
+  const ctx = state({
+    selectedPlan: plan,
+    dashboard: {
+      plans: Array.from({ length: 6 }, (_, index) => ({ ...plan, id: index + 1, name: `Meta ${index + 1}` })),
+      subscriptions: [], movements: [], accounts: [], summary: {},
+    },
+  })
+  const overview = ctx.renderOverview()
+  const markup = text(overview)
+  assert.match(markup, /Meta 1/)
+  assert.match(markup, /Meta 4/)
+  assert.doesNotMatch(markup, /Meta 5|Meta 6/)
+  assert.equal((markup.match(/<progress /g) || []).length, 4)
+  assert.match(markup, /Mostrando 4 planes/)
+  assert.doesNotMatch(markup, /plan-card|Registrar movimiento|Editar plan|card-trash-button|finance-related-movements|Finalización estimada|Próxima aportación/)
+  const plans = text(ctx.renderPlans())
+  assert.match(plans, /Meta 6/)
+  assert.match(plans, /Registrar movimiento/)
+  ctx.selectedPlan = ctx.dashboard.plans[0]
+  assert.match(text(ctx.renderPlanMovements(ctx.dashboard.plans).values[1]), /finance-related-movements/)
+})
+
 test('plan countdown distinguishes today, tomorrow and later and omits completed plans', () => {
   const ctx = state()
   for (const [date, expected] of [

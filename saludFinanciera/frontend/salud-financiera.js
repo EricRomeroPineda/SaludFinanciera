@@ -469,10 +469,29 @@ class SaludFinanciera extends LitElement {
             <h2>Planes futuros</h2>
             <button class="text-button" type="button" @click=${() => { this.activeTab = 'plans' }}>Ver todos →</button>
           </div>
-          <div class="card-grid">
-            ${plans.filter((plan) => Boolean(Number(plan.visible))).map((plan) => this.renderPlanCard(plan))}
-          </div>
-          ${this.renderPlanMovements(plans.filter((plan) => Boolean(Number(plan.visible))))}
+          <ul class="overview-plan-list">
+            ${plans.filter((plan) => Boolean(Number(plan.visible))).slice(0, 4).map((plan) => {
+              const progress = Number(plan.goal) > 0
+                ? Math.min(100, Math.max(0, Number(plan.saved) / Number(plan.goal) * 100)) : 0
+              return html`
+                <li>
+                  <div class="overview-plan-heading">
+                    <button class="text-button" type="button" @click=${() => {
+                      this.activeTab = 'plans'
+                      this.selectedPlan = plan
+                    }}>${plan.name}</button>
+                    <span>${this.formatMoney(plan.saved)} / ${this.formatMoney(plan.goal)}</span>
+                  </div>
+                  <div class="overview-plan-progress">
+                    <progress max="100" .value=${progress} aria-label=${`Progreso de ${plan.name}`}></progress>
+                    <small>${Math.floor(progress)}%</small>
+                  </div>
+                </li>
+              `
+            })}
+          </ul>
+          ${plans.filter((plan) => Boolean(Number(plan.visible))).length > 4
+            ? html`<p class="overview-footnote">Mostrando 4 planes. Consulta el resto en Planes futuros.</p>` : ''}
         </section>
       ` : ''}
       <p class="overview-footnote">${subscriptions.length} suscripciones · ${plans.length} planes futuros</p>
