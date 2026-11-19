@@ -36,13 +36,31 @@ test('evidence input is optional and available in movement forms, the general re
   assert.doesNotMatch(panel, /required/)
   const item = { id: 8, date: '2026-11-19', amount: '10' }
   const register = text(calendar.renderMonthlyTable.call({
-    data: { movements: [item] }, scope: 'all', formatMoney: () => '$10',
+    data: { movements: [item] }, scope: 'all', expandedEvidenceId: 8, formatMoney: () => '$10',
   }, 'Noviembre'))
   assert.match(register, /<th>Evidencia<\/th>/)
   assert.match(register, /<movement-evidence .movementId=8/)
   const history = text(related.render.call({ items: [item] }))
   assert.match(history, /<th>Evidencia<\/th>/)
   assert.match(history, /<movement-evidence .movementId=8/)
+})
+
+test('general register expands evidence in its own full-width row and keeps actions inside a table cell', () => {
+  const state = {
+    data: { movements: [{ id: 8, date: '2026-11-19', amount: '10' }] },
+    scope: 'all', formatMoney: () => '$10',
+  }
+  const collapsed = text(calendar.renderMonthlyTable.call(state, 'Noviembre'))
+  assert.doesNotMatch(collapsed, /<movement-evidence/)
+  assert.match(collapsed, /<td><div class="monthly-actions">/)
+  const expanded = text(calendar.renderMonthlyTable.call({ ...state, expandedEvidenceId: 8 }, 'Noviembre'))
+  assert.match(expanded, /<tr class="evidence-detail-row">\s*<td colspan="10"/)
+  assert.match(expanded, /\.expanded=true .hideToggle=true/)
+  const panel = text(evidence.render.call({
+    ...methods(evidence), expanded: true, hideToggle: true, pending: [], images: [],
+  }))
+  assert.doesNotMatch(panel, /aria-expanded=/)
+  assert.match(panel, /Imágenes de evidencia/)
 })
 
 test('selection validates total count and file sizes and leaves previous pending evidence intact on error', () => {

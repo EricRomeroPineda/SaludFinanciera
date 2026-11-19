@@ -7,6 +7,7 @@ export class MovementEvidence extends LitElement {
     images: { state: true }, pending: { state: true }, error: { state: true },
     loading: { state: true }, busy: { state: true }, canManage: { state: true },
     locked: { type: Boolean },
+    hideToggle: { type: Boolean },
   }
   static styles = css`
     :host { display: block; font-size: 12px; color: var(--ink); }
@@ -127,9 +128,9 @@ export class MovementEvidence extends LitElement {
   render() {
     const manage = !this.readOnly && (!this.movementId || this.canManage)
     return html`
-      <button type="button" aria-expanded=${this.expanded} @click=${() => { this.expanded = !this.expanded }}>
+      ${!this.hideToggle ? html`<button type="button" aria-expanded=${this.expanded} @click=${() => { this.expanded = !this.expanded }}>
         ${this.expanded ? 'Ocultar evidencia' : 'Evidencia (opcional)'}
-      </button>
+      </button>` : ''}
       ${this.expanded ? html`
         <div class="panel">
           ${this.loading ? html`<p role="status">Cargando evidencia…</p>` : ''}

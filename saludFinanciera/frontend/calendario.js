@@ -27,6 +27,7 @@ class FinancialCalendar extends LitElement {
     revision: { attribute: false },
     scope: { state: true },
     familyView: { type: Boolean },
+    expandedEvidenceId: { state: true },
   }
 
   constructor() {
@@ -39,6 +40,7 @@ class FinancialCalendar extends LitElement {
     this.loading = true
     this.requestVersion = 0
     this.scope = 'all'
+    this.expandedEvidenceId = null
   }
 
   updated(changed) {
@@ -49,6 +51,7 @@ class FinancialCalendar extends LitElement {
   }
 
   async loadMonth() {
+    this.expandedEvidenceId = null
     const version = ++this.requestVersion
     const month = this.month
     this.loading = true
@@ -148,14 +151,27 @@ class FinancialCalendar extends LitElement {
                       <td>${movementOrigin(item)}</td><td>${movementDestination(item)}</td>
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
-                      <td><movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence></td>
-                      <td class="monthly-actions">
+                      <td><button class="calendar-action" type="button"
+                        aria-expanded=${this.expandedEvidenceId === item.id}
+                        aria-controls=${`movement-evidence-${item.id}`}
+                        @click=${() => { this.expandedEvidenceId = this.expandedEvidenceId === item.id ? null : item.id }}>
+                        ${this.expandedEvidenceId === item.id ? 'Ocultar evidencia' : 'Evidencia (opcional)'}
+                      </button></td>
+                      <td><div class="monthly-actions">
                         ${!this.familyView && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
                           <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
                         ` : item.loanKind === 'desembolso' ? 'Desembolso fijo' : 'Solo consulta'}
-                      </td>
+                      </div></td>
                     </tr>
+                    ${this.expandedEvidenceId === item.id ? html`
+                      <tr class="evidence-detail-row">
+                        <td colspan="10" id=${`movement-evidence-${item.id}`}>
+                          <movement-evidence .movementId=${item.id} .readOnly=${this.familyView}
+                            .expanded=${true} .hideToggle=${true}></movement-evidence>
+                        </td>
+                      </tr>
+                    ` : ''}
                   `)}</tbody>
                 </table>
               </div>

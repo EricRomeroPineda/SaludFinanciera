@@ -21,6 +21,8 @@ Al crear o editar un movimiento puedes adjuntar hasta **5 imágenes JPG, PNG o W
 
 El botón **Evidencia (opcional)** aparece en el registro general, el detalle diario del calendario y los historiales de tarjetas, planes, suscripciones y préstamos. Permite consultar imágenes, abrirlas en otra pestaña y, en vista individual, agregar o eliminar las propias, incluso de desembolsos cuyo monto es fijo. La familia solo puede consultarlas. Adjuntar/quitar evidencia no altera montos ni saldos; eliminar el movimiento elimina sus referencias y después sus archivos. Un error de limpieza en disco se registra explícitamente en la consola como `[EVIDENCIA]`.
 
+En el registro general, la evidencia se despliega debajo del movimiento en una fila de ancho completo, sin ensanchar las columnas ni desplazar los botones Editar y Eliminar.
+
 El movimiento se guarda antes de subir sus imágenes. Si falla una subida, el formulario avisa que el movimiento ya está guardado, conserva las imágenes pendientes y permite reintentar sin crear otro movimiento ni volver a subir las imágenes que sí finalizaron. No cierres el formulario mientras haya archivos pendientes; si lo cierras, puedes adjuntarlos después desde el registro ya guardado. Las imágenes seleccionadas solo en el navegador aún no son un respaldo.
 
 ## Perfil, temas y recuperación
