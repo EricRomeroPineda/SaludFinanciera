@@ -39,7 +39,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
      WHERE m.id_usuario = ? AND m.fecha >= ? AND m.fecha < ?
-     GROUP BY DATE(m.fecha)
+     GROUP BY DATE_FORMAT(m.fecha, '%Y-%m-%d')
      ORDER BY day`,
     [userId, start, end],
   )

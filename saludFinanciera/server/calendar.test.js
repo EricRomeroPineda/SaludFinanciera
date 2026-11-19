@@ -59,6 +59,8 @@ test('calendar API queries all monthly movements for the owner and returns edita
   t.mock.method(pool, 'execute', async (sql, params) => {
     calls.push({ sql, params })
     if (sql.includes('COUNT(*) AS count') && sql.includes('GROUP BY DATE')) {
+      assert.match(sql, /GROUP BY DATE_FORMAT\(m\.fecha, '%Y-%m-%d'\)/)
+      assert.doesNotMatch(sql, /GROUP BY DATE\(m\.fecha\)/)
       return [[{ day: '2026-11-18', count: '301', income: '100.50', expenses: '50.25' }]]
     }
     if (sql.includes('SELECT cat.nombre')) return [[{ name: 'Comida', type: 'gasto', total: '50.25', count: '2' }]]
