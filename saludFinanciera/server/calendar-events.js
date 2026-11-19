@@ -1,7 +1,7 @@
 import { isCreditAccount } from '../account-types.js'
 import { nextScheduledDate } from '../schedule.js'
 
-export function calendarEvents(month, { accounts, subscriptions, plans }) {
+export function calendarEvents(month, { accounts, subscriptions, plans, loans = [] }) {
   const [year, monthNumber] = month.split('-').map(Number)
   const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
   const events = []
@@ -37,6 +37,15 @@ export function calendarEvents(month, { accounts, subscriptions, plans }) {
     if (!plan.configured || plan.completed) continue
     recurring('plan', plan, plan.periodUnit, plan.contributionDay, {
       planId: plan.id, amount: plan.contribution,
+    })
+  }
+  for (const loan of loans) {
+    if (Number(loan.remaining) <= 0 || !loan.commitmentDate?.startsWith(`${month}-`)) continue
+    events.push({
+      kind: 'loan', date: loan.commitmentDate,
+      label: `${loan.name} · ${loan.type === 'me_deben' ? 'Me deben' : 'Yo debo'}`,
+      loanId: loan.id, loanType: loan.type, amount: loan.remaining,
+      ...(loan.type === 'me_deben' ? { destinationAccountId: loan.accountId } : { originAccountId: loan.accountId }),
     })
   }
   return events.sort((a, b) => a.date.localeCompare(b.date) || a.label.localeCompare(b.label, 'es'))

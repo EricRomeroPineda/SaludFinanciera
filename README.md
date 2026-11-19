@@ -55,6 +55,8 @@ Las tarjetas muestran el monto registrado fijo, abonado, pendiente, fechas y cue
 
 Los préstamos y abonos son traslados entre una cuenta y el saldo por cobrar/pagar, no ingresos o gastos ordinarios: se identifican por nombre y clase en el registro, el detalle diario y los historiales, cuentan como actividad pero no inflan los totales ordinarios de ingresos/gastos del calendario. No pueden compartir movimiento con categoría, plan o suscripción. El desembolso inicial, tipo, monto original y fecha de inicio son fijos; se pueden editar persona, compromiso, cuenta sugerida y notas. La papelera solo elimina préstamos sin movimientos, para conservar el historial; una cuenta sugerida en un préstamo debe desvincularse antes de eliminarla. El resumen de deuda de Panorama conserva su definición de crédito utilizado; los préstamos por pagar/cobrar se consultan en Deudores.
 
+El calendario incluye un marcador naranja **Deudas · Fecha compromiso** para cada préstamo pendiente en su fecha compromiso exacta, tanto Me deben como Yo debo, con su saldo por cobrar/pagar. No se repite en otros meses ni incrementa el contador de movimientos reales; desaparece al liquidarse. En el detalle del día, Registrar abre un abono con fecha, préstamo y cuenta sugerida preseleccionados. La vista familiar conserva estos marcadores como solo consulta.
+
 Al pulsar una tarjeta de préstamo o usar Enter/Espacio aparece su tabla completa de movimientos. La vista familiar combina los préstamos de los integrantes identificando al propietario y conserva la restricción de solo consulta. Registrar, abonar, editar y eliminar sigue requiriendo la vista individual y la propiedad en el servidor.
 
 ### Familia y consulta conjunta

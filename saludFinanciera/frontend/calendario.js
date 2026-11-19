@@ -6,7 +6,7 @@ import calendarStyles from './calendario.css?inline'
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 const dayFormat = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-const eventLabels = { card: 'Pago de tarjeta', plan: 'Aportación a plan', subscription: 'Suscripción / servicio' }
+const eventLabels = { card: 'Pago de tarjeta', plan: 'Aportación a plan', subscription: 'Suscripción / servicio', loan: 'Deudas · Fecha compromiso' }
 
 function localDateString(date) {
   const year = date.getFullYear()

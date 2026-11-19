@@ -2,6 +2,7 @@ import { pool } from '../../server/db.js'
 import { getSubscriptions } from '../suscripciones/service.js'
 import { getPlans } from './modules.js'
 import { calendarEvents } from './calendar-events.js'
+import { getLoans } from './loans.js'
 
 function invalid(message) {
   const error = new Error(message)
@@ -90,11 +91,12 @@ export async function getCalendarData(userId, month, scope = 'month') {
   )
   const subscriptions = await getSubscriptions(userId)
   const plans = await getPlans(userId)
+  const loans = await getLoans(userId)
 
   return {
     month,
     scope,
-    events: calendarEvents(month, { accounts, subscriptions, plans }),
+    events: calendarEvents(month, { accounts, subscriptions, plans, loans }),
     days: days.map((item) => ({
       ...item,
       count: Number(item.count),

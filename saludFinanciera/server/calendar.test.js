@@ -41,6 +41,21 @@ test('calendar markers distinguish credit cards, active subscriptions and pendin
   assert.ok(!events.some((item) => ['Cancelada', 'Completado', 'Sin configurar', 'Débito', 'Otro mes'].includes(item.label)))
 })
 
+test('loan markers appear only on the exact commitment date while pending, in both directions', () => {
+  const data = { ...fixtures(), loans: [
+    { id: 20, name: 'Ana', type: 'me_deben', remaining: '60.00', commitmentDate: '2026-11-19', accountId: 2 },
+    { id: 21, name: 'Luis', type: 'debo', remaining: '150.00', commitmentDate: '2026-11-30', accountId: 3 },
+    { id: 22, name: 'Liquidado', type: 'debo', remaining: '0.00', commitmentDate: '2026-11-19' },
+    { id: 23, name: 'Otro año', type: 'debo', remaining: '100', commitmentDate: '2027-11-19' },
+  ] }
+  const events = calendarEvents('2026-11', data).filter((event) => event.kind === 'loan')
+  assert.deepEqual(events, [
+    { kind: 'loan', date: '2026-11-19', label: 'Ana · Me deben', loanId: 20, loanType: 'me_deben', amount: '60.00', destinationAccountId: 2 },
+    { kind: 'loan', date: '2026-11-30', label: 'Luis · Yo debo', loanId: 21, loanType: 'debo', amount: '150.00', originAccountId: 3 },
+  ])
+  assert.equal(calendarEvents('2026-12', data).filter((event) => event.kind === 'loan').length, 0)
+})
+
 test('weekly markers repeat only on their weekday and month-end days clamp for leap years', () => {
   const data = fixtures()
   const events = calendarEvents('2026-11', data)
@@ -78,6 +93,7 @@ test('calendar API queries all monthly movements for the owner and returns edita
     if (sql.includes('FROM cuenta')) return [fixtures().accounts]
     if (sql.includes('FROM suscripciones AS s')) return [[]]
     if (sql.includes('FROM plan_futuro AS p')) return [[]]
+    if (sql.includes('FROM prestamo p')) return [[]]
     assert.fail(sql)
   })
   const data = await getCalendarData(7, '2026-11')

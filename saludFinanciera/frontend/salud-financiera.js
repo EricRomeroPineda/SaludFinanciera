@@ -1002,6 +1002,16 @@ class SaludFinanciera extends LitElement {
   }
 
   openCalendarMovement({ date, event = null }) {
+    if (event?.kind === 'loan') {
+      const loan = this.dashboard.loans.find((item) => Number(item.id) === Number(event.loanId))
+      if (!loan) {
+        this.error = 'El préstamo ya no está disponible. Actualiza la información antes de registrar el abono.'
+        return
+      }
+      this.startLoanPayment(loan)
+      this.newMovementDefaults = { ...this.newMovementDefaults, date }
+      return
+    }
     this.movementLoanId = null
     this.error = ''
     this.createdCategory = null

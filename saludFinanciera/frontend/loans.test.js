@@ -135,6 +135,24 @@ test('initial loan movements are labelled and immutable in the register, while h
   assert.match(history, /<td>9<\/td>/)
 })
 
+test('scheduled commitment opens a repayment on the selected day with the correct direction', () => {
+  for (const type of ['me_deben', 'debo']) {
+    const state = {
+      ...methods(finance), dashboard: { loans: [{ ...item, type }] },
+    }
+    state.openCalendarMovement({ date: item.commitmentDate, event: { kind: 'loan', loanId: item.id } })
+    assert.equal(state.movementLoanId, item.id)
+    assert.equal(state.movementOperation, type === 'me_deben' ? 'income' : 'expense')
+    assert.equal(state.newMovementDefaults.date, item.commitmentDate)
+    assert.equal(state.newMovementDefaults.amount, item.remaining)
+    assert.equal(state.showMovementForm, true)
+  }
+  const missing = { ...methods(finance), dashboard: { loans: [] } }
+  missing.openCalendarMovement({ date: item.commitmentDate, event: { kind: 'loan', loanId: item.id } })
+  assert.match(missing.error, /ya no está disponible/)
+  assert.notEqual(missing.showMovementForm, true)
+})
+
 test('family loans are read only and keep the family scope when viewing related movements', () => {
   const markup = text(loans.render.call({ ...methods(loans), familyView: true, items: [item], selectedId: 8, accounts }))
   assert.match(markup, /class="card-actions" \?hidden=true/)

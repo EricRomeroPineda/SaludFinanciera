@@ -94,6 +94,7 @@
 .event-dot.card { background: #368bff; }
 .event-dot.plan { background: #26b76d; }
 .event-dot.subscription { background: #b278f1; }
+.event-dot.loan { background: #ef9628; }
 .day-markers { position: absolute; bottom: 4px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
 .calendar-primary { margin-bottom: 16px; padding: 10px 14px; border: 0; border-radius: 8px; background: var(--green); color: var(--on-accent); font-size: 12px; cursor: pointer; }
 .calendar-action { padding: 5px 2px; border: 0; background: transparent; color: var(--green); font-size: 11px; cursor: pointer; }
