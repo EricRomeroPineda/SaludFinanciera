@@ -19,6 +19,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', {
   month: 'short',
   day: 'numeric',
 })
+const weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
 function isCardAccount(account) {
   const type = String(account.type || '')
@@ -41,6 +42,7 @@ class SaludFinanciera extends LitElement {
     showMovementForm: { state: true },
     showPlanForm: { state: true },
     editingPlan: { state: true },
+    planUnit: { state: true },
     movementOperation: { state: true },
     editingMovement: { state: true },
     error: { state: true },
@@ -70,6 +72,7 @@ class SaludFinanciera extends LitElement {
     this.newMovementDefaults = null
     this.showPlanForm = false
     this.editingPlan = null
+    this.planUnit = ''
     this.movementOperation = 'expense'
     this.editingMovement = null
     this.error = ''
@@ -197,12 +200,14 @@ class SaludFinanciera extends LitElement {
           name: formData.get('name'),
           goal: formData.get('goal'),
           unitPeriod: formData.get('unitPeriod') || null,
-          periodsRemaining: formData.get('periodsRemaining'),
+          contribution: formData.get('contribution'),
+          contributionDay: formData.get('contributionDay'),
           visible: formData.has('visible'),
         }),
       })
       this.showPlanForm = false
       this.editingPlan = null
+      this.planUnit = ''
       await this.refreshDashboard()
     } catch (error) {
       this.error = error.message
@@ -619,6 +624,7 @@ class SaludFinanciera extends LitElement {
           <div><p class="eyebrow">METAS FINANCIERAS</p><h2>Planes futuros</h2></div>
           <button class="primary-button compact-button" type="button" @click=${() => {
             this.editingPlan = null
+            this.planUnit = ''
             this.showPlanForm = !this.showPlanForm
           }}>
             ${this.showPlanForm ? 'Cancelar' : '+ Nuevo plan'}
@@ -629,16 +635,28 @@ class SaludFinanciera extends LitElement {
             <label>Nombre de la meta<input name="name" maxlength="100" .value=${this.editingPlan?.name || ''} required /></label>
             <label>Monto objetivo<input name="goal" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.goal || ''} required /></label>
             <label>Unidad de periodo
-              <select name="unitPeriod" required .value=${this.editingPlan?.periodUnit || ''}>
-                <option value="" ?selected=${!['semana', 'mes', 'anio'].includes(this.editingPlan?.periodUnit)}>Selecciona la frecuencia</option>
-                <option value="semana" ?selected=${this.editingPlan?.periodUnit === 'semana'}>Semana</option>
-                <option value="mes" ?selected=${this.editingPlan?.periodUnit === 'mes'}>Mes</option>
-                <option value="anio" ?selected=${this.editingPlan?.periodUnit === 'anio'}>Año</option>
+              <select name="unitPeriod" required .value=${this.planUnit}
+                @change=${(event) => { this.planUnit = event.currentTarget.value }}>
+                <option value="" ?selected=${!['semana', 'mes'].includes(this.planUnit)}>Selecciona la frecuencia</option>
+                <option value="semana" ?selected=${this.planUnit === 'semana'}>Semana</option>
+                <option value="mes" ?selected=${this.planUnit === 'mes'}>Mes</option>
               </select>
             </label>
-            <label>Periodos faltantes (manual)<input name="periodsRemaining" type="number" min="0" max="4294967295" step="1" .value=${this.editingPlan?.periodsRemaining ?? ''} required /></label>
+            <label>Aportación por periodo<input name="contribution" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.contribution ?? ''} required /></label>
+            ${this.planUnit === 'semana' ? html`
+              <label>Día de aportación
+                <select name="contributionDay" required>
+                  <option value="">Selecciona un día</option>
+                  ${weekdays.map((day, index) => html`<option value=${index + 1}
+                    ?selected=${this.editingPlan?.periodUnit === 'semana' && Number(this.editingPlan.contributionDay) === index + 1}>${day}</option>`)}
+                </select>
+              </label>
+            ` : html`
+              <label>Día del mes de aportación<input name="contributionDay" type="number" min="1" max="31" step="1"
+                .value=${this.editingPlan?.periodUnit === 'mes' ? this.editingPlan.contributionDay ?? '' : ''} required /></label>
+            `}
             <label class="checkbox-label"><input name="visible" type="checkbox" ?checked=${this.editingPlan ? Boolean(Number(this.editingPlan.visible)) : true} /> Mostrar en el panorama</label>
-            <p class="form-hint">Monetizado se calcula únicamente con los movimientos vinculados al plan; la meta no cambia automáticamente. Actualiza manualmente los periodos faltantes. La fecha estimada suma esos periodos a la fecha de hoy: no es un vencimiento guardado ni detecta impagos.</p>
+            <p class="form-hint">Monetizado suma los movimientos vinculados al plan. Los periodos faltantes son el faltante dividido entre la aportación, redondeado hacia arriba. La fecha se estima con los próximos días de aportación y se recorre si quedan aportaciones pendientes; la meta no cambia. En meses cortos se usa su último día.</p>
             <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.submitting ? 'Guardando…' : 'Guardar plan'}</button></div>
           </form>
         ` : ''}
@@ -674,18 +692,21 @@ class SaludFinanciera extends LitElement {
         </div>
         ${projection.configured ? html`
           <dl class="card-dates">
-            <div><dt>${periodsLabel} (manual)</dt><dd>${plan.periodsRemaining}</dd></div>
+            <div><dt>Aportación ${plan.periodUnit === 'semana' ? 'semanal' : 'mensual'}</dt><dd>${this.formatMoney(plan.contribution)}</dd></div>
+            <div><dt>Día de aportación</dt><dd>${plan.periodUnit === 'semana' ? weekdays[Number(plan.contributionDay) - 1] : `Día ${plan.contributionDay} de cada mes`}</dd></div>
+            <div><dt>${periodsLabel}</dt><dd>${projection.periodsRemaining}</dd></div>
             ${!projection.completed ? html`
-              <div class="card-payment"><dt>Finalización estimada desde hoy</dt><dd>${projection.estimatedCompletionDate ? this.formatDate(projection.estimatedCompletionDate) : 'Fuera del rango de fechas; revisa los periodos'}</dd></div>
+              <div><dt>Próxima aportación</dt><dd>${projection.nextContributionDate ? this.formatDate(projection.nextContributionDate) : 'Fuera del rango de fechas'}</dd></div>
+              <div class="card-payment"><dt>Finalización estimada</dt><dd>${projection.estimatedCompletionDate ? this.formatDate(projection.estimatedCompletionDate) : 'Fuera del rango de fechas; revisa la aportación'}</dd></div>
             ` : ''}
           </dl>
-        ` : html`<p class="plan-note">Edita el plan para configurar la unidad de periodo y los periodos faltantes.</p>`}
-        ${projection.configured && !projection.completed ? html`<p class="plan-note">Estimación desde hoy; los periodos se actualizan manualmente, no por impagos ni aportaciones.</p>` : ''}
+        ` : html`<p class="plan-note">Edita el plan para configurar la frecuencia semanal o mensual, el día y la aportación esperada.</p>`}
         ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
         <div class="card-actions">
           <button class="text-button" type="button" @click=${() => {
             this.activeTab = 'plans'
             this.editingPlan = plan
+            this.planUnit = ['semana', 'mes'].includes(plan.periodUnit) ? plan.periodUnit : ''
             this.showPlanForm = true
           }}>Editar plan</button>
           <button class="text-button delete-button" type="button" @click=${() => this.handleDeletePlan(plan)}>Eliminar</button>

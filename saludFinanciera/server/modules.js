@@ -7,10 +7,11 @@ export async function getPlans(userId) {
     `SELECT p.id, p.nombre AS name, p.meta AS goal,
             COALESCE(t.saved, 0) AS saved, p.meta - COALESCE(t.saved, 0) AS remaining,
             p.mostrar AS visible, p.unidad_periodo AS periodUnit,
-            p.periodos_faltantes AS periodsRemaining
+            p.aportacion_periodo AS contribution, p.dia_aportacion AS contributionDay,
+            DATE_FORMAT(t.lastContributionDate, '%Y-%m-%d') AS lastContributionDate
      FROM plan_futuro AS p
      LEFT JOIN (
-       SELECT id_plan_futuro, id_usuario, SUM(monto) AS saved
+       SELECT id_plan_futuro, id_usuario, SUM(monto) AS saved, MAX(fecha) AS lastContributionDate
        FROM movimiento WHERE id_usuario = ? GROUP BY id_plan_futuro, id_usuario
      ) AS t ON t.id_plan_futuro = p.id AND t.id_usuario = p.id_usuario
      WHERE p.id_usuario = ?
@@ -47,30 +48,32 @@ function planFields(input) {
   const name = requiredText(input.name, 'El nombre de la meta', 100)
   const goal = decimal(input.goal, 'La meta')
   const unitPeriod = input.unitPeriod
-  if (!['semana', 'mes', 'anio'].includes(unitPeriod)) {
-    throw invalid('Selecciona un periodo semanal, mensual o anual.')
+  if (!['semana', 'mes'].includes(unitPeriod)) {
+    throw invalid('Selecciona un periodo semanal o mensual.')
   }
-  const periodsRemaining = input.periodsRemaining == null || String(input.periodsRemaining).trim() === ''
-    ? NaN : Number(input.periodsRemaining)
-  if (!Number.isSafeInteger(periodsRemaining) || periodsRemaining < 0 || periodsRemaining > 4294967295) {
-    throw invalid('Los periodos faltantes deben ser un entero entre 0 y 4294967295.')
+  const contribution = decimal(input.contribution, 'La aportación por periodo')
+  const contributionDay = Number(input.contributionDay)
+  const maxDay = unitPeriod === 'semana' ? 7 : 31
+  if (!Number.isInteger(contributionDay) || contributionDay < 1 || contributionDay > maxDay) {
+    throw invalid(unitPeriod === 'semana'
+      ? 'Selecciona un día de lunes a domingo.' : 'El día de aportación debe estar entre 1 y 31.')
   }
 
   const visible = input.visible === undefined
     ? true
     : input.visible === true || input.visible === 1 || input.visible === '1'
-  return { name, goal, unitPeriod, periodsRemaining, visible }
+  return { name, goal, unitPeriod, contribution, contributionDay, visible }
 }
 
 export async function createPlan(userId, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `INSERT INTO plan_futuro
-       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, periodos_faltantes)
-     VALUES (?, ?, ?, 0, ?, ?, ?)`,
+       (id_usuario, nombre, meta, monetizado, mostrar, unidad_periodo, aportacion_periodo, dia_aportacion)
+     VALUES (?, ?, ?, 0, ?, ?, ?, ?)`,
     [
       userId, fields.name, fields.goal, fields.visible,
-      fields.unitPeriod, fields.periodsRemaining,
+      fields.unitPeriod, fields.contribution, fields.contributionDay,
     ],
   )
 
@@ -82,11 +85,11 @@ export async function updatePlan(userId, idValue, input) {
   const fields = planFields(input)
   const [result] = await pool.execute(
     `UPDATE plan_futuro
-     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, periodos_faltantes = ?
+     SET nombre = ?, meta = ?, mostrar = ?, unidad_periodo = ?, aportacion_periodo = ?, dia_aportacion = ?
      WHERE id = ? AND id_usuario = ?`,
     [
       fields.name, fields.goal, fields.visible, fields.unitPeriod,
-      fields.periodsRemaining, id, userId,
+      fields.contribution, fields.contributionDay, id, userId,
     ],
   )
   if (!result.affectedRows) throw invalid('No se encontró el plan de tu usuario.', 404)

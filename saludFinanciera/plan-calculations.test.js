@@ -2,49 +2,70 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { calculatePlanProjection } from './plan-calculations.js'
 
-const plan = { goal: '300.00', saved: '100.00', periodUnit: 'mes', periodsRemaining: 3 }
+const plan = { goal: '1000.00', saved: '50.00', periodUnit: 'mes', contribution: '200.00', contributionDay: 18 }
 const project = (changes = {}, date = new Date(2026, 10, 18, 12)) =>
   calculatePlanProjection({ ...plan, ...changes }, date)
 
-test('manual periods project full weeks, months and years from today', () => {
-  assert.equal(project().estimatedCompletionDate, '2027-02-18')
-  assert.equal(project({ periodUnit: 'semana' }).estimatedCompletionDate, '2026-12-09')
-  assert.equal(project({ periodUnit: 'anio' }).estimatedCompletionDate, '2029-11-18')
-  assert.equal(project({ periodsRemaining: 0 }).estimatedCompletionDate, '2026-11-18')
-  assert.equal(project({ periodsRemaining: '3' }).estimatedCompletionDate, '2027-02-18')
+test('periods are calculated from the pending balance, rounding up for a final partial payment', () => {
+  assert.deepEqual(project(), {
+    configured: true, completed: false, periodsRemaining: 5,
+    nextContributionDate: '2026-11-18', estimatedCompletionDate: '2027-03-18',
+  })
+  assert.equal(project({ saved: '200' }).periodsRemaining, 4)
+  assert.equal(project({ saved: '250' }).periodsRemaining, 4)
+  assert.equal(project({ goal: '0.30', saved: '0.10', contribution: '0.10' }).periodsRemaining, 2)
+  assert.equal(project({ periodsRemaining: 999 }).periodsRemaining, 5)
+  assert.equal(plan.goal, '1000.00')
 })
 
-test('estimates move with today but do not detect missed or partial payments', () => {
-  assert.equal(project({}, new Date(2026, 10, 19, 12)).estimatedCompletionDate, '2027-02-19')
-  for (const saved of ['0', '50', '200']) {
-    assert.equal(project({ saved }).estimatedCompletionDate, '2027-02-18')
+test('missing a scheduled day shifts the estimate to the next monthly contribution', () => {
+  assert.equal(project({}, new Date(2026, 10, 19)).nextContributionDate, '2026-12-18')
+  assert.equal(project({}, new Date(2026, 10, 19)).estimatedCompletionDate, '2027-04-18')
+  assert.equal(project({}, new Date(2026, 11, 19)).estimatedCompletionDate, '2027-05-18')
+})
+
+test('a contribution today consumes the date; partial or insufficient amounts require another period', () => {
+  assert.equal(project({ lastContributionDate: '2026-11-18' }).estimatedCompletionDate, '2027-04-18')
+  assert.equal(project({ saved: '200', lastContributionDate: '2026-11-18' }).estimatedCompletionDate, '2027-03-18')
+  assert.equal(project({ saved: '400', lastContributionDate: '2026-11-18' }).estimatedCompletionDate, '2027-02-18')
+  assert.equal(project({ lastContributionDate: '2026-11-01' }).nextContributionDate, '2026-11-18')
+})
+
+test('weekly plans use Monday through Sunday and seven-day intervals', () => {
+  const weekly = { periodUnit: 'semana', contributionDay: 3 }
+  assert.equal(project(weekly).nextContributionDate, '2026-11-18')
+  assert.equal(project(weekly).estimatedCompletionDate, '2026-12-16')
+  assert.equal(project(weekly, new Date(2026, 10, 19)).estimatedCompletionDate, '2026-12-23')
+  assert.equal(project({ ...weekly, contributionDay: 1 }).nextContributionDate, '2026-11-23')
+  assert.equal(project({ ...weekly, contributionDay: 7 }).nextContributionDate, '2026-11-22')
+  assert.equal(project({ ...weekly, lastContributionDate: '2026-11-18' }).nextContributionDate, '2026-11-25')
+})
+
+test('monthly dates clamp short months without losing the configured day', () => {
+  const changes = { contributionDay: 31, goal: '600', saved: '0' }
+  assert.equal(project(changes, new Date(2027, 0, 31)).estimatedCompletionDate, '2027-03-31')
+  assert.equal(project(changes, new Date(2027, 1, 28)).nextContributionDate, '2027-02-28')
+  assert.equal(project(changes, new Date(2028, 1, 28)).nextContributionDate, '2028-02-29')
+  assert.equal(project({ ...changes, lastContributionDate: '2027-02-28' }, new Date(2027, 1, 28))
+    .nextContributionDate, '2027-03-31')
+})
+
+test('completed and overfunded plans have zero remaining periods and no future contributions', () => {
+  for (const saved of ['1000', '1200']) {
+    assert.deepEqual(project({ saved }), {
+      configured: true, completed: true, periodsRemaining: 0,
+      nextContributionDate: null, estimatedCompletionDate: null,
+    })
   }
-  assert.equal(plan.periodsRemaining, 3)
-  assert.equal(plan.goal, '300.00')
 })
 
-test('months and years clamp dates at month end, including leap years', () => {
-  assert.equal(project({ periodsRemaining: 1 }, new Date(2027, 0, 31)).estimatedCompletionDate, '2027-02-28')
-  assert.equal(project({ periodsRemaining: 1 }, new Date(2028, 0, 31)).estimatedCompletionDate, '2028-02-29')
-  assert.equal(project({ periodsRemaining: 2 }, new Date(2027, 0, 31)).estimatedCompletionDate, '2027-03-31')
-  assert.equal(project({ periodUnit: 'anio', periodsRemaining: 1 }, new Date(2028, 1, 29))
-    .estimatedCompletionDate, '2029-02-28')
-})
-
-test('completed and overfunded plans omit estimates without modifying the manual periods', () => {
-  for (const saved of ['300', '350']) {
-    assert.deepEqual(project({ saved }), { configured: true, completed: true, estimatedCompletionDate: null })
+test('legacy schedules require configuration and dates outside the supported range are explicit', () => {
+  for (const changes of [
+    { contribution: null }, { contribution: 0 }, { contributionDay: null },
+    { contributionDay: 32 }, { periodUnit: 'semana', contributionDay: 8 }, { periodUnit: 'anio' },
+  ]) {
+    assert.equal(project(changes).configured, false)
+    assert.equal(project(changes).periodsRemaining, null)
   }
-  assert.equal(project({ goal: '0.30', saved: '0.30' }).completed, true)
-  assert.equal(plan.periodsRemaining, 3)
-})
-
-test('missing or invalid configuration is explicit, zero is valid, excessive dates have no estimate', () => {
-  for (const periodsRemaining of [null, undefined, '', ' ', -1, 1.5, 4294967296]) {
-    assert.equal(project({ periodsRemaining }).configured, false)
-  }
-  assert.equal(project({ periodUnit: null }).configured, false)
-  assert.equal(project({ periodsRemaining: 0 }).configured, true)
-  assert.equal(project({ periodsRemaining: 4294967295 }).estimatedCompletionDate, null)
-  assert.equal(project({}, new Date(9999, 11, 31)).estimatedCompletionDate, null)
+  assert.equal(project({ contribution: '0.01', goal: '9999999999999.99' }).estimatedCompletionDate, null)
 })
