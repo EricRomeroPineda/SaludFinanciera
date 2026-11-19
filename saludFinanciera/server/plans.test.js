@@ -2,11 +2,43 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { pool } from '../../server/db.js'
 import { createPlan, getPlans, lockPlans, syncPlanSavings, updatePlan } from './modules.js'
-import { deleteMovement, saveMovement } from './movements.js'
+import { deleteMovement, getRelatedMovements, saveMovement } from './movements.js'
 
 const input = {
   name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00', contributionDay: '18', visible: true,
 }
+
+test('related plan movements query the complete history for the authenticated user and selected plan', async (t) => {
+  const rows = [{ id: 5, amount: '100.00', date: '2026-11-18' }]
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.match(sql, /WHERE m\.id_usuario = \? AND m\.id_plan_futuro = \?/)
+    assert.match(sql, /ORDER BY m\.fecha DESC, m\.id DESC/)
+    assert.doesNotMatch(sql, /LIMIT/)
+    assert.deepEqual(params, [7, 8])
+    return [rows]
+  })
+  assert.deepEqual(await getRelatedMovements(7, 'plan', 8), { movements: rows })
+})
+
+test('related movements retain account/subscription filters and reject invalid relations or IDs', async (t) => {
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.match(sql, /WHERE m\.id_usuario = \?/)
+    if (params.length === 3) {
+      assert.match(sql, /\(m\.id_cuenta_origen = \? OR m\.id_cuenta_destino = \?\)/)
+      assert.deepEqual(params, [7, 8, 8])
+    } else {
+      assert.match(sql, /m\.id_suscripcion = \?/)
+      assert.deepEqual(params, [7, 8])
+    }
+    return [[]]
+  })
+  assert.deepEqual(await getRelatedMovements(7, 'account', 8), { movements: [] })
+  assert.deepEqual(await getRelatedMovements(7, 'subscription', 8), { movements: [] })
+  await assert.rejects(getRelatedMovements(7, 'invalid', 8), { statusCode: 400 })
+  for (const id of [null, '', -1, 0, 'wrong']) {
+    await assert.rejects(getRelatedMovements(7, 'plan', id), { statusCode: 400 })
+  }
+})
 
 test('creating and editing plans persist the schedule but never accept a manual accumulated amount', async (t) => {
   const calls = []

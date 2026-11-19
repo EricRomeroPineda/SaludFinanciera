@@ -35,7 +35,7 @@ function text(value) {
 
 test('plan viewer renders cards, calculated progress and monthly dates rather than a table', () => {
   const markup = text(handlers.renderPlans.call(state()))
-  assert.match(markup, /class="plan-card"/)
+  assert.match(markup, /class="plan-card /)
   assert.doesNotMatch(markup, /<table/)
   assert.match(markup, /<progress max="100" .value=33\.333/)
   assert.match(markup, /Meta fija/)
@@ -112,3 +112,112 @@ test('panorama respects visibility while the plans viewer retains hidden plans',
   assert.doesNotMatch(overview, /Plan oculto/)
   assert.match(text(ctx.renderPlans()), /Plan oculto/)
 })
+
+test('plan countdown distinguishes today, tomorrow and later and omits completed plans', () => {
+  const ctx = state()
+  for (const [date, expected] of [
+    ['2026-11-18', '¡Hoy es día de aportar!'],
+    ['2026-11-19', 'Falta 1 día para aportar'],
+    ['2026-11-20', 'Faltan 2 días para aportar'],
+    ['2026-11-23', 'Faltan 5 días para aportar'],
+  ]) {
+    const markup = text(ctx.renderPlanCountdown({ completed: false, nextContributionDate: date }))
+    assert.ok(markup.includes(expected))
+    assert.equal(markup.includes('urgent'), date <= '2026-11-20')
+  }
+  assert.equal(ctx.renderPlanCountdown({ completed: true, nextContributionDate: null }), '')
+  assert.equal(ctx.renderPlanCountdown({ completed: false, nextContributionDate: null }), '')
+})
+
+test('registering a plan movement opens a fresh expense with that plan preselected', () => {
+  const ctx = state({
+    editingMovement: { id: 12, planId: 99 }, movementOperation: 'transfer',
+    newMovementDefaults: { cardName: 'Old card' },
+  })
+  ctx.startPlanMovement(plan)
+  assert.equal(ctx.activeTab, 'movements')
+  assert.equal(ctx.showMovementForm, true)
+  assert.equal(ctx.editingMovement, null)
+  assert.equal(ctx.movementOperation, 'expense')
+  assert.deepEqual(ctx.newMovementDefaults, { planId: 8, planName: 'Vacaciones' })
+  ctx.dashboard = { ...ctx.dashboard, accounts: [], categories: [], subscriptions: [] }
+  const markup = text(ctx.renderMovementForm())
+  assert.match(markup, /<select name="planId" .value=8>/)
+  assert.match(markup, /Registra una aportación para Vacaciones/)
+})
+
+test('plan cards select only on surface click or Enter/Space, with separate trash and movement actions', () => {
+  const ctx = state()
+  const card = ctx.renderPlanCard(plan)
+  const callbacks = card.values.filter((value) => typeof value === 'function')
+  const [click, keydown] = callbacks
+  click({ target: { closest: () => ({}) } })
+  assert.equal(ctx.selectedPlan, undefined)
+  click({ target: { closest: () => null } })
+  assert.equal(ctx.selectedPlan, plan)
+  for (const key of ['Enter', ' ']) {
+    ctx.selectedPlan = null
+    const target = {}
+    let prevented = false
+    keydown({ key, target, currentTarget: target, preventDefault() { prevented = true } })
+    assert.equal(ctx.selectedPlan, plan)
+    assert.equal(prevented, true)
+  }
+  ctx.selectedPlan = null
+  keydown({ key: 'Enter', target: {}, currentTarget: {}, preventDefault() { assert.fail() } })
+  assert.equal(ctx.selectedPlan, null)
+  const markup = text(card)
+  assert.match(markup, /Registrar movimiento/)
+  assert.match(markup, /class="card-trash-button"/)
+  assert.match(markup, /aria-label=Eliminar Vacaciones/)
+})
+
+test('plan history renders only for a currently selected plan and is keyed by refreshed dashboard', () => {
+  const ctx = state()
+  assert.equal(ctx.renderPlanMovements([plan]), '')
+  ctx.selectedPlan = plan
+  const detail = ctx.renderPlanMovements([plan])
+  assert.equal(detail.values[0], ctx.dashboard)
+  assert.match(text(detail.values[1]), /relation="plan"/)
+  assert.match(text(detail.values[1]), /\.relationId=8/)
+  assert.equal(ctx.renderPlanMovements([]), '')
+})
+
+test('trash opens a confirmation modal, cancel does not issue deletion', async () => {
+  let opened = false
+  let closed = false
+  const dialog = { showModal() { opened = true }, close() { closed = true } }
+  const ctx = state({ renderRoot: { querySelector: () => dialog }, updateComplete: Promise.resolve() })
+  await ctx.requestDeletePlan(plan)
+  assert.equal(opened, true)
+  assert.equal(ctx.pendingDeletePlan, plan)
+  ctx.closePlanDeleteDialog()
+  assert.equal(closed, true)
+  assert.equal(ctx.pendingDeletePlan, null)
+})
+
+for (const fails of [false, true]) {
+  test(`plan deletion ${fails ? 'preserves modal and exposes linked-movement error' : 'clears selection and refreshes after confirmation'}`, async (t) => {
+    let closed = false
+    let refreshed = false
+    t.mock.method(globalThis, 'fetch', async (path, options) => {
+      assert.equal(path, '/api/plans/8')
+      assert.equal(options.method, 'DELETE')
+      return new Response(JSON.stringify(fails ? { error: 'Tiene movimientos relacionados.' } : { ok: true }),
+        { status: fails ? 409 : 200 })
+    })
+    const ctx = state({
+      pendingDeletePlan: plan, selectedPlan: plan, editingPlan: plan, showPlanForm: true,
+      renderRoot: { querySelector: () => ({ close() { closed = true } }) },
+      refreshDashboard: async () => { refreshed = true },
+    })
+    await ctx.handleDeletePlan()
+    assert.equal(closed, !fails)
+    assert.equal(refreshed, !fails)
+    assert.equal(ctx.pendingDeletePlan, fails ? plan : null)
+    assert.equal(ctx.selectedPlan, fails ? plan : null)
+    assert.equal(ctx.submitting, false)
+    if (fails) assert.equal(ctx.error, 'Tiene movimientos relacionados.')
+    else assert.equal(ctx.showPlanForm, false)
+  })
+}

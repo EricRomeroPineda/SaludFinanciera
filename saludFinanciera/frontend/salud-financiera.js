@@ -1,4 +1,5 @@
 import { LitElement, html, unsafeCSS } from 'lit'
+import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount } from '../account-types.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
@@ -43,6 +44,8 @@ class SaludFinanciera extends LitElement {
     showPlanForm: { state: true },
     editingPlan: { state: true },
     planUnit: { state: true },
+    selectedPlan: { state: true },
+    pendingDeletePlan: { state: true },
     movementOperation: { state: true },
     editingMovement: { state: true },
     error: { state: true },
@@ -73,6 +76,8 @@ class SaludFinanciera extends LitElement {
     this.showPlanForm = false
     this.editingPlan = null
     this.planUnit = ''
+    this.selectedPlan = null
+    this.pendingDeletePlan = null
     this.movementOperation = 'expense'
     this.editingMovement = null
     this.error = ''
@@ -151,6 +156,7 @@ class SaludFinanciera extends LitElement {
                 <button class="quiet-button" type="button" @click=${this.loadDashboard}>Reintentar</button>
               </div>
             `}
+        ${this.renderPlanDeleteDialog()}
       </main>
     `
   }
@@ -216,15 +222,69 @@ class SaludFinanciera extends LitElement {
     }
   }
 
-  async handleDeletePlan(plan) {
-    if (!window.confirm(`¿Eliminar el plan "${plan.name}"?`)) return
+  async requestDeletePlan(plan) {
+    this.pendingDeletePlan = plan
     this.error = ''
+    await this.updateComplete
+    this.renderRoot.querySelector('#delete-plan-dialog').showModal()
+  }
+
+  closePlanDeleteDialog() {
+    if (this.submitting) return
+    this.renderRoot.querySelector('#delete-plan-dialog').close()
+    this.pendingDeletePlan = null
+  }
+
+  async handleDeletePlan() {
+    const plan = this.pendingDeletePlan
+    if (!plan || this.submitting) return
+    this.error = ''
+    this.submitting = true
     try {
       await apiRequest(`/api/plans/${plan.id}`, { method: 'DELETE' })
+      if (this.editingPlan?.id === plan.id) {
+        this.editingPlan = null
+        this.showPlanForm = false
+      }
+      if (this.selectedPlan?.id === plan.id) this.selectedPlan = null
+      this.renderRoot.querySelector('#delete-plan-dialog').close()
+      this.pendingDeletePlan = null
       await this.refreshDashboard()
     } catch (error) {
       this.error = error.message
+    } finally {
+      this.submitting = false
     }
+  }
+
+  renderPlanDeleteDialog() {
+    return html`
+      <dialog id="delete-plan-dialog" class="plan-delete-dialog" aria-labelledby="delete-plan-title"
+        @cancel=${(event) => {
+          if (this.submitting) event.preventDefault()
+          else this.pendingDeletePlan = null
+        }}>
+        <h2 id="delete-plan-title">¿Eliminar el plan?</h2>
+        <p>${this.pendingDeletePlan?.name}</p>
+        <p>Solo se puede eliminar si no tiene movimientos relacionados. No se borrará su historial.</p>
+        ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
+        <div class="plan-delete-actions">
+          <button class="quiet-button" type="button" autofocus ?disabled=${this.submitting}
+            @click=${this.closePlanDeleteDialog}>Cancelar</button>
+          <button class="primary-button confirm-plan-delete" type="button" ?disabled=${this.submitting}
+            @click=${this.handleDeletePlan}>${this.submitting ? 'Eliminando…' : 'Sí, eliminar'}</button>
+        </div>
+      </dialog>
+    `
+  }
+
+  startPlanMovement(plan) {
+    this.error = ''
+    this.editingMovement = null
+    this.movementOperation = 'expense'
+    this.newMovementDefaults = { planId: plan.id, planName: plan.name }
+    this.showMovementForm = true
+    this.activeTab = 'movements'
   }
 
   async handleSaveMovement(event) {
@@ -412,6 +472,7 @@ class SaludFinanciera extends LitElement {
           <div class="card-grid">
             ${plans.filter((plan) => Boolean(Number(plan.visible))).map((plan) => this.renderPlanCard(plan))}
           </div>
+          ${this.renderPlanMovements(plans.filter((plan) => Boolean(Number(plan.visible))))}
         </section>
       ` : ''}
       <p class="overview-footnote">${subscriptions.length} suscripciones · ${plans.length} planes futuros</p>
@@ -663,6 +724,7 @@ class SaludFinanciera extends LitElement {
         ${items.length
           ? html`<div class="card-grid">${items.map((item) => this.renderPlanCard(item))}</div>`
           : this.emptyMessage('No tienes planes futuros registrados.')}
+        ${this.renderPlanMovements(items)}
       </section>
     `
   }
@@ -675,12 +737,23 @@ class SaludFinanciera extends LitElement {
     const periodsLabel = plan.periodUnit === 'semana' ? 'Semanas faltantes'
       : plan.periodUnit === 'anio' ? 'Años faltantes' : 'Meses faltantes'
     return html`
-      <article class="plan-card">
+      <article class="plan-card ${this.selectedPlan?.id === plan.id ? 'selected' : ''}" tabindex="0"
+        aria-label=${`Plan ${plan.name}. Ver movimientos`}
+        @click=${(event) => {
+          if (!event.target.closest('button')) this.selectedPlan = plan
+        }}
+        @keydown=${(event) => {
+          if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) {
+            event.preventDefault()
+            this.selectedPlan = plan
+          }
+        }}>
         <div class="credit-card-heading">
           <span>${plan.periodUnit === 'semana' ? 'Plan semanal' : plan.periodUnit === 'mes' ? 'Plan mensual' : plan.periodUnit === 'anio' ? 'Plan anual' : 'Plan sin configurar'}</span>
           <span class="status-tag ${projection.completed ? '' : 'pending'}">${projection.completed ? 'Meta completada' : 'En progreso'}</span>
         </div>
         <h3>${plan.name}</h3>
+        ${this.renderPlanCountdown(projection)}
         <div class="card-balances">
           <div class="card-main-balance"><span>Monetizado</span><strong>${this.formatMoney(plan.saved)}</strong></div>
           <div><span>Meta fija</span><strong>${this.formatMoney(plan.goal)}</strong></div>
@@ -703,16 +776,43 @@ class SaludFinanciera extends LitElement {
         ` : html`<p class="plan-note">Edita el plan para configurar la frecuencia semanal o mensual, el día y la aportación esperada.</p>`}
         ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
         <div class="card-actions">
+          <button class="text-button" type="button" ?disabled=${this.submitting}
+            @click=${() => this.startPlanMovement(plan)}>Registrar movimiento</button>
           <button class="text-button" type="button" @click=${() => {
             this.activeTab = 'plans'
             this.editingPlan = plan
             this.planUnit = ['semana', 'mes'].includes(plan.periodUnit) ? plan.periodUnit : ''
             this.showPlanForm = true
           }}>Editar plan</button>
-          <button class="text-button delete-button" type="button" @click=${() => this.handleDeletePlan(plan)}>Eliminar</button>
+          <button class="card-trash-button" type="button" ?disabled=${this.submitting}
+            aria-label=${`Eliminar ${plan.name}`} title="Eliminar plan" @click=${() => this.requestDeletePlan(plan)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />
+            </svg>
+          </button>
         </div>
       </article>
     `
+  }
+
+  renderPlanCountdown(projection) {
+    if (projection.completed || !projection.nextContributionDate) return ''
+    const today = Date.UTC(this.today.getFullYear(), this.today.getMonth(), this.today.getDate())
+    const days = Math.round((Date.parse(`${projection.nextContributionDate}T00:00:00Z`) - today) / 86400000)
+    return html`
+      <div class="plan-countdown ${days <= 2 ? 'urgent' : ''} ${days === 0 ? 'today' : ''}" role="status">
+        <strong>${days === 0 ? '¡Hoy es día de aportar!' : days === 1
+          ? 'Falta 1 día para aportar' : `Faltan ${days} días para aportar`}</strong>
+      </div>
+    `
+  }
+
+  renderPlanMovements(plans) {
+    const plan = plans.find((item) => item.id === this.selectedPlan?.id)
+    return plan ? keyed(this.dashboard, html`
+      <finance-related-movements relation="plan"
+        .relationId=${plan.id} .label=${plan.name}></finance-related-movements>
+    `) : ''
   }
 
   renderMovements() {
@@ -738,6 +838,7 @@ class SaludFinanciera extends LitElement {
 
   renderMovementForm() {
     const movement = this.editingMovement || {}
+    const planId = movement.planId || (!this.editingMovement ? this.newMovementDefaults?.planId : null)
     const originAccountId = movement.originAccountId || this.newMovementDefaults?.originAccountId
     const destinationAccountId = movement.destinationAccountId
       || this.newMovementDefaults?.destinationAccountId
@@ -751,6 +852,9 @@ class SaludFinanciera extends LitElement {
       <form class="movement-form" @submit=${this.handleSaveMovement}>
         ${this.newMovementDefaults?.cardName
           ? html`<p class="form-hint">Registra una transferencia hacia ${this.newMovementDefaults.cardName} para reflejar el pago en el saldo disponible.</p>`
+          : ''}
+        ${this.newMovementDefaults?.planName
+          ? html`<p class="form-hint">Registra una aportación para ${this.newMovementDefaults.planName}; se descontará de la cuenta de origen y se sumará al monetizado del plan.</p>`
           : ''}
         <label>Operación
           <select
@@ -797,9 +901,9 @@ class SaludFinanciera extends LitElement {
             </select>
           </label>
           <label>Aportación a plan (opcional)
-            <select name="planId" .value=${String(movement.planId || '')}>
-              <option value="" ?selected=${!movement.planId}>Sin plan</option>
-              ${this.dashboard.plans.map((plan) => html`<option value=${plan.id} ?selected=${Number(movement.planId) === Number(plan.id)}>${plan.name}</option>`)}
+            <select name="planId" .value=${String(planId || '')}>
+              <option value="" ?selected=${!planId}>Sin plan</option>
+              ${this.dashboard.plans.map((plan) => html`<option value=${plan.id} ?selected=${Number(planId) === Number(plan.id)}>${plan.name}</option>`)}
             </select>
           </label>
         ` : ''}

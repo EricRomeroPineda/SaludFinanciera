@@ -69,6 +69,17 @@
 .plan-progress progress::-webkit-progress-value { background: var(--green); border-radius: 99px; }
 .plan-progress progress::-moz-progress-bar { background: var(--green); border-radius: 99px; }
 .plan-note { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.plan-card { cursor: pointer; }
+.plan-card.selected, .plan-card:focus-visible { border-color: var(--green); outline: 2px solid var(--green); }
+.plan-countdown { margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--transfer); border-left-width: 5px; border-radius: 9px; background: var(--transfer-bg); color: var(--transfer); font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.plan-countdown.urgent { border-color: var(--negative); background: var(--negative-bg); color: var(--negative); }
+.plan-countdown.today { border-width: 2px; }
+.plan-delete-dialog { width: min(440px, calc(100% - 36px)); max-height: calc(100vh - 40px); overflow: auto; padding: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); }
+.plan-delete-dialog::backdrop { background: #0009; }
+.plan-delete-dialog h2 { margin: 0 0 16px; font-size: 21px; }
+.plan-delete-dialog p { color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.plan-delete-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.confirm-plan-delete, .confirm-plan-delete:hover:not(:disabled) { background: var(--negative); color: var(--surface); }
 .status-tag.pending { background: var(--soft); color: var(--muted); }
 .card-empty p { margin: 0 0 6px; }
 .card-empty p:last-child { color: var(--muted); font-size: 11px; }

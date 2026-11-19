@@ -16,14 +16,14 @@ function normalizeId(value, label) {
 }
 
 export async function getRelatedMovements(userId, relation, value) {
-  if (!['account', 'subscription'].includes(relation)) {
+  if (!['account', 'subscription', 'plan'].includes(relation)) {
     throw invalid('La relación de movimientos no es válida.')
   }
   const id = normalizeId(value, 'El identificador')
   if (!id) throw invalid('El identificador es obligatorio.')
   const condition = relation === 'account'
     ? '(m.id_cuenta_origen = ? OR m.id_cuenta_destino = ?)'
-    : 'm.id_suscripcion = ?'
+    : relation === 'plan' ? 'm.id_plan_futuro = ?' : 'm.id_suscripcion = ?'
   const [movements] = await pool.execute(
     `SELECT m.id, m.monto AS amount,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
