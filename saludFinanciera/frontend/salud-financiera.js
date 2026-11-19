@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount } from '../account-types.js'
+import { calculatePlanProjection } from '../plan-calculations.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -196,7 +197,8 @@ class SaludFinanciera extends LitElement {
           name: formData.get('name'),
           goal: formData.get('goal'),
           unitPeriod: formData.get('unitPeriod') || null,
-          periodsRemaining: formData.get('periodsRemaining') || null,
+          contribution: formData.get('contribution'),
+          firstContributionDate: formData.get('firstContributionDate'),
           visible: formData.has('visible'),
         }),
       })
@@ -397,6 +399,17 @@ class SaludFinanciera extends LitElement {
             : this.emptyMessage('Aún no hay movimientos registrados.')}
         </section>
       </div>
+      ${plans.some((plan) => Boolean(Number(plan.visible))) ? html`
+        <section class="data-card overview-plans">
+          <div class="section-heading">
+            <h2>Planes futuros</h2>
+            <button class="text-button" type="button" @click=${() => { this.activeTab = 'plans' }}>Ver todos →</button>
+          </div>
+          <div class="card-grid">
+            ${plans.filter((plan) => Boolean(Number(plan.visible))).map((plan) => this.renderPlanCard(plan))}
+          </div>
+        </section>
+      ` : ''}
       <p class="overview-footnote">${subscriptions.length} suscripciones · ${plans.length} planes futuros</p>
     `
   }
@@ -617,38 +630,69 @@ class SaludFinanciera extends LitElement {
             <label>Nombre de la meta<input name="name" maxlength="100" .value=${this.editingPlan?.name || ''} required /></label>
             <label>Monto objetivo<input name="goal" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.goal || ''} required /></label>
             <label>Unidad de periodo
-              <select name="unitPeriod" .value=${this.editingPlan?.periodUnit || ''}>
-                <option value="">Sin periodo</option>
-                <option value="semana">Semana</option>
-                <option value="mes">Mes</option>
-                <option value="anio">Año</option>
+              <select name="unitPeriod" required .value=${this.editingPlan?.periodUnit || ''}>
+                <option value="" ?selected=${!['semana', 'mes'].includes(this.editingPlan?.periodUnit)}>Selecciona la frecuencia</option>
+                <option value="semana" ?selected=${this.editingPlan?.periodUnit === 'semana'}>Semana</option>
+                <option value="mes" ?selected=${this.editingPlan?.periodUnit === 'mes'}>Mes</option>
               </select>
             </label>
-            <label>Periodos faltantes<input name="periodsRemaining" type="number" min="0" step="1" .value=${this.editingPlan?.periodsRemaining ?? ''} /></label>
-            <label class="checkbox-label"><input name="visible" type="checkbox" ?checked=${this.editingPlan ? Boolean(this.editingPlan.visible) : true} /> Mostrar en el panorama</label>
-            <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>Guardar plan</button></div>
+            <label>Aportación por semana o mes<input name="contribution" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.contribution ?? ''} required /></label>
+            <label>Fecha de la primera aportación<input name="firstContributionDate" type="date" min="1000-01-01" max="9999-12-31" .value=${this.editingPlan?.firstContributionDate || ''} required /></label>
+            <label class="checkbox-label"><input name="visible" type="checkbox" ?checked=${this.editingPlan ? Boolean(Number(this.editingPlan.visible)) : true} /> Mostrar en el panorama</label>
+            <p class="form-hint">Monetizado se calcula únicamente con los movimientos vinculados al plan. La meta no cambia automáticamente. Los periodos faltantes y la fecha estimada se recalculan con el saldo pendiente; si vence un periodo sin cubrir la aportación, la fecha se recorre.</p>
+            <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.submitting ? 'Guardando…' : 'Guardar plan'}</button></div>
           </form>
         ` : ''}
         ${items.length
-          ? html`<div class="table-wrap"><table>
-              <thead><tr><th>Meta</th><th>Objetivo</th><th>Ahorrado</th><th>Faltante</th><th>Periodo</th><th></th></tr></thead>
-              <tbody>${items.map((item) => html`
-                <tr>
-                  <td><strong>${item.name}</strong></td><td>${this.formatMoney(item.goal)}</td>
-                  <td>${this.formatMoney(item.saved)}</td><td>${this.formatMoney(item.remaining)}</td>
-                  <td>${item.periodUnit || '—'}</td>
-                  <td class="row-actions">
-                    <button class="text-button" type="button" @click=${() => {
-                      this.editingPlan = item
-                      this.showPlanForm = true
-                    }}>Editar</button>
-                    <button class="text-button delete-button" type="button" @click=${() => this.handleDeletePlan(item)}>Eliminar</button>
-                  </td>
-                </tr>
-              `)}</tbody>
-            </table></div>`
+          ? html`<div class="card-grid">${items.map((item) => this.renderPlanCard(item))}</div>`
           : this.emptyMessage('No tienes planes futuros registrados.')}
       </section>
+    `
+  }
+
+  renderPlanCard(plan) {
+    const projection = calculatePlanProjection(plan, this.today)
+    const progress = Number(plan.goal) > 0
+      ? Math.min(100, Math.max(0, Number(plan.saved) / Number(plan.goal) * 100)) : 0
+    const progressLabel = Math.floor(progress * 10) / 10
+    const periodsLabel = plan.periodUnit === 'semana' ? 'Semanas faltantes' : 'Meses faltantes'
+    return html`
+      <article class="plan-card">
+        <div class="credit-card-heading">
+          <span>${plan.periodUnit === 'semana' ? 'Plan semanal' : plan.periodUnit === 'mes' ? 'Plan mensual' : 'Plan sin configurar'}</span>
+          <span class="status-tag ${projection.completed ? '' : 'pending'}">${projection.completed ? 'Meta completada' : 'En progreso'}</span>
+        </div>
+        <h3>${plan.name}</h3>
+        <div class="card-balances">
+          <div class="card-main-balance"><span>Monetizado</span><strong>${this.formatMoney(plan.saved)}</strong></div>
+          <div><span>Meta fija</span><strong>${this.formatMoney(plan.goal)}</strong></div>
+          <div><span>Faltante</span><strong>${this.formatMoney(plan.remaining)}</strong></div>
+        </div>
+        <div class="plan-progress">
+          <div class="credit-progress-label"><span>Progreso</span><strong>${progressLabel}%</strong></div>
+          <progress max="100" .value=${progress} aria-label=${`Progreso de ${plan.name}: ${progressLabel}%`}></progress>
+        </div>
+        ${projection.configured ? html`
+          <dl class="card-dates">
+            <div><dt>Aportación ${plan.periodUnit === 'semana' ? 'semanal' : 'mensual'}</dt><dd>${this.formatMoney(plan.contribution)}</dd></div>
+            <div><dt>${periodsLabel}</dt><dd>${projection.periodsRemaining}</dd></div>
+            <div><dt>Primera aportación</dt><dd>${this.formatDate(plan.firstContributionDate)}</dd></div>
+            ${!projection.completed ? html`
+              <div><dt>Próxima aportación</dt><dd>${projection.nextContributionDate ? this.formatDate(projection.nextContributionDate) : 'Fuera del rango de fechas'}</dd></div>
+              <div class="card-payment"><dt>Finalización estimada</dt><dd>${projection.estimatedCompletionDate ? this.formatDate(projection.estimatedCompletionDate) : 'Fuera del rango de fechas; revisa la aportación'}</dd></div>
+            ` : ''}
+          </dl>
+        ` : html`<p class="plan-note">Edita el plan para configurar una aportación semanal o mensual y su fecha inicial.</p>`}
+        ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
+        <div class="card-actions">
+          <button class="text-button" type="button" @click=${() => {
+            this.activeTab = 'plans'
+            this.editingPlan = plan
+            this.showPlanForm = true
+          }}>Editar plan</button>
+          <button class="text-button delete-button" type="button" @click=${() => this.handleDeletePlan(plan)}>Eliminar</button>
+        </div>
+      </article>
     `
   }
 

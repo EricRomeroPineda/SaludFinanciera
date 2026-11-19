@@ -1,5 +1,6 @@
 import { pool } from '../../server/db.js'
 import { lockSubscriptions, syncMonetized } from '../suscripciones/service.js'
+import { lockPlans, syncPlanSavings } from './modules.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -161,23 +162,6 @@ async function adjustBalance(connection, userId, accountId, amount, direction) {
   }
 }
 
-async function adjustPlanSavings(connection, userId, planId, amount, direction) {
-  if (!planId) return
-  const operator = direction === 'add' ? '+' : '-'
-  const condition = direction === 'subtract' ? ' AND monetizado >= ?' : ''
-  const params = direction === 'subtract'
-    ? [amount, planId, userId, amount]
-    : [amount, planId, userId]
-  const [result] = await connection.execute(
-    `UPDATE plan_futuro SET monetizado = monetizado ${operator} ?
-     WHERE id = ? AND id_usuario = ?${condition}`,
-    params,
-  )
-  if (result.affectedRows !== 1) {
-    throw invalid('No se pudo ajustar el ahorro acumulado del plan.', 409)
-  }
-}
-
 async function reverseMovement(connection, userId, oldMovement) {
   const amount = String(oldMovement.monto)
   if (oldMovement.id_cuenta_origen) {
@@ -186,7 +170,6 @@ async function reverseMovement(connection, userId, oldMovement) {
   if (oldMovement.id_cuenta_destino) {
     await adjustBalance(connection, userId, oldMovement.id_cuenta_destino, amount, 'subtract')
   }
-  await adjustPlanSavings(connection, userId, oldMovement.id_plan_futuro, amount, 'subtract')
 }
 
 async function applyMovement(connection, userId, movement) {
@@ -198,7 +181,6 @@ async function applyMovement(connection, userId, movement) {
   if (movement.destinationId) {
     await adjustBalance(connection, userId, movement.destinationId, movement.amount, 'add')
   }
-  await adjustPlanSavings(connection, userId, movement.planId, movement.amount, 'add')
 }
 
 function parseMovement(input) {
@@ -221,6 +203,7 @@ export async function saveMovement(userId, input, movementId = null) {
   try {
     await connection.beginTransaction()
     let oldSubscriptionId = null
+    let oldPlanId = null
 
     if (movementId) {
       const [oldRows] = await connection.execute(
@@ -229,10 +212,13 @@ export async function saveMovement(userId, input, movementId = null) {
       )
       if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
       oldSubscriptionId = oldRows[0].id_suscripcion
+      oldPlanId = oldRows[0].id_plan_futuro
       await lockSubscriptions(connection, userId, [oldSubscriptionId, movement.subscriptionId])
+      await lockPlans(connection, userId, [oldPlanId, movement.planId])
       await reverseMovement(connection, userId, oldRows[0])
     } else {
       await lockSubscriptions(connection, userId, [movement.subscriptionId])
+      await lockPlans(connection, userId, [movement.planId])
     }
 
     await applyMovement(connection, userId, movement)
@@ -279,6 +265,7 @@ export async function saveMovement(userId, input, movementId = null) {
     }
 
     await syncMonetized(connection, userId, [oldSubscriptionId, movement.subscriptionId])
+    await syncPlanSavings(connection, userId, [oldPlanId, movement.planId])
     await connection.commit()
     return { ok: true, id }
   } catch (error) {
@@ -301,12 +288,14 @@ export async function deleteMovement(userId, movementId) {
     if (!rows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
 
     await lockSubscriptions(connection, userId, [rows[0].id_suscripcion])
+    await lockPlans(connection, userId, [rows[0].id_plan_futuro])
     await reverseMovement(connection, userId, rows[0])
     await connection.execute(
       'DELETE FROM movimiento WHERE id = ? AND id_usuario = ?',
       [movementId, userId],
     )
     await syncMonetized(connection, userId, [rows[0].id_suscripcion])
+    await syncPlanSavings(connection, userId, [rows[0].id_plan_futuro])
     await connection.commit()
     return { ok: true, id: movementId }
   } catch (error) {

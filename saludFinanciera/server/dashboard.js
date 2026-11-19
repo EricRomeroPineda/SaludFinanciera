@@ -1,6 +1,7 @@
 import { getSubscriptions } from '../suscripciones/service.js'
 import { pool } from '../../server/db.js'
 import { isCreditAccount, isDebitAccount } from '../account-types.js'
+import { getPlans } from './modules.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -31,15 +32,7 @@ export async function getDashboardData(userId) {
 
   const subscriptions = await getSubscriptions(userId)
 
-  const [plans] = await pool.execute(
-    `SELECT id, nombre AS name, meta AS goal, monetizado AS saved,
-            faltante AS remaining, mostrar AS visible,
-            unidad_periodo AS periodUnit, periodos_faltantes AS periodsRemaining
-     FROM plan_futuro
-     WHERE id_usuario = ?
-     ORDER BY nombre, id`,
-    [userId],
-  )
+  const plans = await getPlans(userId)
 
   const [categories] = await pool.execute(
     `SELECT id, nombre AS name, tipo AS type
