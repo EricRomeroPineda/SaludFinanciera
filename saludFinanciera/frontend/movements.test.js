@@ -34,7 +34,7 @@ const calendarState = (changes = {}) => ({
   ...methods(calendar), month: '2026-11', selectedDay: '2026-11-18',
   data: { days: [{ day: '2026-11-18', count: 1, income: 0, expenses: 100 }], movements: [movement],
     categories: [], events: [{ kind: 'plan', date: '2026-11-18', label: 'Viaje', planId: 8, amount: 100 }] },
-  error: '', loading: false, requestVersion: 0, ...changes,
+  error: '', loading: false, requestVersion: 0, scope: 'all', ...changes,
 })
 function text(value) {
   if (Array.isArray(value)) return value.map(text).join('')
@@ -68,7 +68,7 @@ test('calendar shows a colored legend, real daily counts, scheduled items and a 
 test('monthly table retains more than 250 movements and empty/error/loading states are distinct', () => {
   const ctx = calendarState()
   ctx.data.movements = Array.from({ length: 301 }, (_, index) => ({ ...movement, id: index + 1 }))
-  assert.equal((text(ctx.renderMonthlyTable('noviembre')).match(/<td>2026-11-18<\/td>/g) || []).length, 301)
+  assert.equal((text(ctx.renderMonthlyTable('noviembre')).match(/Ver movimientos del 2026-11-18/g) || []).length, 301)
   assert.match(text(calendarState({ data: { movements: [] } }).renderMonthlyTable('noviembre')), /No hay movimientos registrados/)
   const error = text(calendarState({ error: 'Falló la consulta' }).render())
   assert.match(error, /Falló la consulta/)
@@ -101,7 +101,7 @@ test('month navigation changes both calendar and monthly query and clamps the se
   const ctx = calendarState({ month: '2026-02', selectedDay: '2026-01-31' })
   await ctx.loadMonth()
   assert.equal(ctx.selectedDay, '2026-02-28')
-  assert.equal(calls[0], '/api/calendar?month=2026-02')
+  assert.equal(calls[0], '/api/calendar?month=2026-02&scope=all')
   let reloaded = 0
   ctx.loadMonth = () => { reloaded++ }
   ctx.changeMonth(-1)
@@ -139,6 +139,30 @@ test('calendar errors do not look like successfully loaded empty months', async 
   assert.equal(ctx.error, 'No disponible')
   assert.equal(ctx.data, null)
   assert.equal(ctx.loading, false)
+})
+
+test('register defaults to all records and allows annual/monthly views explicitly', () => {
+  const ctx = calendarState()
+  const markup = text(ctx.renderMonthlyTable('noviembre'))
+  assert.match(markup, /Registro general · Todos los registros/)
+  assert.match(markup, /Año seleccionado/)
+  assert.match(markup, /Mes seleccionado/)
+  ctx.scope = 'year'
+  assert.match(text(ctx.renderMonthlyTable('noviembre')), /Registro general · Año 2026/)
+  ctx.scope = 'month'
+  assert.match(text(ctx.renderMonthlyTable('noviembre')), /Registro general · noviembre/)
+})
+
+test('selecting a record date navigates to its saved day/month/year and year selection reloads', () => {
+  let reloaded = 0
+  const ctx = calendarState({ loadMonth: () => { reloaded++ } })
+  ctx.showMovementDate('2025-03-16')
+  assert.equal(ctx.selectedDay, '2025-03-16')
+  assert.equal(ctx.month, '2025-03')
+  assert.equal(reloaded, 1)
+  ctx.selectYear({ currentTarget: { value: '2024', setCustomValidity: () => {} } })
+  assert.equal(ctx.month, '2024-03')
+  assert.equal(reloaded, 2)
 })
 
 for (const kind of ['plan', 'subscription', 'card']) {

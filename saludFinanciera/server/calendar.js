@@ -9,7 +9,8 @@ function invalid(message) {
   return error
 }
 
-export async function getCalendarData(userId, month) {
+export async function getCalendarData(userId, month, scope = 'month') {
+  if (!['all', 'year', 'month'].includes(scope)) throw invalid('Selecciona todos los registros, año o mes.')
   if (!/^\d{4}-\d{2}$/.test(month)) {
     throw invalid('El mes debe tener formato AAAA-MM.')
   }
@@ -21,6 +22,9 @@ export async function getCalendarData(userId, month) {
   const start = `${month}-01`
   const endDate = new Date(Date.UTC(year, monthNumber, 1))
   const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-01`
+  const movementCondition = scope === 'all' ? '' : ' AND m.fecha >= ? AND m.fecha < ?'
+  const movementParams = scope === 'all' ? [userId]
+    : scope === 'year' ? [userId, `${year}-01-01`, `${year + 1}-01-01`] : [userId, start, end]
   const [days] = await pool.execute(
     `SELECT DATE_FORMAT(m.fecha, '%Y-%m-%d') AS day,
             COUNT(*) AS count,
@@ -70,9 +74,9 @@ export async function getCalendarData(userId, month) {
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
        ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
-     WHERE m.id_usuario = ? AND m.fecha >= ? AND m.fecha < ?
+     WHERE m.id_usuario = ?${movementCondition}
      ORDER BY m.fecha DESC, m.id DESC`,
-    [userId, start, end],
+    movementParams,
   )
 
   const [accounts] = await pool.execute(
@@ -87,6 +91,7 @@ export async function getCalendarData(userId, month) {
 
   return {
     month,
+    scope,
     events: calendarEvents(month, { accounts, subscriptions, plans }),
     days: days.map((item) => ({
       ...item,

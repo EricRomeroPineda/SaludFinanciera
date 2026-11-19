@@ -23,6 +23,7 @@ class FinancialCalendar extends LitElement {
     error: { state: true },
     loading: { state: true },
     revision: { attribute: false },
+    scope: { state: true },
   }
 
   constructor() {
@@ -34,6 +35,7 @@ class FinancialCalendar extends LitElement {
     this.error = ''
     this.loading = true
     this.requestVersion = 0
+    this.scope = 'all'
   }
 
   updated(changed) {
@@ -50,7 +52,7 @@ class FinancialCalendar extends LitElement {
     this.error = ''
     this.data = null
     try {
-      const data = await apiRequest(`/api/calendar?month=${encodeURIComponent(month)}`)
+      const data = await apiRequest(`/api/calendar?month=${encodeURIComponent(month)}&scope=${this.scope}`)
       if (version !== this.requestVersion) return
       this.data = data
       const selectedDayNumber = Number(this.selectedDay.slice(-2))
@@ -76,6 +78,27 @@ class FinancialCalendar extends LitElement {
     this.loadMonth()
   }
 
+  selectYear(event) {
+    const input = event.currentTarget
+    const year = Number(input.value)
+    if (!Number.isInteger(year) || year < 1000 || year > 9998) {
+      input.setCustomValidity('El año debe estar entre 1000 y 9998.')
+      input.reportValidity()
+      return
+    }
+    input.setCustomValidity('')
+    this.month = `${year}-${this.month.slice(5)}`
+    this.loadMonth()
+  }
+
+  showMovementDate(date) {
+    this.selectedDay = date
+    if (this.month !== date.slice(0, 7)) {
+      this.month = date.slice(0, 7)
+      this.loadMonth()
+    }
+  }
+
   formatMoney(value) {
     return currency.format(Number(value) || 0)
   }
@@ -92,19 +115,30 @@ class FinancialCalendar extends LitElement {
 
   renderMonthlyTable(monthTitle) {
     const items = this.data?.movements || []
+    const period = this.scope === 'all' ? 'Todos los registros'
+      : this.scope === 'year' ? `Año ${this.month.slice(0, 4)}` : monthTitle
     return html`
       <section class="calendar-card monthly-register">
-        <h2>Registro general · ${monthTitle}</h2>
-        <p class="day-total">${this.loading || this.error ? 'Consulta del mes pendiente' : `${items.length} movimientos registrados en el mes`}</p>
-        ${this.loading ? html`<p class="calendar-loading" role="status">Cargando registro mensual…</p>`
-          : this.error ? html`<p class="calendar-empty">No se pudo consultar el registro mensual.</p>`
+        <h2>Registro general · ${period}</h2>
+        <label class="register-scope">Mostrar
+          <select aria-label="Periodo del registro general" .value=${this.scope}
+            @change=${(event) => { this.scope = event.currentTarget.value; this.loadMonth() }}>
+            <option value="all" ?selected=${this.scope === 'all'}>Todos los registros</option>
+            <option value="year" ?selected=${this.scope === 'year'}>Año seleccionado</option>
+            <option value="month" ?selected=${this.scope === 'month'}>Mes seleccionado</option>
+          </select>
+        </label>
+        <p class="day-total">${this.loading || this.error ? 'Consulta pendiente' : `${items.length} movimientos registrados`}</p>
+        ${this.loading ? html`<p class="calendar-loading" role="status">Cargando registros…</p>`
+          : this.error ? html`<p class="calendar-empty">No se pudo consultar el registro general.</p>`
             : items.length ? html`
-              <div class="monthly-table-scroll" tabindex="0" role="region" aria-label="Registro de movimientos del mes">
+              <div class="monthly-table-scroll" tabindex="0" role="region" aria-label="Registro general de movimientos">
                 <table>
                   <thead><tr><th>Fecha</th><th>Operación</th><th>Origen</th><th>Destino</th><th>Categoría</th><th>Plan</th><th>Suscripción</th><th>Monto</th><th>Acciones</th></tr></thead>
                   <tbody>${items.map((item) => html`
                     <tr>
-                      <td>${item.date}</td>
+                      <td><button class="calendar-action" type="button" aria-label=${`Ver movimientos del ${item.date}`}
+                        @click=${() => this.showMovementDate(item.date)}>${item.date}</button></td>
                       <td>${item.originAccountId && item.destinationAccountId ? 'Transferencia' : item.originAccountId ? 'Gasto' : 'Ingreso'}</td>
                       <td>${item.originAccount || '—'}</td><td>${item.destinationAccount || '—'}</td>
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
@@ -117,7 +151,7 @@ class FinancialCalendar extends LitElement {
                   `)}</tbody>
                 </table>
               </div>
-            ` : html`<p class="calendar-empty">No hay movimientos registrados en este mes.</p>`}
+            ` : html`<p class="calendar-empty">No hay movimientos registrados${this.scope === 'all' ? '' : ' en el periodo seleccionado'}.</p>`}
       </section>
     `
   }
@@ -142,6 +176,11 @@ class FinancialCalendar extends LitElement {
             <button class="calendar-nav" type="button" aria-label="Mes anterior" @click=${() => this.changeMonth(-1)}>‹</button>
             <h2>${monthTitle}</h2>
             <button class="calendar-nav" type="button" aria-label="Mes siguiente" @click=${() => this.changeMonth(1)}>›</button>
+          </div>
+          <div class="calendar-period-controls">
+            <label>Año<input aria-label="Año del calendario" type="number" min="1000" max="9998" step="1"
+              .value=${String(year)} @change=${this.selectYear} /></label>
+            <button class="calendar-action" type="button" @click=${this.loadMonth}>Actualizar registros</button>
           </div>
           <div class="calendar-legend" aria-label="Leyenda de colores">
             <h3>Marcadores previstos</h3>

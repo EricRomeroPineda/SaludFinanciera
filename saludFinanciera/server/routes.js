@@ -28,7 +28,7 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
     const userId = await getUserId(request, response)
     if (!userId) return true
     const month = url.searchParams.get('month') || ''
-    sendJson(response, 200, await getCalendarData(userId, month))
+    sendJson(response, 200, await getCalendarData(userId, month, url.searchParams.get('scope') || 'month'))
     return true
   }
 
