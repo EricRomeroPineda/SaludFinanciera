@@ -1,0 +1,109 @@
+import assert from 'node:assert/strict'
+import { registerHooks } from 'node:module'
+import { test } from 'node:test'
+
+registerHooks({
+  load(url, context, next) {
+    if (url.endsWith('.css?inline')) return { format: 'module', source: 'export default ""', shortCircuit: true }
+    if (url.endsWith('.svg')) return { format: 'module', source: 'export default ""', shortCircuit: true }
+    return next(url, context)
+  },
+})
+const components = new Map()
+globalThis.customElements = { define: (name, component) => components.set(name, component) }
+await import('../../src/inicio/inicio.js')
+const finance = components.get('salud-financiera').prototype
+const family = components.get('family-settings').prototype
+
+function text(value) {
+  if (Array.isArray(value)) return value.map(text).join('')
+  if (value?.strings) return value.strings.reduce((output, part, index) => output + part + text(value.values[index]), '')
+  return value == null || typeof value === 'function' ? '' : String(value)
+}
+
+test('profile includes an independent family card with explicit acceptance and no automatic joining', () => {
+  const inicio = components.get('inicio-app').prototype
+  const profile = text(inicio.renderDashboard.call({
+    activeTab: 'profile', renderHeader: () => '', renderProfile: () => 'profile',
+  }))
+  assert.match(profile, /<family-settings>/)
+  const markup = text(family.render.call({ family: null, ready: true }))
+  assert.match(markup, /Nombre de la familia/)
+  assert.match(markup, /Código de invitación/)
+  assert.match(markup, /type="checkbox" required/)
+  assert.match(markup, /Acepto compartir/)
+})
+
+test('creating and accepting families use the authenticated endpoints and expose errors', async (t) => {
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    requests.push({ path, options })
+    if (options?.method === 'POST') return new Response(JSON.stringify({ ok: true }))
+    return new Response(JSON.stringify({ family: { id: 4, name: 'Luna', members: [] } }))
+  })
+  const state = { load: family.load }
+  await family.perform.call(state, '/join', 'POST', { code: 'a'.repeat(43) }, 'Aceptada')
+  assert.equal(requests[0].path, '/api/family/join')
+  assert.deepEqual(JSON.parse(requests[0].options.body), { code: 'a'.repeat(43) })
+  assert.equal(state.family.id, 4)
+  assert.equal(state.busy, false)
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: 'Código vencido' }), { status: 409 }))
+  await family.perform.call(state, '/join', 'POST', { code: 'a'.repeat(43) }, 'Aceptada')
+  assert.equal(state.error, 'Código vencido')
+  assert.equal(state.notice, '')
+})
+
+test('changing between individual and family clears selections, forms and previously loaded data', () => {
+  let loads = 0
+  const state = {
+    dashboard: {}, selectedCard: {}, selectedPlan: {}, editingPlan: {},
+    showMovementForm: true, showPlanForm: true, showAccountForm: true,
+    loadDashboard() { loads++ },
+  }
+  finance.changeView.call(state, { currentTarget: { value: 'family' } })
+  assert.equal(state.familyView, true)
+  assert.equal(state.dashboard, null)
+  assert.equal(state.selectedCard, null)
+  assert.equal(state.selectedPlan, null)
+  assert.equal(state.showMovementForm, false)
+  finance.changeView.call(state, { currentTarget: { value: 'individual' } })
+  assert.equal(state.familyView, false)
+  assert.equal(loads, 2)
+})
+
+test('a late family response cannot replace the subsequently selected individual dashboard', async (t) => {
+  let resolveFamily
+  t.mock.method(globalThis, 'fetch', (path) => path.endsWith('view=family')
+    ? new Promise((resolve) => { resolveFamily = resolve })
+    : Promise.resolve(new Response(JSON.stringify({ accounts: [{ name: 'Solo yo' }] }))))
+  const state = { familyView: true }
+  const pending = finance.refreshDashboard.call(state)
+  state.familyView = false
+  await finance.refreshDashboard.call(state)
+  resolveFamily(new Response(JSON.stringify({ accounts: [{ name: 'Familia' }] })))
+  await pending
+  assert.equal(state.dashboard.accounts[0].name, 'Solo yo')
+})
+
+test('calendar family mode uses authorized family reads and suppresses all movement writes', async (t) => {
+  const calendar = components.get('financial-calendar').prototype
+  let path
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    path = url
+    return new Response(JSON.stringify({ movements: [] }))
+  })
+  const state = {
+    familyView: true, requestVersion: 0, month: '2026-11', scope: 'all', selectedDay: '2026-11-18',
+    lastDay: () => '2026-11-30',
+    dispatchEvent: () => assert.fail('Family view must not dispatch writes'),
+  }
+  await calendar.loadMonth.call(state)
+  assert.match(path, /&view=family$/)
+  calendar.requestMovement.call(state)
+  calendar.movementAction.call(state, 'delete-movement', { id: 7 })
+  const markup = text(calendar.renderMonthlyTable.call({
+    ...state, data: { movements: [{ id: 7, date: '2026-11-18' }] }, formatMoney: () => '$10',
+  }, 'Noviembre'))
+  assert.doesNotMatch(markup, />Editar<|>Eliminar</)
+  assert.match(markup, /Solo consulta/)
+})
