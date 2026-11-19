@@ -197,8 +197,7 @@ class SaludFinanciera extends LitElement {
           name: formData.get('name'),
           goal: formData.get('goal'),
           unitPeriod: formData.get('unitPeriod') || null,
-          contribution: formData.get('contribution'),
-          firstContributionDate: formData.get('firstContributionDate'),
+          periodsRemaining: formData.get('periodsRemaining'),
           visible: formData.has('visible'),
         }),
       })
@@ -631,15 +630,15 @@ class SaludFinanciera extends LitElement {
             <label>Monto objetivo<input name="goal" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.goal || ''} required /></label>
             <label>Unidad de periodo
               <select name="unitPeriod" required .value=${this.editingPlan?.periodUnit || ''}>
-                <option value="" ?selected=${!['semana', 'mes'].includes(this.editingPlan?.periodUnit)}>Selecciona la frecuencia</option>
+                <option value="" ?selected=${!['semana', 'mes', 'anio'].includes(this.editingPlan?.periodUnit)}>Selecciona la frecuencia</option>
                 <option value="semana" ?selected=${this.editingPlan?.periodUnit === 'semana'}>Semana</option>
                 <option value="mes" ?selected=${this.editingPlan?.periodUnit === 'mes'}>Mes</option>
+                <option value="anio" ?selected=${this.editingPlan?.periodUnit === 'anio'}>Año</option>
               </select>
             </label>
-            <label>Aportación por semana o mes<input name="contribution" type="number" min="0.01" step="0.01" .value=${this.editingPlan?.contribution ?? ''} required /></label>
-            <label>Fecha de la primera aportación<input name="firstContributionDate" type="date" min="1000-01-01" max="9999-12-31" .value=${this.editingPlan?.firstContributionDate || ''} required /></label>
+            <label>Periodos faltantes (manual)<input name="periodsRemaining" type="number" min="0" max="4294967295" step="1" .value=${this.editingPlan?.periodsRemaining ?? ''} required /></label>
             <label class="checkbox-label"><input name="visible" type="checkbox" ?checked=${this.editingPlan ? Boolean(Number(this.editingPlan.visible)) : true} /> Mostrar en el panorama</label>
-            <p class="form-hint">Monetizado se calcula únicamente con los movimientos vinculados al plan. La meta no cambia automáticamente. Los periodos faltantes y la fecha estimada se recalculan con el saldo pendiente; si vence un periodo sin cubrir la aportación, la fecha se recorre.</p>
+            <p class="form-hint">Monetizado se calcula únicamente con los movimientos vinculados al plan; la meta no cambia automáticamente. Actualiza manualmente los periodos faltantes. La fecha estimada suma esos periodos a la fecha de hoy: no es un vencimiento guardado ni detecta impagos.</p>
             <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.submitting ? 'Guardando…' : 'Guardar plan'}</button></div>
           </form>
         ` : ''}
@@ -655,11 +654,12 @@ class SaludFinanciera extends LitElement {
     const progress = Number(plan.goal) > 0
       ? Math.min(100, Math.max(0, Number(plan.saved) / Number(plan.goal) * 100)) : 0
     const progressLabel = Math.floor(progress * 10) / 10
-    const periodsLabel = plan.periodUnit === 'semana' ? 'Semanas faltantes' : 'Meses faltantes'
+    const periodsLabel = plan.periodUnit === 'semana' ? 'Semanas faltantes'
+      : plan.periodUnit === 'anio' ? 'Años faltantes' : 'Meses faltantes'
     return html`
       <article class="plan-card">
         <div class="credit-card-heading">
-          <span>${plan.periodUnit === 'semana' ? 'Plan semanal' : plan.periodUnit === 'mes' ? 'Plan mensual' : 'Plan sin configurar'}</span>
+          <span>${plan.periodUnit === 'semana' ? 'Plan semanal' : plan.periodUnit === 'mes' ? 'Plan mensual' : plan.periodUnit === 'anio' ? 'Plan anual' : 'Plan sin configurar'}</span>
           <span class="status-tag ${projection.completed ? '' : 'pending'}">${projection.completed ? 'Meta completada' : 'En progreso'}</span>
         </div>
         <h3>${plan.name}</h3>
@@ -674,15 +674,13 @@ class SaludFinanciera extends LitElement {
         </div>
         ${projection.configured ? html`
           <dl class="card-dates">
-            <div><dt>Aportación ${plan.periodUnit === 'semana' ? 'semanal' : 'mensual'}</dt><dd>${this.formatMoney(plan.contribution)}</dd></div>
-            <div><dt>${periodsLabel}</dt><dd>${projection.periodsRemaining}</dd></div>
-            <div><dt>Primera aportación</dt><dd>${this.formatDate(plan.firstContributionDate)}</dd></div>
+            <div><dt>${periodsLabel} (manual)</dt><dd>${plan.periodsRemaining}</dd></div>
             ${!projection.completed ? html`
-              <div><dt>Próxima aportación</dt><dd>${projection.nextContributionDate ? this.formatDate(projection.nextContributionDate) : 'Fuera del rango de fechas'}</dd></div>
-              <div class="card-payment"><dt>Finalización estimada</dt><dd>${projection.estimatedCompletionDate ? this.formatDate(projection.estimatedCompletionDate) : 'Fuera del rango de fechas; revisa la aportación'}</dd></div>
+              <div class="card-payment"><dt>Finalización estimada desde hoy</dt><dd>${projection.estimatedCompletionDate ? this.formatDate(projection.estimatedCompletionDate) : 'Fuera del rango de fechas; revisa los periodos'}</dd></div>
             ` : ''}
           </dl>
-        ` : html`<p class="plan-note">Edita el plan para configurar una aportación semanal o mensual y su fecha inicial.</p>`}
+        ` : html`<p class="plan-note">Edita el plan para configurar la unidad de periodo y los periodos faltantes.</p>`}
+        ${projection.configured && !projection.completed ? html`<p class="plan-note">Estimación desde hoy; los periodos se actualizan manualmente, no por impagos ni aportaciones.</p>` : ''}
         ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
         <div class="card-actions">
           <button class="text-button" type="button" @click=${() => {

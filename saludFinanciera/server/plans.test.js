@@ -5,36 +5,46 @@ import { createPlan, getPlans, lockPlans, syncPlanSavings, updatePlan } from './
 import { deleteMovement, saveMovement } from './movements.js'
 
 const input = {
-  name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00',
-  firstContributionDate: '2026-11-18', visible: true,
+  name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', periodsRemaining: '3', visible: true,
 }
 
 test('creating and editing plans persist the schedule but never accept a manual accumulated amount', async (t) => {
   const calls = []
   t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.doesNotMatch(sql, /aportacion_periodo|fecha_primera_aportacion/)
     calls.push({ sql, params })
     return [{ insertId: 8, affectedRows: 1 }]
   })
   assert.deepEqual(await createPlan(7, { ...input, saved: '999', monetizado: '999' }), { id: 8 })
   assert.match(calls[0].sql, /monetizado/)
   assert.match(calls[0].sql, /VALUES \(\?, \?, \?, 0,/)
-  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', '100.00', '2026-11-18'])
+  assert.deepEqual(calls[0].params, [7, 'Vacaciones', '300.00', true, 'mes', 3])
   await updatePlan(7, 8, { ...input, saved: '999', monetizado: '999' })
   assert.doesNotMatch(calls[1].sql, /monetizado\s*=/)
-  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', '100.00', '2026-11-18', 8, 7])
+  assert.deepEqual(calls[1].params, ['Vacaciones', '300.00', true, 'mes', 3, 8, 7])
 })
 
-test('plan API rejects incomplete schedules, invalid amounts and impossible dates before SQL', async (t) => {
+test('plan API rejects invalid amounts, units and manual period counts before SQL', async (t) => {
   const execute = t.mock.method(pool, 'execute', () => assert.fail('Invalid input must not reach SQL'))
   for (const changes of [
-    { goal: 0 }, { contribution: '' }, { contribution: 0 }, { contribution: '-10' },
-    { contribution: '1.001' }, { unitPeriod: 'anio' }, { unitPeriod: null },
-    { firstContributionDate: '2026-02-29' }, { firstContributionDate: '' },
+    { goal: 0 }, { periodsRemaining: '' }, { periodsRemaining: null }, { periodsRemaining: undefined },
+    { periodsRemaining: -1 }, { periodsRemaining: 1.5 }, { periodsRemaining: 4294967296 },
+    { unitPeriod: 'dia' }, { unitPeriod: null },
   ]) {
     await assert.rejects(createPlan(7, { ...input, ...changes }), { statusCode: 400 })
     await assert.rejects(updatePlan(7, 8, { ...input, ...changes }), { statusCode: 400 })
   }
   assert.equal(execute.mock.callCount(), 0)
+})
+
+test('zero periods, unsigned integer limit and annual records are supported by the existing schema', async (t) => {
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.ok([0, 4294967295].includes(params.at(-1)))
+    assert.ok(params.includes('anio'))
+    return [{ insertId: 8 }]
+  })
+  await createPlan(7, { ...input, unitPeriod: 'anio', periodsRemaining: 0 })
+  await createPlan(7, { ...input, unitPeriod: 'anio', periodsRemaining: 4294967295 })
 })
 
 test('editing a nonexistent or foreign plan returns 404', async (t) => {
@@ -45,20 +55,21 @@ test('editing a nonexistent or foreign plan returns 404', async (t) => {
 test('plan reads aggregate all movements for the owner and calculate the remaining amount and schedule', async (t) => {
   t.mock.method(pool, 'execute', async (sql, params) => {
     assert.match(sql, /SUM\(monto\) AS saved/)
-    assert.match(sql, /MAX\(fecha\) AS lastContributionDate/)
+    assert.match(sql, /p\.periodos_faltantes AS periodsRemaining/)
+    assert.doesNotMatch(sql, /aportacion_periodo|fecha_primera_aportacion/)
     assert.match(sql, /p\.meta - COALESCE\(t\.saved, 0\) AS remaining/)
     assert.match(sql, /t\.id_usuario = p\.id_usuario/)
     assert.doesNotMatch(sql, /LIMIT|p\.monetizado AS saved/)
     assert.deepEqual(params, [7, 7])
     return [[{
       id: 8, goal: '300.00', saved: '100.00', remaining: '200.00',
-      contribution: '100.00', periodUnit: 'mes', firstContributionDate: '9998-11-18',
+      periodUnit: 'mes', periodsRemaining: 3,
     }]]
   })
   const [plan] = await getPlans(7)
   assert.equal(plan.saved, '100.00')
   assert.equal(plan.remaining, '200.00')
-  assert.equal(plan.periodsRemaining, 2)
+  assert.equal(plan.periodsRemaining, 3)
 })
 
 test('plan locks and synchronization use unique sorted IDs and user-scoped sums', async () => {

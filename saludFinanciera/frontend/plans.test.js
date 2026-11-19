@@ -16,8 +16,7 @@ await import('./salud-financiera.js')
 const handlers = components.get('salud-financiera').prototype
 const plan = {
   id: 8, name: 'Vacaciones', goal: '300.00', saved: '100.00', remaining: '200.00',
-  periodUnit: 'mes', contribution: '100.00', firstContributionDate: '2026-11-18',
-  lastContributionDate: '2026-11-18', visible: 1,
+  periodUnit: 'mes', periodsRemaining: 3, visible: 1,
 }
 const state = (changes = {}) => ({
   ...Object.fromEntries(Object.getOwnPropertyNames(handlers)
@@ -52,25 +51,25 @@ test('weekly cards, overfunding and legacy plans have explicit states', () => {
   assert.match(completed, /Meta completada/)
   assert.match(completed, /<progress max="100" .value=100/)
   assert.doesNotMatch(completed, /Finalización estimada/)
-  const legacy = text(ctx.renderPlanCard({ ...plan, contribution: null, firstContributionDate: null }))
+  const legacy = text(ctx.renderPlanCard({ ...plan, periodsRemaining: null }))
   assert.match(legacy, /Edita el plan para configurar/)
   assert.doesNotMatch(legacy, /Invalid Date|NaN/)
 })
 
-test('plan forms only capture the fixed goal and schedule, not accumulated amounts or periods', () => {
+test('plan forms capture manual periods using the existing schema, not accumulated amounts or new columns', () => {
   const markup = text(handlers.renderPlans.call(state({ showPlanForm: true, editingPlan: plan })))
-  for (const name of ['name', 'goal', 'unitPeriod', 'contribution', 'firstContributionDate', 'visible']) {
+  for (const name of ['name', 'goal', 'unitPeriod', 'periodsRemaining', 'visible']) {
     assert.ok(markup.includes(`name="${name}"`))
   }
-  assert.doesNotMatch(markup, /name="(?:saved|monetized|monetizado|remaining|periodsRemaining)"/)
-  assert.doesNotMatch(markup, /value="anio"/)
+  assert.doesNotMatch(markup, /name="(?:saved|monetized|monetizado|remaining|contribution|firstContributionDate)"/)
+  assert.match(markup, /no es un vencimiento guardado ni detecta impagos/)
 })
 
 for (const editing of [false, true]) {
   test(`plan ${editing ? 'edit' : 'create'} sends the schedule and reloads the calculated data`, async (t) => {
     const form = new Map([
-      ['name', 'Vacaciones'], ['goal', '300.00'], ['unitPeriod', 'mes'], ['contribution', '100.00'],
-      ['firstContributionDate', '2026-11-18'], ['visible', 'on'],
+      ['name', 'Vacaciones'], ['goal', '300.00'], ['unitPeriod', 'mes'],
+      ['periodsRemaining', '3'], ['visible', 'on'],
     ])
     t.mock.method(globalThis, 'FormData', function () { return form })
     let request
@@ -87,8 +86,7 @@ for (const editing of [false, true]) {
     assert.equal(request.path, editing ? '/api/plans/8' : '/api/plans')
     assert.equal(request.options.method, editing ? 'PUT' : 'POST')
     assert.deepEqual(JSON.parse(request.options.body), {
-      name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', contribution: '100.00',
-      firstContributionDate: '2026-11-18', visible: true,
+      name: 'Vacaciones', goal: '300.00', unitPeriod: 'mes', periodsRemaining: '3', visible: true,
     })
     assert.equal(ctx.error, '')
     assert.equal(ctx.showPlanForm, false)
