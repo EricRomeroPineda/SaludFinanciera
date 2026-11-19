@@ -31,7 +31,10 @@ function text(value) {
     return value.strings.reduce((output, part, index) => output + part + text(value.values[index]), '')
   }
 
-  test('cash is selectable, editable and visible with only an available balance', () => {
+  return value == null || typeof value === 'function' ? '' : String(value)
+}
+
+test('cash is selectable, editable and visible with only an available balance', () => {
     const account = { id: 9, name: 'Cartera', type: 'Efectivo', available: '250.50' }
     const ctx = state({
       dashboard: { accounts: [account] }, formAvailable: '250.50', formLimit: '',
@@ -46,9 +49,7 @@ function text(value) {
     const card = text(ctx.renderBankCard(account))
     assert.match(card, /Saldo disponible/)
     assert.doesNotMatch(card, /Fecha de corte|Fecha límite|Registrar pago|Saldo utilizado|Límite máximo/)
-  })
-  return value == null || typeof value === 'function' ? '' : String(value)
-}
+})
 
 test('plan viewer renders cards, calculated progress and monthly dates rather than a table', () => {
   const markup = text(handlers.renderPlans.call(state()))
