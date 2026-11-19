@@ -15,6 +15,7 @@ import {
 } from './auth.js'
 import { handleFinanceRoute } from '../saludFinanciera/server/routes.js'
 import { handleFamilyRoute } from './family.js'
+import { serveStatic } from './static.js'
 
 const port = Number(process.env.API_PORT || 3001)
 const host = process.env.API_HOST || '127.0.0.1'
@@ -150,6 +151,9 @@ export const server = createServer(async (request, response) => {
     if (await handleFamilyRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson })) return
 
+    if (url.pathname !== '/api' && !url.pathname.startsWith('/api/')) {
+      if (await serveStatic(request, response, url.pathname)) return
+    }
     sendJson(response, 404, { error: 'Ruta no encontrada.' })
   } catch (error) {
     const statusCode = error.statusCode || 500

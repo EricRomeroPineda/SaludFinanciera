@@ -3,12 +3,13 @@
 ## Ejecutar en Windows junto a MySQL
 
 1. Instala Node.js y asegúrate de que MySQL esté iniciado y que exista la base `salud_financiera` con el esquema actual.
-2. En PowerShell, desde la raíz del proyecto, ejecuta `Copy-Item .env.example .env`.
+2. Conserva tu `.env` existente. Solo si no existe, en PowerShell, desde la raíz del proyecto, ejecuta `Copy-Item .env.example .env`.
 3. En `.env`, configura `DB_PASSWORD` con la contraseña local de MySQL. Para generar `SESSION_SECRET`, ejecuta `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` y copia el resultado. No compartas ni subas `.env`.
 4. Ejecuta `npm ci`.
 5. Si necesitas normalizar los temas existentes, ejecuta `server/migrations/001-user-profile.sql` desde MySQL Workbench u otro cliente MySQL. No agrega columnas ni modifica `foto_perfil VARCHAR(500)`. Haz un respaldo antes de aplicar la migración.
-6. En una terminal, ejecuta `npm run server`.
-7. En otra terminal, ejecuta `npm run dev`. Abre la dirección local que indique Vite.
+6. Ejecuta `npm run serve` y abre `http://127.0.0.1:3001` (o el puerto configurado en `.env`). Primero compila; solo si el build termina correctamente inicia Node sin modo watch. El mismo servidor entrega `dist/index.html`, sus archivos compilados y `/api`, sin necesidad de Vite en ejecución.
+
+Para desarrollo se conservan los dos comandos en terminales separadas: `npm run server` y `npm run dev`. Vite reenvía `/api` al backend local. El navegador usa rutas relativas del mismo origen en ambos modos. Los cambios al frontend requieren volver a ejecutar `npm run serve` para recompilar; no sobrescribas `.env` ni cambies la configuración de MySQL o `SESSION_SECRET` para usar este comando.
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
