@@ -51,6 +51,8 @@ export async function serveStatic(request, response, pathname, root = distDirect
       'Content-Length': body ? body.length : info.size,
       'Cache-Control': 'no-cache',
       'X-Content-Type-Options': 'nosniff',
+      ...(extname(realFile).toLowerCase() === '.html'
+        ? { 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups' } : {}),
     })
     response.end(body)
     return true

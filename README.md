@@ -13,6 +13,35 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Recordatorios en Google Calendar
+
+En **Movimiento**, junto a los marcadores del calendario, **Sincronizar con Google Calendar** abre una vista previa del **mes seleccionado**. Consulta nuevamente los datos de tu usuario antes de mostrar pagos de tarjetas, suscripciones, aportaciones y compromisos de deudas. No exporta los movimientos realizados, archivos de evidencia, contraseñas ni datos bancarios de conexión. Está disponible únicamente en vista Individual; cada usuario autoriza la cuenta Google de su elección.
+
+Selecciona los marcadores, revisa los nombres, fechas y montos, ajusta la hora (09:00 por defecto, zona horaria del navegador), marca el consentimiento y pulsa **Autorizar y enviar**. Se crean eventos privados de 15 minutos en el **calendario principal** de la cuenta que elijas, con avisos emergentes **un día antes y el mismo día** a esa hora. Activa los permisos y notificaciones de Google Calendar en el móvil/navegador; la aplicación no garantiza la entrega si Google o el dispositivo los bloquean. Los avisos ya vencidos no se envían retroactivamente. Los marcadores de días anteriores aparecen desmarcados; las referencias de suscripciones sin fecha exacta de inicio no se pueden enviar.
+
+### Configuración inicial gratuita para uso personal
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), crea o elige un proyecto y habilita **Google Calendar API** en **APIs y servicios → Biblioteca**. Este uso de Calendar API no requiere un proveedor de mensajería ni tiene un costo adicional por evento, pero está sujeto a las cuotas y políticas de Google.
+2. En **Google Auth Platform**, configura nombre de la aplicación, correo de soporte y audiencia. Para uso personal con cuentas Gmail, usa **Externo**, estado **Prueba**, y agrega los correos Google que usarás en **Usuarios de prueba**. Si Google muestra “access_denied”, comprueba primero esa lista. Publicarla para más usuarios puede requerir verificación de Google.
+3. En **Acceso a los datos**, agrega el alcance `https://www.googleapis.com/auth/calendar.events.owned`. Google permite con ese permiso administrar eventos de los calendarios que posees; esta implementación solo accede a los identificadores de eventos de Salud Financiera en tu calendario principal y verifica su marca antes de modificarlos. No lee tu agenda completa ni toca eventos ajenos a la integración.
+4. En **Clientes**, crea un cliente OAuth de tipo **Aplicación web**. En **Orígenes autorizados de JavaScript**, agrega `http://localhost` y `http://localhost:3001`. Para desarrollo agrega también `http://localhost:5173`, o el puerto real de Vite. El origen debe coincidir exactamente con el navegador (esquema, host y puerto), sin rutas. No hace falta configurar una URI de redirección: se usa una ventana emergente de Google Identity Services.
+5. Copia únicamente el **ID del cliente**, terminado en `.apps.googleusercontent.com`, y agrega a tu `.env` existente:
+
+   ```dotenv
+   GOOGLE_CALENDAR_CLIENT_ID=TU_ID.apps.googleusercontent.com
+   ```
+
+   El ID es público y se entrega al navegador. **No agregues el secreto del cliente**: no se utiliza en este flujo. No cambies MySQL, `SESSION_SECRET` ni `API_HOST`.
+6. Detén el servidor anterior y ejecuta `npm run serve`. Para esta integración abre **`http://localhost:3001`** (o el puerto configurado), aunque Node siga escuchando en `127.0.0.1`. Si antes usabas `127.0.0.1` en el navegador, inicia sesión de nuevo en `localhost`: las cookies no se comparten entre esos hosts. En desarrollo usa `http://localhost:5173` y el proxy existente. Permite ventanas emergentes y acceso a `accounts.google.com` y `www.googleapis.com`.
+
+No se requiere SQL, otra tabla, una API pública de MySQL, un servicio programado ni una PC encendida después del envío: Google conserva los eventos y maneja los avisos. La sincronización es manual y requiere internet y la aplicación abierta al enviar. El permiso de acceso se mantiene solo en memoria durante cada envío; no se guarda en MySQL, archivos, cookies ni almacenamiento del navegador. Se descarta al terminar. Puedes revocar el permiso en [las conexiones de tu cuenta Google](https://myaccount.google.com/connections).
+
+### Actualizaciones, reintentos y límites
+
+Los identificadores son deterministas por usuario, origen y periodo: reenviar el mismo marcador a la misma cuenta Google actualiza fecha, hora y monto, en lugar de duplicarlo. Los compromisos de deudas conservan su identidad si cambian de mes; las aportaciones, suscripciones y tarjetas se identifican por mes y ocurrencia. Cambiar el número de ocurrencias de una programación puede reasignar los recordatorios de ese mes. No cambies `SESSION_SECRET` para configurar Google: además de invalidar sesiones, cambia la identidad de sincronización de los usuarios y los eventos anteriores dejarían de reconocerse.
+
+Cada evento muestra su resultado. Si falla alguno, los pendientes quedan seleccionados para reintentar; si una respuesta se pierde tras crear el evento, repetir usa el mismo identificador. Un evento borrado en Google debe restaurarse de la papelera antes de reenviarlo. Los eventos desmarcados no se actualizan ni borran. **No hay eliminación automática**: al liquidar una deuda, cancelar una suscripción o reducir aportaciones, revisa y borra manualmente los avisos anteriores en Google. Tampoco se registran pagos ni se modifican saldos al sincronizar. Los cambios manuales de título, fecha, monto u hora en los eventos de la integración se sobrescriben al reenviarlos.
+
 ## Evidencia opcional en movimientos
 
 Antes de usar esta versión, respalda la base y ejecuta una sola vez `server/migrations/006-movement-evidence.sql` en la base configurada en `.env`; crea `movimiento_evidencia`, relacionada con `movimiento.id`. Ejecuta `npm ci` para instalar las dependencias actualizadas y reinicia el servidor (`npm run serve` recompila también el frontend). No hay cambios en las credenciales ni en la configuración de MySQL.

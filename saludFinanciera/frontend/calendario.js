@@ -2,6 +2,7 @@ import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import './movement-evidence.js'
+import './google-calendar-sync.js'
 import calendarStyles from './calendario.css?inline'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
@@ -213,6 +214,8 @@ class FinancialCalendar extends LitElement {
             `)}
             <small>El número de cada día cuenta solo movimientos registrados. Los puntos indican fechas programadas, no pagos realizados.</small>
           </div>
+          <google-calendar-sync .month=${this.month} .familyView=${this.familyView}
+            .revision=${this.revision} .disabled=${this.loading || Boolean(this.error)}></google-calendar-sync>
           ${this.error ? html`<p class="calendar-empty" role="alert">${this.error}</p>
             <button class="calendar-action" type="button" @click=${this.loadMonth}>Reintentar</button>` : ''}
           ${this.loading ? html`<p class="calendar-loading" role="status">Cargando calendario…</p>` : ''}

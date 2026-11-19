@@ -17,6 +17,7 @@ import { handleFinanceRoute } from '../saludFinanciera/server/routes.js'
 import { handleFamilyRoute } from './family.js'
 import { serveStatic } from './static.js'
 import { handleEvidenceRoute } from './evidence.js'
+import { handleGoogleCalendarRoute } from './google-calendar.js'
 
 const port = Number(process.env.API_PORT || 3001)
 const host = process.env.API_HOST || '127.0.0.1'
@@ -149,6 +150,7 @@ export const server = createServer(async (request, response) => {
       return
     }
 
+    if (await handleGoogleCalendarRoute(request, response, url, { getUserId, sendJson })) return
     if (await handleEvidenceRoute(request, response, url, { getUserId, sendJson })) return
     if (await handleFamilyRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson })) return

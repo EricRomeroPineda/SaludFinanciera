@@ -29,6 +29,9 @@ test('static serving returns correct GET/HEAD types and restricts reads to dist'
       assert.equal(response.status, 200)
       assert.ok(response.headers['Content-Type'].startsWith(mime))
       assert.equal(response.headers['X-Content-Type-Options'], 'nosniff')
+      if (pathname === '/') {
+        assert.equal(response.headers['Cross-Origin-Opener-Policy'], 'same-origin-allow-popups')
+      }
       if (method === 'GET') {
         length = response.body.length
         assert.ok(length > 0)
