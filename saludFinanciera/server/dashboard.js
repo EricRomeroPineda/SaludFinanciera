@@ -1,6 +1,6 @@
 import { getSubscriptions } from '../suscripciones/service.js'
 import { pool } from '../../server/db.js'
-import { isCreditAccount, isDebitAccount } from '../account-types.js'
+import { isCreditAccount } from '../account-types.js'
 import { getPlans } from './modules.js'
 
 function invalid(message, statusCode = 400) {
@@ -100,24 +100,23 @@ function accountFields(input) {
   const name = String(input.name || '').trim()
   const type = String(input.type || '').trim()
   if (!name || name.length > 100) throw invalid('El nombre de la cuenta es obligatorio.')
-  if (!['Tarjeta de crédito', 'Tarjeta de débito'].includes(type)) {
-    throw invalid('Selecciona Crédito o Débito como tipo de cuenta.')
+  if (!['Tarjeta de crédito', 'Tarjeta de débito', 'Efectivo'].includes(type)) {
+    throw invalid('Selecciona Crédito, Débito o Efectivo como tipo de cuenta.')
   }
 
   const credit = isCreditAccount(type)
-  const debit = isDebitAccount(type)
-  const total = debit ? null : decimalValue(input.total, 'El total')
+  const total = credit ? decimalValue(input.total, 'El total') : null
   const available = decimalValue(input.available, 'El saldo disponible')
   if (available == null) {
     throw invalid('Captura el saldo disponible actual; si no tienes disponible, introduce 0.')
   }
-  const paymentToAvoidInterest = debit ? null : decimalValue(
+  const paymentToAvoidInterest = !credit ? null : decimalValue(
     input.paymentToAvoidInterest,
     'El pago para evitar intereses',
   )
 
-  const statementDate = debit ? null : input.statementDate || null
-  const paymentDueDate = debit ? null : input.paymentDueDate || null
+  const statementDate = credit ? input.statementDate || null : null
+  const paymentDueDate = credit ? input.paymentDueDate || null : null
   if (credit) {
     if (total == null || !statementDate || !paymentDueDate || paymentToAvoidInterest == null) {
       throw invalid('El crédito requiere límite máximo, fecha de corte, fecha límite de pago y pago para no generar intereses de este mes.')

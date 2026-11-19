@@ -30,6 +30,23 @@ function text(value) {
   if (value?.strings) {
     return value.strings.reduce((output, part, index) => output + part + text(value.values[index]), '')
   }
+
+  test('cash is selectable, editable and visible with only an available balance', () => {
+    const account = { id: 9, name: 'Cartera', type: 'Efectivo', available: '250.50' }
+    const ctx = state({
+      dashboard: { accounts: [account] }, formAvailable: '250.50', formLimit: '',
+    })
+    ctx.startAccountEdit(account)
+    assert.equal(ctx.newAccountType, 'Efectivo')
+    const form = text(ctx.renderAccountForm())
+    assert.match(form, /value="Efectivo" .selected=true/)
+    assert.match(form, /name="available"/)
+    assert.doesNotMatch(form, /name="(?:total|statementDate|paymentDueDate|paymentToAvoidInterest)"/)
+    assert.match(text(ctx.renderCards()), /Cartera/)
+    const card = text(ctx.renderBankCard(account))
+    assert.match(card, /Saldo disponible/)
+    assert.doesNotMatch(card, /Fecha de corte|Fecha límite|Registrar pago|Saldo utilizado|Límite máximo/)
+  })
   return value == null || typeof value === 'function' ? '' : String(value)
 }
 

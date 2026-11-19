@@ -1,7 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
-import { isCreditAccount, isDebitAccount } from '../account-types.js'
+import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
@@ -32,7 +32,7 @@ function isCardAccount(account) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-  return type.includes('tarjeta') || isCreditAccount(type) || isDebitAccount(type)
+  return type.includes('tarjeta') || isCreditAccount(type) || isDebitAccount(type) || isCashAccount(type)
 }
 
 class SaludFinanciera extends LitElement {
@@ -429,7 +429,7 @@ class SaludFinanciera extends LitElement {
   startAccountEdit(account) {
     this.editingAccount = account
     this.newAccountType = isCreditAccount(account.type) ? 'Tarjeta de crédito'
-      : isDebitAccount(account.type) ? 'Tarjeta de débito' : ''
+      : isDebitAccount(account.type) ? 'Tarjeta de débito' : isCashAccount(account.type) ? 'Efectivo' : ''
     this.formLimit = account.total ?? ''
     this.formAvailable = account.available
     this.showAccountForm = true
@@ -584,6 +584,7 @@ class SaludFinanciera extends LitElement {
             <option value="" .selected=${!this.newAccountType} disabled>Selecciona un tipo</option>
             <option value="Tarjeta de crédito" .selected=${credit}>Crédito</option>
             <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
+            <option value="Efectivo" .selected=${isCashAccount(this.newAccountType)}>Efectivo</option>
           </select>
         </label>
         ${credit ? html`
@@ -614,7 +615,7 @@ class SaludFinanciera extends LitElement {
   renderCards() {
     const cards = this.dashboard.accounts.filter(isCardAccount)
     const groups = [
-      { title: 'Nómina / Débito', cards: cards.filter((card) => !isCreditAccount(card.type)) },
+      { title: 'Nómina / Débito / Efectivo', cards: cards.filter((card) => !isCreditAccount(card.type)) },
       { title: 'Crédito', cards: cards.filter((card) => isCreditAccount(card.type)) },
     ]
     return html`
