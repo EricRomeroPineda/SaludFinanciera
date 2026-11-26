@@ -110,7 +110,8 @@ test('checking the email normalizes and locks only a confirmed address', async (
   assert.deepEqual(request, { path: '/api/auth/email/check-recovery-email', body: { email: 'ana@example.com' } })
   assert.equal(state.verifiedEmail, 'ana@example.com')
   assert.equal(state.email, state.verifiedEmail)
-  assert.equal(state.useKey, false)
+  assert.equal(state.useKey, true)
+  assert.equal(state.selectedMethod, 'key')
 })
 
 test('editing email invalidates all displayed recovery choices and permissions', async () => {

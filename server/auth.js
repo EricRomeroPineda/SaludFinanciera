@@ -117,7 +117,7 @@ function validateTheme(theme) {
   if (!themes.some(({ id }) => id === theme)) invalidInput('Selecciona uno de los colores disponibles.')
 }
 
-export async function registerUser(name, password, photo, recoveryKey, theme = 'verde') {
+export async function registerUser(name, password, photo, recoveryKey, theme = 'verde', email) {
   const normalizedName = String(name || '').trim()
   const normalizedPassword = String(password || '')
 
@@ -127,8 +127,14 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     throw error
   }
   validatePassword(normalizedPassword)
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+  if (normalizedEmail.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(normalizedEmail)) {
+    invalidInput('Escribe un correo electrónico válido.')
+  }
+  photo = photo || null
   if (typeof photo === 'string' && photo.startsWith('/')) invalidInput('Regístrate con una URL HTTPS; después puedes subir tu foto desde Mi perfil.')
-  validateProfile(photo, theme)
+  if (photo) validateProfile(photo, theme)
+  else validateTheme(theme)
   const normalizedKey = normalizeRecoveryKey(recoveryKey)
 
   const connection = await pool.getConnection()
@@ -151,15 +157,21 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
       error.statusCode = 409
       throw error
     }
+    const [existingEmails] = await connection.execute('SELECT id FROM usuario WHERE correo = ? LIMIT 1', [normalizedEmail])
+    if (existingEmails.length) throw Object.assign(new Error('Ya hay una cuenta registrada con ese correo.'), { statusCode: 409 })
 
     const passwordHash = await bcrypt.hash(normalizedPassword, 12)
     const recoveryHash = await bcrypt.hash(normalizedKey, 12)
     const [result] = await connection.execute(
-      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira, apariencia) VALUES (?, ?, ?, ?, ?, NULL, ?)',
-      [normalizedName, passwordHash, photo, theme, recoveryHash, theme === 'oscuro' ? 'night' : 'day'],
+      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira, apariencia, correo, correo_verificado) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0)',
+      [normalizedName, passwordHash, photo, theme, recoveryHash, theme === 'oscuro' ? 'night' : 'day', normalizedEmail],
     )
 
-    return { id: result.insertId, name: normalizedName, photo, theme, appearance: theme === 'oscuro' ? 'night' : 'day', sessionVersion: passwordVersion(passwordHash) }
+    return { id: result.insertId, name: normalizedName, photo, theme, appearance: theme === 'oscuro' ? 'night' : 'day',
+      email: normalizedEmail, emailVerified: 0, sessionVersion: passwordVersion(passwordHash) }
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') throw Object.assign(new Error('Ya hay una cuenta registrada con ese correo o usuario.'), { statusCode: 409 })
+    throw error
   } finally {
     try {
       await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
@@ -328,7 +340,7 @@ export async function recoverPassword(name, recoveryKey, password, address) {
   const normalizedKey = normalizeRecoveryKey(recoveryKey)
   validatePassword(password)
   const [users] = await pool.execute(
-    'SELECT id, recuperacion_token_hash, password_hash FROM usuario WHERE nombre = ? AND (recuperacion_expira IS NULL OR recuperacion_expira > CURRENT_TIMESTAMP) LIMIT 2',
+    'SELECT id, recuperacion_token_hash, password_hash FROM usuario WHERE nombre = ? AND correo IS NOT NULL AND correo_verificado = 1 AND (recuperacion_expira IS NULL OR recuperacion_expira > CURRENT_TIMESTAMP) LIMIT 2',
     [normalizedName],
   )
   const user = users.length === 1 ? users[0] : null

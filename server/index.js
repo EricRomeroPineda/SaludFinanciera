@@ -92,7 +92,7 @@ export const server = createServer(async (request, response) => {
 
     if (route === 'POST /api/auth/register') {
       const body = await readJson(request)
-      const user = await registerUser(body.name, body.password, body.photo, body.recoveryKey, body.theme)
+      const user = await registerUser(body.name, body.password, body.photo, body.recoveryKey, body.theme, body.email)
       setSessionCookie(response, user.id, user.sessionVersion)
       sendJson(response, 201, { user })
       return

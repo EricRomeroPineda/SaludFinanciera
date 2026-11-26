@@ -23,7 +23,7 @@ const photo = 'https://example.com/avatar.png'
 for (const mode of ['login', 'register', 'recover']) {
   test(`${mode} sends only its required fields with a photo URL draft`, async (t) => {
     const fields = new Map([
-      ['name', 'Ana'], ['password', 'long-test-password'], ['recoveryKey', 'private-key'], ['photoUrl', photo],
+      ['name', 'Ana'], ['email', 'ana@example.com'], ['password', 'long-test-password'], ['recoveryKey', 'private-key'], ['photoUrl', photo],
     ])
     t.mock.method(globalThis, 'FormData', function () { return fields })
     let request
@@ -42,10 +42,10 @@ for (const mode of ['login', 'register', 'recover']) {
     await handlers.handleAuthSubmit.call(state, { preventDefault() {}, currentTarget: {} })
     assert.equal(state.error, '')
     assert.equal(state.submitting, false)
-    if (mode !== 'recover') assert.equal(state.activeSection, 'menu')
+    if (mode !== 'recover') assert.equal(state.activeSection, mode === 'register' ? 'finance' : 'menu')
     assert.equal(request.path, `/api/auth/${mode}`)
     const expected = { name: 'Ana', password: 'long-test-password' }
-    if (mode === 'register') expected.photo = photo
+    if (mode === 'register') { expected.photo = null; expected.email = 'ana@example.com' }
     if (mode !== 'login') expected.recoveryKey = 'private-key'
     assert.deepEqual(JSON.parse(request.options.body), expected)
     assert.ok(Buffer.byteLength(request.options.body) < 16 * 1024)
@@ -83,11 +83,29 @@ test('changing theme never resends the profile photo', async (t) => {
   assert.ok(Buffer.byteLength(request.options.body) < 16 * 1024)
 })
 
-test('photo form accepts only a URL and enforces the database column length', () => {
+test('optional signup photo failure preserves the created account and surfaces a retry message', async (t) => {
+    t.mock.method(globalThis, 'FormData', function () {
+      return new Map([['name', 'Ana'], ['email', 'ana@example.com'], ['password', 'long-password'], ['recoveryKey', 'private-key']])
+    })
+    t.mock.method(globalThis, 'fetch', async (path) => path === '/api/auth/register'
+      ? new Response(JSON.stringify({ user: { id: 7, name: 'Ana', photo: null, email: 'ana@example.com', emailVerified: 0 } }))
+      : new Response(JSON.stringify({ error: 'Sin permisos de escritura' }), { status: 503 }))
+    const state = { authMode: 'register', photoFile: new Blob(['image'], { type: 'image/webp' }) }
+    await handlers.handleAuthSubmit.call(state, { preventDefault() {}, currentTarget: {} })
+    assert.equal(state.user.id, 7)
+    assert.equal(state.activeTab, 'profile')
+    assert.equal(state.activeSection, 'finance')
+    assert.match(state.error, /cuenta se creó.*Sin permisos/)
+    assert.match(state.notice, /Verifica tu correo/)
+    assert.equal(state.submitting, false)
+  })
+
+test('registration photo uses the optional pencil editor instead of a URL', () => {
   const template = handlers.renderPhotoFields.call({ photoDraft: '', submitting: false })
   const markup = template.strings.join('')
-  assert.ok(markup.includes('type="url"'))
-  assert.ok(markup.includes('maxlength="500" required'))
+  assert.ok(markup.includes('Foto opcional'))
+  assert.ok(markup.includes('<photo-editor '))
+  assert.ok(!markup.includes('type="url"'))
   assert.ok(!markup.includes('type="file"'))
 })
 

@@ -50,8 +50,9 @@ test('registration stores photo, theme and a hashed recovery key', async (t) => 
     },
     release: () => { released = true },
   }))
-  const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul')
-  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', sessionVersion: versionFor(inserted[1]) })
+  const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul', ' Ana@Example.com ')
+  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', email: 'ana@example.com', emailVerified: 0, sessionVersion: versionFor(inserted[1]) })
+  assert.equal(inserted[6], 'ana@example.com')
   assert.equal(inserted[5], 'day')
   assert.equal(inserted[2], photo)
   assert.equal(inserted[3], 'azul')
@@ -61,12 +62,45 @@ test('registration stores photo, theme and a hashed recovery key', async (t) => 
   assert.equal(released, true)
 })
 
-test('registration rejects missing photos, recovery keys and invalid themes before touching MySQL', async (t) => {
+test('registration rejects missing or invalid email, recovery keys and invalid themes before touching MySQL', async (t) => {
   const getConnection = t.mock.method(pool, 'getConnection', () => assert.fail('Unexpected connection'))
   await assert.rejects(registerUser('Ana', password, '', recoveryKey), { statusCode: 400 })
-  await assert.rejects(registerUser('Ana', password, photo, ''), { statusCode: 400 })
-  await assert.rejects(registerUser('Ana', password, photo, recoveryKey, 'invalid'), { statusCode: 400 })
+  await assert.rejects(registerUser('Ana', password, photo, '', 'verde', 'ana@example.com'), { statusCode: 400 })
+  await assert.rejects(registerUser('Ana', password, photo, recoveryKey, 'invalid', 'ana@example.com'), { statusCode: 400 })
   assert.equal(getConnection.mock.callCount(), 0)
+})
+
+test('registration accepts an omitted photo and stores email as unverified without sending mail', async (t) => {
+  let inserted
+  t.mock.method(pool, 'getConnection', async () => ({
+    execute: async (sql, params) => {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
+      if (sql.includes('RELEASE_LOCK')) return [[{}]]
+      if (sql.startsWith('SELECT id')) return [[]]
+      assert.match(sql, /correo_verificado\) VALUES.*0\)/)
+      inserted = params
+      return [{ insertId: 40 }]
+    },
+    release() {},
+  }))
+  const user = await registerUser('Sin foto', password, null, recoveryKey, 'verde', 'nofoto@example.com')
+  assert.equal(inserted[2], null)
+  assert.equal(user.photo, null)
+  assert.equal(user.emailVerified, 0)
+})
+
+test('registration reports duplicate emails without creating an account', async (t) => {
+  t.mock.method(pool, 'getConnection', async () => ({
+    execute: async (sql) => {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
+      if (sql.includes('RELEASE_LOCK')) return [[{}]]
+      if (sql.includes('WHERE nombre')) return [[]]
+      if (sql.includes('WHERE correo')) return [[{ id: 1 }]]
+      assert.fail('Must not insert')
+    },
+    release() {},
+  }))
+  await assert.rejects(registerUser('Otro', password, null, recoveryKey, 'verde', 'ana@example.com'), { statusCode: 409 })
 })
 
 test('login and restored sessions return saved profile fields without exposing hashes', async (t) => {

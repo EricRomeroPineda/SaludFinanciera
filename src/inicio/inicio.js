@@ -5,7 +5,7 @@ import '../../saludFinanciera/frontend/salud-financiera.js'
 import appearanceStyles from './appearance.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
-import { isValidPhoto, themes } from '../../shared/profile.js'
+import { themes } from '../../shared/profile.js'
 import defaultAvatar from '../assets/default-avatar.svg'
 import './familia.js'
 import './email-settings.js'
@@ -148,7 +148,11 @@ class Inicio extends LitElement {
       name: formData.get('name'),
       password: formData.get('password'),
     }
-    if (this.authMode === 'register') payload.photo = String(formData.get('photoUrl') || '').trim()
+    const registering = this.authMode === 'register'
+    if (registering) {
+      payload.photo = null
+      payload.email = formData.get('email')
+    }
     if (this.authMode !== 'login') payload.recoveryKey = formData.get('recoveryKey')
 
     try {
@@ -162,10 +166,26 @@ class Inicio extends LitElement {
         return
       }
       this.user = user
+      if (registering) {
+        this.notice = 'Cuenta creada. Verifica tu correo desde Mi perfil; si no lo verificas, no podrás recuperar tu acceso.'
+        if (this.photoFile) {
+          try {
+            const { photo } = await apiRequest('/api/auth/photo', {
+              method: 'POST', headers: { 'Content-Type': this.photoFile.type }, body: this.photoFile,
+            })
+            this.user = { ...user, photo }
+            this.photoFile = null
+            if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+            this.photoPreview = ''
+          } catch (error) {
+            this.error = `Tu cuenta se creó, pero no se pudo guardar la foto: ${error.message}. Puedes volver a subirla desde Mi perfil.`
+          }
+        }
+      }
       this.appearance = null
-      this.photoDraft = user.photo || ''
-      this.activeTab = 'overview'
-      this.activeSection = 'menu'
+      this.photoDraft = this.user.photo || ''
+      this.activeTab = registering ? 'profile' : 'overview'
+      this.activeSection = registering ? 'finance' : 'menu'
     } catch (error) {
       this.error = error.message
     } finally {
@@ -194,15 +214,14 @@ class Inicio extends LitElement {
   }
 
   setAuthMode(mode) {
+    if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+    this.photoFile = null
+    this.photoPreview = ''
     this.authMode = mode
     this.error = ''
     this.notice = ''
     this.photoDraft = ''
     this.renderRoot.querySelector('.auth-form')?.reset()
-  }
-
-  handlePhotoUrl(event) {
-    this.photoDraft = event.target.value.trim()
   }
 
   async handleThemeChange(event) {
@@ -266,9 +285,9 @@ class Inicio extends LitElement {
   }
 
   renderPhotoFields() {
-    if (this.user) return html`
+    return html`
       <div class="profile-photo-editor">
-        <img class="profile-photo preview-photo" src=${this.photoPreview || this.user.photo || defaultAvatar}
+        <img class="profile-photo preview-photo" src=${this.photoPreview || this.user?.photo || defaultAvatar}
           alt="Vista previa de tu foto" referrerpolicy="no-referrer"
           @error=${(event) => {
             if (!event.target.src.endsWith(defaultAvatar)) {
@@ -283,26 +302,13 @@ class Inicio extends LitElement {
           </svg>
         </button>
       </div>
-      <small>Pulsa el lápiz para seleccionar y ajustar tu foto.</small>
-      <photo-editor .src=${this.photoPreview || this.user.photo || ''} @photo-edited=${(event) => {
+      <small>Foto opcional. Pulsa el lápiz para seleccionar y ajustar tu foto.</small>
+      <photo-editor .src=${this.photoPreview || this.user?.photo || ''} @photo-edited=${(event) => {
         if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
         this.photoFile = event.detail
         this.photoPreview = URL.createObjectURL(event.detail)
         this.error = ''
       }}></photo-editor>
-    `
-    return html`
-      <label>
-        URL de tu foto de perfil
-        <input name="photoUrl" type="url" placeholder="https://ejemplo.com/foto.jpg"
-          .value=${this.photoDraft} maxlength="500" required
-          ?disabled=${this.submitting} @input=${this.handlePhotoUrl} />
-        <small>Usa una dirección HTTPS pública de hasta 500 caracteres.</small>
-      </label>
-      ${this.photoDraft && isValidPhoto(this.photoDraft) ? html`
-        <img class="profile-photo preview-photo" src=${this.photoDraft} alt="Vista previa de tu foto"
-          referrerpolicy="no-referrer" @error=${() => { this.error = 'No se pudo mostrar la foto. Revisa la URL o elige otra imagen.' }} />
-      ` : ''}
     `
   }
 
@@ -449,7 +455,7 @@ class Inicio extends LitElement {
             <p class="eyebrow">${registering ? 'EMPIEZA AQUÍ' : 'QUÉ BUENO VERTE'}</p>
             <h2 id="auth-title">${registering ? 'Crea tu usuario' : recovering ? 'Recupera tu acceso' : 'Inicia sesión'}</h2>
             <p>${registering
-              ? 'Registra tu usuario, foto y palabra clave para empezar a organizar tus finanzas.'
+              ? 'Registra tu usuario, correo y palabra clave. La foto de perfil es opcional.'
               : recovering ? 'Recupera tu acceso con tu correo verificado.'
                 : 'Entra con tu usuario o correo verificado en Salud Financiera.'}</p>
           </div>
@@ -462,6 +468,10 @@ class Inicio extends LitElement {
               ${registering || recovering ? 'Nombre de usuario' : 'Usuario o correo electrónico'}
               <input name="name" type="text" maxlength=${registering || recovering ? '100' : '254'} autocomplete="username" required />
             </label>
+            ${registering ? html`<label>Correo electrónico
+              <input name="email" type="email" maxlength="254" autocomplete="email" required />
+            </label>
+            <p class="privacy-note" role="note">Si no verificas tu correo, no podrás recuperar tu acceso. Podrás verificarlo después desde Mi perfil.</p>` : ''}
             <label>
               ${recovering ? 'Nueva contraseña' : 'Contraseña'}
               <input
@@ -482,7 +492,7 @@ class Inicio extends LitElement {
               </label>
             ` : ''}
             <button class="primary-button submit-button" type="submit"
-              ?disabled=${this.submitting || (registering && !isValidPhoto(this.photoDraft))}>
+              ?disabled=${this.submitting}>
               ${this.submitting ? 'Un momento…' : registering ? 'Crear usuario' : recovering ? 'Restablecer contraseña' : 'Entrar'}
               <span aria-hidden="true">→</span>
             </button>

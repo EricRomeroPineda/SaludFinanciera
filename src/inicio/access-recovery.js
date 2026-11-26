@@ -78,8 +78,8 @@ class AccessRecovery extends LitElement {
       if (generation !== this.generation) return
       this.email = result.email
       this.verifiedEmail = result.email
-      this.useKey = false
-      this.selectedMethod = ''
+      this.useKey = true
+      this.selectedMethod = 'key'
     } catch (error) {
       if (generation === this.generation) this.error = error.message
     } finally {
@@ -168,15 +168,15 @@ class AccessRecovery extends LitElement {
           @submit=${(event) => this.submit(event, this.useKey ? undefined : this.selectedMethod)}>
           <div class="recovery-actions">
             <div class="recovery-action">
+              <button class="quiet-button recovery-icon" type="button" aria-label="Recuperar contraseña con palabra clave"
+                title="Recuperar contraseña con palabra clave" aria-pressed=${String(this.useKey)} ?disabled=${this.busy}
+                @click=${() => this.selectMethod('key')}>${this.icon('key')}</button>
+            </div>
+            <div class="recovery-action">
               <button class="quiet-button recovery-icon" type="button"
                 @click=${() => this.selectMethod('reset-password')} aria-pressed=${String(this.selectedMethod === 'reset-password')}
                 aria-label="Recuperar contraseña por correo" title="Recuperar contraseña por correo"
                 ?disabled=${this.busy}>${this.icon('mail')}</button>
-            </div>
-            <div class="recovery-action">
-              <button class="quiet-button recovery-icon" type="button" aria-label="Recuperar contraseña con palabra clave"
-                title="Recuperar contraseña con palabra clave" aria-pressed=${String(this.useKey)} ?disabled=${this.busy}
-                @click=${() => this.selectMethod('key')}>${this.icon('key')}</button>
             </div>
             <div class="recovery-action">
               <button class="quiet-button recovery-icon" type="button"
