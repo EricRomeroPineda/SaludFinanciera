@@ -112,7 +112,9 @@ Al iniciar sesión o restaurar una sesión se muestra un **Menú principal** con
 
 Al registrarse se solicita la URL HTTPS de una foto (máximo 500 caracteres) y una palabra clave de recuperación. Solo se guarda la URL en `foto_perfil VARCHAR(500)`, no se suben archivos ni se admiten imágenes base64. La URL debe seguir disponible públicamente. La foto aparece junto al nombre al iniciar sesión y al restaurar la sesión. No es necesario ampliar el campo de foto; si ya lo ampliaste, puede conservarse sin cambios.
 
-En **Mi perfil** se selecciona la foto como archivo JPG, PNG o WebP (hasta 5 MB, sin animación y hasta 20 megapíxeles). Hay vista previa y se sube al pulsar **Guardar perfil**. El servidor valida el contenido, elimina metadatos y optimiza a WebP de hasta 800 × 800; no guarda el nombre original. Las fotos anteriores por URL siguen funcionando. El registro inicial conserva su campo de URL; después se puede reemplazar por un archivo desde el perfil.
+En **Mi perfil** se puede cambiar el nombre de usuario (obligatorio, hasta 100 caracteres). Se rechazan nombres ocupados o que coincidan con el correo verificado de otra cuenta. El cambio conserva el ID, los datos financieros, la sesión, la contraseña y el correo; para los próximos accesos y la recuperación se usa el nuevo usuario.
+
+El lápiz sobre la foto abre un editor con vista circular, selección de archivo JPG, PNG o WebP (hasta 5 MB y 20 megapíxeles), zoom de 1× a 4×, giro de 90°, inversión horizontal/vertical y ajustes de posición. **Restablecer** deshace los ajustes del editor y **Cancelar** conserva la foto anterior. **Aplicar foto** prepara un recorte cuadrado de 600 × 600, mostrado como círculo; solo se sube al pulsar **Guardar perfil**. El servidor vuelve a validar el contenido, elimina metadatos y optimiza a WebP de hasta 800 × 800; no guarda el nombre original. Las fotos anteriores por URL siguen funcionando; para editarlas, el servidor externo debe permitir CORS. Si no, selecciona el archivo del equipo. El registro inicial conserva su campo de URL; después se puede reemplazar por un archivo desde el perfil.
 
 Configura en el `.env` del **equipo que ejecuta Node**:
 

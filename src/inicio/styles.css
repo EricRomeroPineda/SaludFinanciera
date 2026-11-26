@@ -149,6 +149,11 @@ a { color: inherit; text-decoration: none; }
 .section-menu-card > span:not(.brand-icon) { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .section-menu-card > .section-menu-link { color: var(--green); font-weight: 700; }
 .preview-photo { width: 80px; height: 80px; }
+.profile-photo-editor { position: relative; width: 112px; height: 112px; margin: 4px auto; }
+.profile-photo-editor .preview-photo { width: 112px; height: 112px; }
+.photo-pencil { position: absolute; right: -4px; bottom: 0; display: grid; place-items: center;
+  width: 36px; height: 36px; padding: 6px; border: 1px solid var(--line); border-radius: 50%;
+  background: var(--surface); color: var(--ink); }
 .profile-settings { max-width: 580px; }
 .email-settings { max-width: 580px; margin-top: 20px; }
 .email-settings p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }

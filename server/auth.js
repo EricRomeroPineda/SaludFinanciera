@@ -200,18 +200,52 @@ export async function findSessionUser(userId) {
   return users[0] || null
 }
 
-export async function updateProfile(userId, { photo, theme, recoveryKey }) {
-  validateProfile(photo, theme)
-  if (photo.startsWith('/') && (await findSessionUser(userId))?.photo !== photo) {
+export async function updateProfile(userId, { photo, theme, recoveryKey, name }) {
+  if (photo === null || photo === '') validateTheme(theme)
+  else validateProfile(photo, theme)
+  if (photo?.startsWith('/') && (await findSessionUser(userId))?.photo !== photo) {
     invalidInput('Sube la foto desde Mi perfil antes de guardarla.')
   }
   if (recoveryKey) {
     invalidInput('Solicita el enlace por correo para cambiar tu palabra clave.')
   }
-  await pool.execute(
-    'UPDATE usuario SET foto_perfil = ?, tema = ? WHERE id = ?',
-    [photo, theme, userId],
-  )
+  if (name !== undefined) {
+    const normalizedName = typeof name === 'string' ? name.trim() : ''
+    if (!normalizedName || normalizedName.length > 100) invalidInput('El nombre es obligatorio y no debe exceder 100 caracteres.')
+    const connection = await pool.getConnection()
+    const lockName = `sf_register_${createHash('sha256').update(normalizedName.toLowerCase()).digest('hex').slice(0, 40)}`
+    let locked = false
+    try {
+      const [locks] = await connection.execute('SELECT GET_LOCK(?, 10) AS acquired', [lockName])
+      locked = Number(locks[0].acquired) === 1
+      if (!locked) throw Object.assign(new Error('No fue posible cambiar el usuario. Intenta de nuevo.'), { statusCode: 503 })
+      const [existing] = await connection.execute(
+        'SELECT id FROM usuario WHERE (nombre = ? OR (correo = ? AND correo_verificado = 1)) AND id <> ? LIMIT 1',
+        [normalizedName, normalizedName.toLowerCase(), userId],
+      )
+      if (existing.length) throw Object.assign(new Error('Ese nombre de usuario ya está registrado.'), { statusCode: 409 })
+      await connection.execute(
+        'UPDATE usuario SET nombre = ?, foto_perfil = ?, tema = ? WHERE id = ?',
+        [normalizedName, photo, theme, userId],
+      )
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw Object.assign(new Error('Ese nombre de usuario ya está registrado.'), { statusCode: 409 })
+      }
+      throw error
+    } finally {
+      try {
+        if (locked) await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
+      } finally {
+        connection.release()
+      }
+    }
+  } else {
+    await pool.execute(
+      'UPDATE usuario SET foto_perfil = ?, tema = ? WHERE id = ?',
+      [photo, theme, userId],
+    )
+  }
   const user = await findSessionUser(userId)
   if (!user) {
     const error = new Error('El usuario que intentas modificar ya no existe.')

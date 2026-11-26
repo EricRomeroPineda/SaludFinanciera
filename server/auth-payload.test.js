@@ -91,12 +91,27 @@ test('photo form accepts only a URL and enforces the database column length', ()
   assert.ok(!markup.includes('type="file"'))
 })
 
-test('signed-in profile selects a local file instead of a URL', () => {
+test('signed-in profile opens a photo editor from a pencil instead of showing a file input', () => {
   const template = handlers.renderPhotoFields.call({ user: { photo }, submitting: false })
   const markup = template.strings.join('')
-  assert.match(markup, /name="photoFile" type="file"/)
-  assert.match(markup, /accept="image\/jpeg,image\/png,image\/webp"/)
+  assert.match(markup, /aria-label="Editar foto de perfil"/)
+  assert.match(markup, /<photo-editor /)
+  assert.doesNotMatch(markup, /type="file"/)
   assert.doesNotMatch(markup, /name="photoUrl"/)
+})
+
+test('profile sends the edited username and preserves a missing photo', async (t) => {
+  t.mock.method(globalThis, 'FormData', function () { return new Map([['name', ' Nueva Ana ']]) })
+  let payload
+  t.mock.method(globalThis, 'fetch', async (_, options) => {
+    payload = JSON.parse(options.body)
+    return new Response(JSON.stringify({ user: { id: 7, name: 'Nueva Ana', photo: null, theme: 'verde' } }))
+  })
+  const state = { user: { id: 7, name: 'Ana', photo: null, theme: 'verde' } }
+  await handlers.handleProfileSubmit.call(state, { preventDefault() {}, currentTarget: {} })
+  assert.deepEqual(payload, { name: 'Nueva Ana', photo: null, theme: 'verde' })
+  assert.equal(state.user.name, 'Nueva Ana')
+  assert.equal(state.notice, 'Perfil guardado.')
 })
 
 test('profile upload sends raw image bytes before saving the returned reference', async (t) => {

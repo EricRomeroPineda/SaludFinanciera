@@ -9,6 +9,7 @@ import { isValidPhoto, themes } from '../../shared/profile.js'
 import defaultAvatar from '../assets/default-avatar.svg'
 import './familia.js'
 import './email-settings.js'
+import './photo-editor.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -243,15 +244,14 @@ class Inicio extends LitElement {
         this.photoFile = null
         if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
         this.photoPreview = ''
-        const input = form.querySelector('[name="photoFile"]')
-        if (input) input.value = ''
         uploaded = true
       }
       const { user } = await apiRequest(`/api/users/${this.user.id}/profile`, {
         method: 'PUT',
         body: JSON.stringify({
-          photo: String(formData.get('photoUrl') || this.user.photo || '').trim(),
+          photo: formData.has('photoUrl') ? String(formData.get('photoUrl') || '').trim() : this.user.photo ?? null,
           theme: themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde',
+          ...(formData.has('name') ? { name: String(formData.get('name') || '').trim() } : {}),
         }),
       })
       this.user = user
@@ -266,14 +266,29 @@ class Inicio extends LitElement {
 
   renderPhotoFields() {
     if (this.user) return html`
-      <label>Foto de perfil
-        <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp"
-          ?disabled=${this.submitting} @change=${this.handlePhotoFile} />
-        <small>JPG, PNG o WebP de hasta 5 MB. Se guarda en el servidor al guardar el perfil.</small>
-      </label>
-      ${this.photoPreview || this.user.photo ? html`<img class="profile-photo preview-photo"
-        src=${this.photoPreview || this.user.photo} alt="Vista previa de tu foto" referrerpolicy="no-referrer"
-        @error=${() => { this.error = 'No se pudo mostrar la foto. Selecciona otra imagen.' }} />` : ''}
+      <div class="profile-photo-editor">
+        <img class="profile-photo preview-photo" src=${this.photoPreview || this.user.photo || defaultAvatar}
+          alt="Vista previa de tu foto" referrerpolicy="no-referrer"
+          @error=${(event) => {
+            if (!event.target.src.endsWith(defaultAvatar)) {
+              event.target.src = defaultAvatar
+              this.error = 'No se pudo mostrar la foto guardada. Puedes elegir otra desde el lápiz.'
+            }
+          }} />
+        <button class="photo-pencil quiet-button" type="button" aria-label="Editar foto de perfil" title="Editar foto de perfil"
+          ?disabled=${this.submitting} @click=${() => this.renderRoot.querySelector('photo-editor').open()}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="m16 3 5 5L8 21H3v-5L16 3Z M13 6l5 5" />
+          </svg>
+        </button>
+      </div>
+      <small>Pulsa el lápiz para seleccionar y ajustar tu foto.</small>
+      <photo-editor .src=${this.photoPreview || this.user.photo || ''} @photo-edited=${(event) => {
+        if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+        this.photoFile = event.detail
+        this.photoPreview = URL.createObjectURL(event.detail)
+        this.error = ''
+      }}></photo-editor>
     `
     return html`
       <label>
@@ -288,22 +303,6 @@ class Inicio extends LitElement {
           referrerpolicy="no-referrer" @error=${() => { this.error = 'No se pudo mostrar la foto. Revisa la URL o elige otra imagen.' }} />
       ` : ''}
     `
-  }
-
-  handlePhotoFile(event) {
-    if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
-    this.photoFile = null
-    this.photoPreview = ''
-    this.error = ''
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) {
-      this.error = 'Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.'
-      event.target.value = ''
-      return
-    }
-    this.photoFile = file
-    this.photoPreview = URL.createObjectURL(file)
   }
 
   render() {
@@ -530,8 +529,13 @@ class Inicio extends LitElement {
         <div class="section-heading"><h2>Mi perfil</h2></div>
         <form class="auth-form" @submit=${this.handleProfileSubmit}>
           ${this.renderPhotoFields()}
+          <label>Nombre de usuario
+            <input name="name" type="text" autocomplete="username" maxlength="100" required
+              .value=${this.user?.name || ''} ?disabled=${this.submitting} />
+          </label>
+          <small>Usa el nuevo usuario para iniciar sesión. Tu correo verificado no cambia.</small>
           <button class="primary-button" type="submit"
-            ?disabled=${this.submitting || this.savingTheme || (!this.photoFile && !isValidPhoto(this.photoDraft))}>
+            ?disabled=${this.submitting || this.savingTheme}>
             ${this.submitting ? 'Guardando…' : 'Guardar perfil'}
           </button>
         </form>

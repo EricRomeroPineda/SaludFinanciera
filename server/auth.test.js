@@ -153,6 +153,64 @@ test('profile cannot change the recovery key outside the email flow', async (t) 
     { statusCode: 400, message: 'Solicita el enlace por correo para cambiar tu palabra clave.' })
 })
 
+test('profile renames the user without changing email, password or user id', async (t) => {
+  let savedName = 'Ana'
+  let released = false
+  let unlocked = false
+  t.mock.method(pool, 'getConnection', async () => ({
+    execute: async (sql, params) => {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
+      if (sql.includes('RELEASE_LOCK')) { unlocked = true; return [[{}]] }
+      if (sql.startsWith('SELECT id')) {
+        assert.match(sql, /correo_verificado = 1/)
+        assert.deepEqual(params, ['Nueva Ana', 'nueva ana', 7])
+        return [[]]
+      }
+      assert.equal(sql, 'UPDATE usuario SET nombre = ?, foto_perfil = ?, tema = ? WHERE id = ?')
+      assert.deepEqual(params, ['Nueva Ana', null, 'verde', 7])
+      savedName = params[0]
+      return [{ affectedRows: 1 }]
+    },
+    release() { released = true },
+  }))
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.includes('WHERE nombre')) return [params[0] === savedName ? [{
+      id: 7, nombre: savedName, password_hash: passwordHash, email: 'ana@example.com', emailVerified: 1,
+    }] : []]
+    return [[{ id: 7, name: savedName, photo: null, email: 'ana@example.com', emailVerified: 1 }]]
+  })
+  const user = await updateProfile(7, { name: ' Nueva Ana ', photo: null, theme: 'verde' })
+  assert.equal(user.name, 'Nueva Ana')
+  assert.equal(user.email, 'ana@example.com')
+  assert.equal(user.id, 7)
+  assert.ok(released && unlocked)
+  assert.equal((await authenticateUser('Nueva Ana', password)).id, 7)
+  await assert.rejects(authenticateUser('Ana', password), { statusCode: 401 })
+})
+
+test('renaming rejects occupied names or verified emails and releases the registration lock', async (t) => {
+  let released = false
+  let unlocked = false
+  t.mock.method(pool, 'getConnection', async () => ({
+    execute: async (sql) => {
+      if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
+      if (sql.includes('RELEASE_LOCK')) { unlocked = true; return [[{}]] }
+      if (sql.startsWith('SELECT id')) return [[{ id: 8 }]]
+      assert.fail('Must not update an occupied name')
+    },
+    release() { released = true },
+  }))
+  await assert.rejects(updateProfile(7, { name: 'Ocupado', photo, theme: 'verde' }), { statusCode: 409 })
+  assert.ok(released && unlocked)
+})
+
+test('invalid usernames are rejected before acquiring a connection', async (t) => {
+  t.mock.method(pool, 'getConnection', () => assert.fail('Must validate first'))
+  for (const name of ['', '   ', 'a'.repeat(101), 123]) {
+    await assert.rejects(updateProfile(7, { name, photo, theme: 'verde' }), { statusCode: 400 })
+  }
+})
+
 test('recovery validates the secret, changes the password and invalidates earlier sessions', async (t) => {
   let currentHash = passwordHash
   let savedPasswordHash
