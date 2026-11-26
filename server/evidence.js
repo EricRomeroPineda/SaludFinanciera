@@ -92,7 +92,7 @@ export async function getEvidence(userId, movementId, evidenceId) {
   return readEvidence(rows[0].archivo)
 }
 
-async function readImage(request) {
+export async function readImage(request) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(request.headers['content-type']?.split(';')[0])) {
     throw invalid('Solo se admiten imágenes JPG, PNG o WebP.', 415)
   }

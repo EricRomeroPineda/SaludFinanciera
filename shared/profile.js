@@ -12,6 +12,7 @@ export const themes = [
 
 export function isValidPhoto(photo) {
   if (typeof photo !== 'string' || photo.length > 500) return false
+  if (/^\/api\/profile-photo\/[1-9]\d*\/[^/]+\/[a-f0-9-]{36}\.webp$/.test(photo)) return true
   try {
     const url = new URL(photo)
     return url.protocol === 'https:' && !url.username && !url.password

@@ -112,7 +112,19 @@ Al iniciar sesión o restaurar una sesión se muestra un **Menú principal** con
 
 Al registrarse se solicita la URL HTTPS de una foto (máximo 500 caracteres) y una palabra clave de recuperación. Solo se guarda la URL en `foto_perfil VARCHAR(500)`, no se suben archivos ni se admiten imágenes base64. La URL debe seguir disponible públicamente. La foto aparece junto al nombre al iniciar sesión y al restaurar la sesión. No es necesario ampliar el campo de foto; si ya lo ampliaste, puede conservarse sin cambios.
 
-En **Mi perfil** se puede actualizar la foto. El color se selecciona desde el icono de paleta del encabezado; cada cambio se guarda automáticamente en `usuario.tema` y se recupera al volver a entrar, incluido el calendario. Los usuarios existentes pueden solicitar una nueva palabra clave por correo verificado o un enlace para elegirla.
+En **Mi perfil** se selecciona la foto como archivo JPG, PNG o WebP (hasta 5 MB, sin animación y hasta 20 megapíxeles). Hay vista previa y se sube al pulsar **Guardar perfil**. El servidor valida el contenido, elimina metadatos y optimiza a WebP de hasta 800 × 800; no guarda el nombre original. Las fotos anteriores por URL siguen funcionando. El registro inicial conserva su campo de URL; después se puede reemplazar por un archivo desde el perfil.
+
+Configura en el `.env` del **equipo que ejecuta Node**:
+
+```dotenv
+PROFILE_PHOTO_DIR=/home/lenovoserver/Imágenes/Servidor
+```
+
+Los archivos se guardan en `<PROFILE_PHOTO_DIR>/<correo-verificado>/perfil/<uuid>.webp`. Sin correo verificado se usa `usuario-<id>/perfil/`; al verificarlo, la foto actual se traslada a la carpeta del correo. Los caracteres especiales del correo se codifican para evitar rutas inseguras. La carpeta se crea automáticamente si el usuario del proceso tiene permisos; sin la variable se utiliza `storage/profile-photos` dentro del proyecto. No se debe publicar esta carpeta mediante un servidor de archivos: la API exige sesión y solo sirve la foto actual de su propietario. No se comparte con la vista familiar.
+
+La carpeta es independiente de `dist`; respáldala junto con la base de datos y conserva permisos de lectura/escritura para el servicio Node. Al reemplazar una foto, se elimina la anterior después de guardar la nueva referencia. Un error de permisos se muestra explícitamente. Reinicia el backend tras configurar la variable. No requiere migraciones: se reutiliza `foto_perfil VARCHAR(500)`.
+
+El color se selecciona desde el icono de paleta del encabezado; cada cambio se guarda automáticamente en `usuario.tema` y se recupera al volver a entrar, incluido el calendario. Los usuarios existentes pueden solicitar una nueva palabra clave por correo verificado o un enlace para elegirla.
 
 El botón con sol/luna alterna la **vista Día/Noche** sin cambiar `usuario.tema` ni hacer solicitudes a la base de datos. Cada tema tiene una paleta clara y otra nocturna: verde, azul y violeta conservan sus matices con fondos oscuros; Oscuro usa negro casi puro de noche y grises claros de día. Se aplica a menús, formularios, paneles, mensajes y calendario mediante variables CSS compartidas que también pueden utilizar las nuevas secciones. La vista se mantiene durante la sesión de navegación; al entrar de nuevo o seleccionar un tema, Oscuro comienza en Noche y los demás en Día.
 

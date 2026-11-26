@@ -21,6 +21,8 @@ class Inicio extends LitElement {
     submitting: { state: true },
     error: { state: true },
     photoDraft: { state: true },
+    photoFile: { state: true },
+    photoPreview: { state: true },
     notice: { state: true },
     savingTheme: { state: true },
     brokenPhoto: { state: true },
@@ -101,6 +103,7 @@ class Inicio extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     window.removeEventListener('hashchange', this.emailLinkListener)
+    if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
   }
 
   readEmailLink() {
@@ -172,6 +175,9 @@ class Inicio extends LitElement {
     this.error = ''
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' })
+      if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+      this.photoPreview = ''
+      this.photoFile = null
       this.user = null
       this.appearance = null
       this.authMode = 'login'
@@ -226,11 +232,25 @@ class Inicio extends LitElement {
     this.notice = ''
     this.submitting = true
     const formData = new FormData(form)
+    let uploaded = false
     try {
+      if (this.photoFile) {
+        const { photo } = await apiRequest('/api/auth/photo', {
+          method: 'POST', headers: { 'Content-Type': this.photoFile.type }, body: this.photoFile,
+        })
+        this.user = { ...this.user, photo }
+        this.photoDraft = photo
+        this.photoFile = null
+        if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+        this.photoPreview = ''
+        const input = form.querySelector('[name="photoFile"]')
+        if (input) input.value = ''
+        uploaded = true
+      }
       const { user } = await apiRequest(`/api/users/${this.user.id}/profile`, {
         method: 'PUT',
         body: JSON.stringify({
-          photo: String(formData.get('photoUrl') || '').trim(),
+          photo: String(formData.get('photoUrl') || this.user.photo || '').trim(),
           theme: themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde',
         }),
       })
@@ -238,13 +258,23 @@ class Inicio extends LitElement {
       this.photoDraft = user.photo
       this.notice = 'Perfil guardado.'
     } catch (error) {
-      this.error = error.message
+      this.error = uploaded ? `La foto se guardó, pero no se pudo actualizar el perfil: ${error.message}` : error.message
     } finally {
       this.submitting = false
     }
   }
 
   renderPhotoFields() {
+    if (this.user) return html`
+      <label>Foto de perfil
+        <input name="photoFile" type="file" accept="image/jpeg,image/png,image/webp"
+          ?disabled=${this.submitting} @change=${this.handlePhotoFile} />
+        <small>JPG, PNG o WebP de hasta 5 MB. Se guarda en el servidor al guardar el perfil.</small>
+      </label>
+      ${this.photoPreview || this.user.photo ? html`<img class="profile-photo preview-photo"
+        src=${this.photoPreview || this.user.photo} alt="Vista previa de tu foto" referrerpolicy="no-referrer"
+        @error=${() => { this.error = 'No se pudo mostrar la foto. Selecciona otra imagen.' }} />` : ''}
+    `
     return html`
       <label>
         URL de tu foto de perfil
@@ -258,6 +288,22 @@ class Inicio extends LitElement {
           referrerpolicy="no-referrer" @error=${() => { this.error = 'No se pudo mostrar la foto. Revisa la URL o elige otra imagen.' }} />
       ` : ''}
     `
+  }
+
+  handlePhotoFile(event) {
+    if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+    this.photoFile = null
+    this.photoPreview = ''
+    this.error = ''
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024) {
+      this.error = 'Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.'
+      event.target.value = ''
+      return
+    }
+    this.photoFile = file
+    this.photoPreview = URL.createObjectURL(file)
   }
 
   render() {
@@ -485,7 +531,7 @@ class Inicio extends LitElement {
         <form class="auth-form" @submit=${this.handleProfileSubmit}>
           ${this.renderPhotoFields()}
           <button class="primary-button" type="submit"
-            ?disabled=${this.submitting || this.savingTheme || !isValidPhoto(this.photoDraft)}>
+            ?disabled=${this.submitting || this.savingTheme || (!this.photoFile && !isValidPhoto(this.photoDraft))}>
             ${this.submitting ? 'Guardando…' : 'Guardar perfil'}
           </button>
         </form>

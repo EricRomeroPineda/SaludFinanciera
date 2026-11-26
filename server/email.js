@@ -3,6 +3,7 @@ import { randomBytes, createHash } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from './db.js'
 import { normalizeRecoveryKey } from './auth.js'
+import { promoteProfilePhoto, removeProfilePhoto } from './profile-photo.js'
 
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const attempts = new Map()
@@ -124,6 +125,8 @@ export async function consumeEmailLink(purpose, input, address) {
     recoveryHash = await bcrypt.hash(key, 12)
   }
   const connection = await pool.getConnection()
+  let movedPhoto
+  let committed = false
   try {
     await connection.beginTransaction()
     const hash = createHash('sha256').update(input.token).digest('hex')
@@ -141,6 +144,7 @@ export async function consumeEmailLink(purpose, input, address) {
     )
     if (!valid.length) throw invalid('El enlace no es válido, ya se usó o caducó.')
     if (purpose === 'verify-email') {
+      movedPhoto = await promoteProfilePhoto(connection, id)
       await connection.execute('UPDATE usuario SET correo_verificado = 1 WHERE id = ?', [id])
     } else {
       await connection.execute(
@@ -149,12 +153,14 @@ export async function consumeEmailLink(purpose, input, address) {
     }
     await connection.execute('DELETE FROM usuario_enlace_correo WHERE id_usuario = ? AND proposito = ?', [id, purpose])
     await connection.commit()
+    committed = true
     return { ok: true }
   } catch (error) {
     await connection.rollback()
     throw error
   } finally {
     connection.release()
+    if (movedPhoto) await removeProfilePhoto(committed ? movedPhoto.old : movedPhoto.photo)
   }
 }
 

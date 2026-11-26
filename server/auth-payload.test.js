@@ -91,6 +91,34 @@ test('photo form accepts only a URL and enforces the database column length', ()
   assert.ok(!markup.includes('type="file"'))
 })
 
+test('signed-in profile selects a local file instead of a URL', () => {
+  const template = handlers.renderPhotoFields.call({ user: { photo }, submitting: false })
+  const markup = template.strings.join('')
+  assert.match(markup, /name="photoFile" type="file"/)
+  assert.match(markup, /accept="image\/jpeg,image\/png,image\/webp"/)
+  assert.doesNotMatch(markup, /name="photoUrl"/)
+})
+
+test('profile upload sends raw image bytes before saving the returned reference', async (t) => {
+  const file = new File(['image'], 'photo.png', { type: 'image/png' })
+  const saved = '/api/profile-photo/7/usuario-7/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.webp'
+  t.mock.method(globalThis, 'FormData', function () { return new Map() })
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    requests.push({ path, options })
+    return new Response(JSON.stringify(path === '/api/auth/photo' ? { photo: saved } : { user: { id: 7, photo: saved, theme: 'verde' } }))
+  })
+  const state = { user: { id: 7, photo, theme: 'verde' }, photoFile: file }
+  await handlers.handleProfileSubmit.call(state, { preventDefault() {}, currentTarget: { querySelector: () => null } })
+  assert.equal(state.error, '')
+  assert.equal(requests[0].path, '/api/auth/photo')
+  assert.equal(requests[0].options.body, file)
+  assert.equal(requests[0].options.headers['Content-Type'], 'image/png')
+  assert.equal(JSON.parse(requests[1].options.body).photo, saved)
+  assert.equal(state.photoFile, null)
+  assert.equal(state.user.photo, saved)
+})
+
 test('authenticated users see the menu before the financial dashboard', () => {
   const state = {
     user: { id: 7 }, activeSection: 'menu',

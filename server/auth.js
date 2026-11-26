@@ -127,6 +127,7 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     throw error
   }
   validatePassword(normalizedPassword)
+  if (typeof photo === 'string' && photo.startsWith('/')) invalidInput('Regístrate con una URL HTTPS; después puedes subir tu foto desde Mi perfil.')
   validateProfile(photo, theme)
   const normalizedKey = normalizeRecoveryKey(recoveryKey)
 
@@ -201,6 +202,9 @@ export async function findSessionUser(userId) {
 
 export async function updateProfile(userId, { photo, theme, recoveryKey }) {
   validateProfile(photo, theme)
+  if (photo.startsWith('/') && (await findSessionUser(userId))?.photo !== photo) {
+    invalidInput('Sube la foto desde Mi perfil antes de guardarla.')
+  }
   if (recoveryKey) {
     invalidInput('Solicita el enlace por correo para cambiar tu palabra clave.')
   }
