@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import '../frontend/related-movements.js'
+import '../frontend/copy-deposit.js'
 import { apiRequest } from '../../src/api.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from '../frontend/styles.css?inline'
@@ -236,7 +237,7 @@ class Subscriptions extends LitElement {
           <datalist id="subscription-statuses"><option value="activa"></option><option value="cancelada"></option></datalist>
         </label>
         <label>Datos de depósito (opcional)<input name="depositDetails" maxlength="500"
-          placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /></label>
+          placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /><copy-deposit field></copy-deposit></label>
         <p class="form-hint">Monetizado se calcula sumando los importes de todos los movimientos vinculados a esta suscripción; no se captura manualmente.</p>
         <p class="form-hint">Mensual semanal: costo por cobro × 4 semanas. Estimación anual: costo por cobro × número de cobros al año. Semanal: 52; mensual: 12; trimestral: 4; semestral: 2; anual: 1. Para las demás frecuencias, el mensual es el anual ÷ 12.</p>
         <div class="form-actions">
@@ -312,7 +313,7 @@ class Subscriptions extends LitElement {
                     <div><dt>Tipo de pago</dt><dd>${item.paymentType === 'manual' ? 'Manual'
                       : item.paymentType === 'automatico' ? 'Automático (domiciliado)' : 'Sin definir'}</dd></div>
                   </dl>
-                  ${item.depositDetails ? html`<p class="form-hint deposit-details">Depósito: ${item.depositDetails}</p>` : ''}
+                  ${item.depositDetails ? html`<p class="form-hint deposit-details">Depósito: ${item.depositDetails}<copy-deposit .value=${item.depositDetails}></copy-deposit></p>` : ''}
                   <div class="subscription-actions">
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}

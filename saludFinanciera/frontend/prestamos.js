@@ -6,6 +6,7 @@ import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import './related-movements.js'
+import './copy-deposit.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 function todayInput() {
@@ -139,7 +140,7 @@ class Loans extends LitElement {
         </label>
         ${(item?.type || this.loanType) === 'debo' ? html`
           <label>Datos de depósito del acreedor (opcional)<input name="depositDetails" maxlength="500"
-            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /></label>
+            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${item?.depositDetails || ''} /><copy-deposit field></copy-deposit></label>
         ` : ''}
         <label>Notas<input name="notes" maxlength="500" .value=${item?.notes || ''} /></label>
         <p class="form-hint">${this.mode === 'legacy'
@@ -210,7 +211,7 @@ class Loans extends LitElement {
                   ${days < 0 ? `Compromiso vencido hace ${Math.abs(days)} días` : days === 0 ? 'El compromiso vence hoy' : `Faltan ${days} días para el compromiso`}
                 </p>` : ''}
                 ${item.notes ? html`<p class="plan-note">${item.notes}</p>` : ''}
-                ${item.type === 'debo' && item.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${item.depositDetails}</p>` : ''}
+                ${item.type === 'debo' && item.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${item.depositDetails}<copy-deposit .value=${item.depositDetails}></copy-deposit></p>` : ''}
                 <div class="card-actions" ?hidden=${this.familyView}>
                   <button class="text-button" type="button" ?disabled=${this.busy || completed} @click=${() => this.registerPayment(item)}>Registrar abono</button>
                   <button class="edit-button" type="button" aria-label=${`Editar préstamo de ${item.name}`} title="Editar préstamo" ?disabled=${this.busy} @click=${() => this.openForm(item)}>${editIcon()}</button>

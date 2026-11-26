@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit'
 import { apiRequest } from '../../src/api.js'
+import './copy-deposit.js'
 import { loadGoogleIdentity, prepareGoogleReminders, requestGoogleAccess, syncGoogleReminder } from './google-calendar-client.js'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
@@ -197,7 +198,7 @@ class GoogleCalendarSync extends LitElement {
                 <span class="details"><strong>${event.label}</strong>
                   <small>${event.date} · ${event.typeLabel} · ${event.amount == null ? 'Monto por definir' : currency.format(Number(event.amount))}</small>
                   ${event.depositDetails && !(event.kind === 'loan' && event.loanType === 'me_deben')
-                    ? html`<small>Datos de depósito: ${event.depositDetails}</small>` : ''}
+                    ? html`<small>Datos de depósito: ${event.depositDetails}<copy-deposit .value=${event.depositDetails}></copy-deposit></small>` : ''}
                   ${event.reference ? html`<small>Solo referencia: configura el inicio de la suscripción para enviarla.</small>` : ''}
                   ${this.results[event.key] ? html`<small class=${this.results[event.key].status === 'error' ? 'error' : 'notice'}>
                     ${this.results[event.key].status === 'created' ? 'Creado' : this.results[event.key].status === 'updated' ? 'Actualizado' : this.results[event.key].message}

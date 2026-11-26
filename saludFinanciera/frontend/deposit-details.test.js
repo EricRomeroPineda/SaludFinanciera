@@ -15,6 +15,7 @@ const finance = components.get('salud-financiera').prototype
 const loans = components.get('finance-loans').prototype
 const subscriptions = components.get('finance-subscriptions').prototype
 const google = components.get('google-calendar-sync').prototype
+const copy = components.get('copy-deposit').prototype
 const deposit = 'Banco prueba, cuenta 001234567890'
 const methods = (prototype) => Object.fromEntries(Object.getOwnPropertyNames(prototype)
   .filter((name) => typeof prototype[name] === 'function').map((name) => [name, prototype[name]]))
@@ -39,6 +40,7 @@ test('all four forms show an optional text deposit field and restore saved text 
   for (const form of markup.map(text)) {
     assert.match(form, /name="depositDetails" maxlength="500"/)
     assert.ok(form.includes(`.value=${deposit}`))
+    assert.match(form, /<copy-deposit field>/)
     assert.doesNotMatch(form, /name="depositDetails"[^>]*required/)
   }
   const receiving = text(loans.renderForm.call({ editing: { type: 'me_deben', depositDetails: deposit }, accounts: [] }))
@@ -88,4 +90,36 @@ test('Google preview explicitly discloses deposit sharing and both days of fixed
   assert.match(markup, /tres eventos privados/)
   assert.match(markup, /seis avisos en total/)
   assert.match(markup, /datos de depósito si existen/)
+  assert.match(markup, /<copy-deposit .value=Banco prueba/)
+})
+
+test('copy preserves all deposit text including leading zeroes', async (t) => {
+  let written
+  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async (value) => { written = value } } })
+  const state = { value: deposit }
+  await copy.copy.call(state)
+  assert.equal(written, deposit)
+  assert.equal(state.notice, 'Datos copiados.')
+  assert.equal(state.error, '')
+  assert.equal(state.busy, false)
+})
+
+test('form copy reads the current edited input instead of the saved text', async (t) => {
+  let written
+  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async (value) => { written = value } } })
+  const state = { field: true, value: 'old', closest: () => ({ querySelector: () => ({ value: 'CLABE 00001234' }) }) }
+  await copy.copy.call(state)
+  assert.equal(written, 'CLABE 00001234')
+})
+
+test('missing data and denied clipboard access report errors, never success', async (t) => {
+  const state = { value: '' }
+  await copy.copy.call(state)
+  assert.match(state.error, /No hay datos/)
+  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async () => { throw new Error('Denied') } } })
+  state.value = deposit
+  await copy.copy.call(state)
+  assert.match(state.error, /No se pudo copiar/)
+  assert.equal(state.notice, '')
+  assert.equal(state.busy, false)
 })
