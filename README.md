@@ -29,6 +29,8 @@ El orden es por menor tiempo para el próximo pago, aportación o compromiso; lo
 
 ## Panorama: actividad y pagos de tarjetas
 
+Los iconos de calendario de Panorama abren un selector de meses o años, sin desplegables de texto. Usa las flechas para navegar y elige un mes para consultar ese mes o un año para consultar el año completo. Escape cierra el selector y «Mes actual» restablece la consulta. En el tema Oscuro, el modo día usa fondo y paneles blancos; el modo noche conserva sus tonos oscuros.
+
 Aplica `server/migrations/008-card-payment-confirmation.sql` antes de iniciar esta versión. Los ingresos y gastos del mes/año se suman desde todos los movimientos del periodo, sin el límite de 250 registros recientes. Se excluyen transferencias entre cuentas y operaciones de préstamos, igual que en Movimiento. La vista familiar suma la actividad de sus integrantes.
 
 Los pagos con vencimiento del día **1 al 14** se presupuestan en el mes anterior; los del 15 en adelante en su propio mes. El importe pendiente se arrastra al mes actual hasta cubrirlo. Por ejemplo, el pago del 10 de enero se muestra en diciembre y, si queda pendiente, pasa a enero. Dos días antes y el día límite se marca como urgente; después del vencimiento aparece una advertencia para revisar con el banco el nuevo importe para no generar intereses. La aplicación no calcula intereses ni cambia por sí sola el importe o la fecha del banco.

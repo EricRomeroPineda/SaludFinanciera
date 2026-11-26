@@ -52,6 +52,7 @@ class SaludFinanciera extends LitElement {
     today: { state: true },
     overviewPeriod: { state: true },
     overviewScope: { state: true },
+    overviewPickerYear: { state: true },
     cardsListView: { state: true },
     plansListView: { state: true },
     loading: { state: true },
@@ -628,32 +629,16 @@ class SaludFinanciera extends LitElement {
       <section class="data-card overview-period" aria-label="Periodo de consulta">
         <div class="section-heading">
           <h2>Panorama</h2>
-          <label>Consultar
-            <select .value=${this.overviewScope || 'month'} @change=${(event) => {
-              this.overviewScope = event.currentTarget.value
-            }}>
-              <option value="month">Mes</option>
-              <option value="year">Año completo</option>
-            </select>
-          </label>
-          ${this.overviewScope === 'year' ? html`
-            <label>Año<input type="number" min="1000" max="9999" step="1"
-              .value=${period.slice(0, 4)} @change=${(event) => {
-                if (event.currentTarget.checkValidity() && event.currentTarget.value) {
-                  this.overviewPeriod = `${event.currentTarget.value.padStart(4, '0')}-${period.slice(5, 7)}`
-                }
-              }} required /></label>
-          ` : html`
-            <label>Mes y año<input type="month" min="1000-01" max="9999-12"
-              .value=${period} @change=${(event) => {
-                if (event.currentTarget.checkValidity() && event.currentTarget.value) {
-                  this.overviewPeriod = event.currentTarget.value
-                }
-              }} required /></label>
-          `}
+          <div class="period-controls">
+            <span class="period-selected" role="status">${this.overviewScope === 'year'
+              ? `Año ${period.slice(0, 4)}` : new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${period}-01T00:00:00Z`))}</span>
+            ${this.renderOverviewPicker(period, 'month')}
+            ${this.renderOverviewPicker(period, 'year')}
+          </div>
           <button class="text-button" type="button" @click=${() => {
             this.overviewPeriod = ''
             this.overviewScope = 'month'
+            this.overviewPickerYear = undefined
           }}>Mes actual</button>
         </div>
         <p class="form-hint">El periodo filtra ingresos, gastos y pagos pendientes. Los vencimientos del día 1 al 14
@@ -748,6 +733,57 @@ class SaludFinanciera extends LitElement {
       ` : ''}
       <p class="overview-footnote">${subscriptions.length} suscripciones · ${plans.length} planes futuros</p>
     `
+  }
+
+  selectOverviewPeriod(event, period, scope) {
+    this.overviewPeriod = period
+    this.overviewScope = scope
+    event.currentTarget.closest('details').open = false
+    event.currentTarget.closest('details').querySelector('summary').focus()
+  }
+
+  renderOverviewPicker(period, scope) {
+    const annual = scope === 'year'
+    const label = annual ? 'Seleccionar año' : 'Seleccionar mes'
+    const year = this.overviewPickerYear ?? Number(period.slice(0, 4))
+    const start = Math.min(9988, Math.max(1000, year - (year - 1000) % 12))
+    const step = annual ? 12 : 1
+    return html`<details class="period-picker" name="overview-period-picker"
+      @toggle=${(event) => {
+        if (event.currentTarget.open) this.overviewPickerYear = Number(period.slice(0, 4))
+      }}
+      @keydown=${(event) => {
+        if (event.key === 'Escape') {
+          event.currentTarget.open = false
+          event.currentTarget.querySelector('summary').focus()
+        }
+      }}>
+      <summary aria-label=${label} title=${label} class=${this.overviewScope === scope || (!this.overviewScope && !annual) ? 'active' : ''}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4m10-4v4M3 10h18" />
+          ${annual ? svg`<path d="M7 14h2m4 0h4M7 17h2m4 0h4" />` : svg`<rect x="7" y="14" width="4" height="3" rx=".5" />`}
+        </svg>
+      </summary>
+      <div class="period-popup" role="group" aria-label=${annual ? 'Calendario de años' : 'Calendario de meses'}>
+        <div class="period-popup-heading">
+          <button class="quiet-button" type="button" aria-label=${annual ? 'Años anteriores' : 'Año anterior'}
+            ?disabled=${annual ? start <= 1000 : year <= 1000}
+            @click=${() => { this.overviewPickerYear = Math.max(1000, year - step) }}>‹</button>
+          <strong>${annual ? `${start}–${start + 11}` : year}</strong>
+          <button class="quiet-button" type="button" aria-label=${annual ? 'Años siguientes' : 'Año siguiente'}
+            ?disabled=${annual ? start >= 9988 : year >= 9999}
+            @click=${() => { this.overviewPickerYear = Math.min(9999, year + step) }}>›</button>
+        </div>
+        <div class="period-options">${Array.from({ length: 12 }, (_, index) => {
+          const value = annual ? String(start + index) : `${year}-${String(index + 1).padStart(2, '0')}`
+          const selected = annual ? period.slice(0, 4) === value : period === value
+          const text = annual ? value : new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' })
+            .format(new Date(Date.UTC(2026, index, 1)))
+          return html`<button class="quiet-button" type="button" aria-pressed=${String(selected)}
+            @click=${(event) => this.selectOverviewPeriod(event, annual ? `${value}-${period.slice(5, 7)}` : value, scope)}>${text}</button>`
+        })}</div>
+      </div>
+    </details>`
   }
 
   renderAccounts() {

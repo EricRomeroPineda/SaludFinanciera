@@ -60,7 +60,8 @@ test('overview period controls switch monthly and annual payment totals without 
     },
   })
   let markup = text(ctx.renderOverview())
-  assert.match(markup, /type="month"/)
+  assert.match(markup, /Seleccionar mes/)
+  assert.doesNotMatch(markup, /<select|type="month"/)
   assert.match(markup, /Pendiente del periodo 2026-11/)
   assert.match(markup, /Disponible con crédito/)
   assert.match(markup, /Deuda total/)
@@ -69,7 +70,7 @@ test('overview period controls switch monthly and annual payment totals without 
   assert.match(markup, /Pendiente del periodo 2026-12/)
   ctx.overviewScope = 'year'
   markup = text(ctx.renderOverview())
-  assert.match(markup, /type="number" min="1000" max="9999"/)
+  assert.match(markup, /Calendario de años/)
   assert.match(markup, /Pendiente del periodo 2026</)
 })
 
