@@ -83,7 +83,7 @@ test('login and restored sessions return saved profile fields without exposing h
   await assert.rejects(authenticateUser('Ana', 'wrong'), { statusCode: 401 })
 })
 
-test('all four themes persist independently of an existing profile photo', async (t) => {
+test('all available themes persist independently of an existing profile photo', async (t) => {
   let savedTheme
   t.mock.method(pool, 'execute', async (sql, params) => {
     if (sql.startsWith('UPDATE')) {
@@ -94,7 +94,7 @@ test('all four themes persist independently of an existing profile photo', async
     }
     return [[{ id: 7, name: 'Ana', photo: null, theme: savedTheme }]]
   })
-  assert.equal(themes.length, 4)
+  assert.equal(themes.length, 9)
   for (const { id } of themes) assert.equal((await updateTheme(7, id)).theme, id)
   await assert.rejects(updateTheme(7, 'invalid'), { statusCode: 400 })
 })

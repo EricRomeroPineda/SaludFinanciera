@@ -2,6 +2,11 @@ export const themes = [
   { id: 'verde', label: 'Verde' },
   { id: 'azul', label: 'Azul' },
   { id: 'violeta', label: 'Violeta' },
+  { id: 'turquesa', label: 'Turquesa' },
+  { id: 'rosa', label: 'Rosa' },
+  { id: 'naranja', label: 'Naranja' },
+  { id: 'rojo', label: 'Rojo' },
+  { id: 'dorado', label: 'Dorado' },
   { id: 'oscuro', label: 'Oscuro' },
 ]
 

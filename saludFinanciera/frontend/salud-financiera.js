@@ -45,6 +45,8 @@ class SaludFinanciera extends LitElement {
   static properties = {
     dashboard: { state: true },
     familyView: { state: true },
+    familyAvailable: { state: true },
+    familyError: { state: true },
     activeTab: { state: true },
     selectedCard: { state: true },
     today: { state: true },
@@ -81,6 +83,8 @@ class SaludFinanciera extends LitElement {
     super()
     this.dashboard = null
     this.familyView = false
+    this.familyAvailable = false
+    this.familyError = ''
     this.activeTab = 'overview'
     this.selectedCard = null
     this.today = new Date()
@@ -118,6 +122,7 @@ class SaludFinanciera extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     this.loadDashboard()
+    this.loadFamilyAvailability()
     this.cardClock = window.setInterval(() => { this.today = new Date() }, 60000)
   }
 
@@ -152,8 +157,19 @@ class SaludFinanciera extends LitElement {
     }
   }
 
+  async loadFamilyAvailability() {
+    this.familyError = ''
+    try {
+      const { family } = await apiRequest('/api/family')
+      this.familyAvailable = Boolean(family)
+    } catch (error) {
+      this.familyError = `No se pudo consultar tu acceso familiar: ${error.message}`
+    }
+  }
+
   changeView(event) {
     if (this.submitting) return
+    if (event.currentTarget.value === 'family' && !this.familyAvailable) return
     this.pendingEvidenceMovementId = null
     this.familyView = event.currentTarget.value === 'family'
     this.dashboard = null
@@ -197,7 +213,7 @@ class SaludFinanciera extends LitElement {
         <button class="quiet-button back-to-menu" type="button" @click=${() => {
           this.dispatchEvent(new CustomEvent('back-to-menu', { bubbles: true, composed: true }))
         }}>← Menú principal</button>
-        <button class="quiet-button scope-toggle" type="button"
+        ${this.familyAvailable || this.familyView ? html`<button class="quiet-button scope-toggle" type="button"
           aria-label=${this.familyView ? 'Vista familiar. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
           title=${this.familyView ? 'Vista familiar · Solo consulta. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
           aria-pressed=${String(Boolean(this.familyView))} ?disabled=${this.submitting}
@@ -206,8 +222,11 @@ class SaludFinanciera extends LitElement {
             <circle cx="12" cy="7" r="3" /><path d="M6 21v-3a6 6 0 0 1 12 0v3" />
             ${this.familyView ? svg`<path d="M5 4a3 3 0 0 0 0 6M2 19v-3a4 4 0 0 1 3-4M19 4a3 3 0 0 1 0 6m3 9v-3a4 4 0 0 0-3-4" />` : ''}
           </svg>
-        </button>
+        </button>` : ''}
         </div>
+        ${this.familyError ? html`<div class="error-message" role="alert">${this.familyError}
+          <button class="text-button" type="button" @click=${this.loadFamilyAvailability}>Reintentar consulta familiar</button>
+        </div>` : ''}
         ${this.familyView ? html`<p class="family-view-notice" role="status">
           <strong>Vista familiar: esta sección es de solo consulta.</strong>
           Para registrar, editar o eliminar, cambia a Individual con el icono superior.

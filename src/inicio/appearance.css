@@ -37,6 +37,12 @@
   --accent-saturation: 50%;
 }
 
+:host([data-theme="turquesa"]) { --palette-hue: 181; --accent-saturation: 65%; }
+:host([data-theme="rosa"]) { --palette-hue: 330; --accent-saturation: 58%; }
+:host([data-theme="naranja"]) { --palette-hue: 25; --accent-saturation: 70%; }
+:host([data-theme="rojo"]) { --palette-hue: 0; --accent-saturation: 62%; }
+:host([data-theme="dorado"]) { --palette-hue: 44; --accent-saturation: 70%; }
+
 :host([data-theme="oscuro"]) {
   --palette-hue: 220;
   --palette-saturation: 5%;

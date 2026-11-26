@@ -58,6 +58,7 @@ test('changing between individual and family clears selections, forms and previo
   const state = {
     dashboard: {}, selectedCard: {}, selectedPlan: {}, editingPlan: {},
     showMovementForm: true, showPlanForm: true, showAccountForm: true,
+    familyAvailable: true,
     loadDashboard() { loads++ },
   }
   finance.changeView.call(state, { currentTarget: { value: 'family' } })
@@ -89,6 +90,7 @@ test('top scope icon replaces the select and family mode announces read-only acc
   const state = {
     loading: true, renderPlanDeleteDialog: () => '', renderMovementDialog: () => '',
     dashboard: null, activeTab: 'overview',
+    familyAvailable: true,
   }
   const individual = text(finance.render.call(state))
   assert.match(individual, /finance-topbar/)
@@ -106,6 +108,35 @@ test('switching scope is blocked while submitting', () => {
   const state = { submitting: true, familyView: false, loadDashboard: () => assert.fail('Must not switch') }
   finance.changeView.call(state, { currentTarget: { value: 'family' } })
   assert.equal(state.familyView, false)
+})
+
+test('users without a family have no scope icon and cannot switch to family', async (t) => {
+  const state = {
+    loading: true, dashboard: null, activeTab: 'overview',
+    renderPlanDeleteDialog: () => '', renderMovementDialog: () => '',
+    loadDashboard: () => assert.fail('Must not switch'),
+  }
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ family: null })))
+  await finance.loadFamilyAvailability.call(state)
+  assert.equal(state.familyAvailable, false)
+  assert.doesNotMatch(text(finance.render.call(state)), /scope-toggle/)
+  finance.changeView.call(state, { currentTarget: { value: 'family' } })
+  assert.notEqual(state.familyView, true)
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ family: { id: 4 } })))
+  await finance.loadFamilyAvailability.call(state)
+  assert.equal(state.familyAvailable, true)
+  assert.match(text(finance.render.call(state)), /scope-toggle/)
+})
+
+test('family lookup failure is visible and retry restores membership availability', async (t) => {
+  const state = {}
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: 'Sin conexión' }), { status: 503 }))
+  await finance.loadFamilyAvailability.call(state)
+  assert.match(state.familyError, /Sin conexión/)
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ family: { id: 4 } })))
+  await finance.loadFamilyAvailability.call(state)
+  assert.equal(state.familyError, '')
+  assert.equal(state.familyAvailable, true)
 })
 
 test('calendar family mode uses authorized family reads and suppresses all movement writes', async (t) => {

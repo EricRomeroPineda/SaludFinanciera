@@ -114,7 +114,7 @@ function validateProfile(photo, theme) {
 }
 
 function validateTheme(theme) {
-  if (!themes.some(({ id }) => id === theme)) invalidInput('Selecciona uno de los cuatro temas disponibles.')
+  if (!themes.some(({ id }) => id === theme)) invalidInput('Selecciona uno de los colores disponibles.')
 }
 
 export async function registerUser(name, password, photo, recoveryKey, theme = 'verde') {
