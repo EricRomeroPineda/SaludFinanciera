@@ -9,6 +9,7 @@ class AccessRecovery extends LitElement {
     busy: { state: true }, error: { state: true }, notice: { state: true },
     token: { state: true }, resendSeconds: { state: true },
     email: { state: true }, verifiedEmail: { state: true }, useKey: { state: true },
+    selectedMethod: { state: true },
   }
 
   constructor() {
@@ -20,6 +21,7 @@ class AccessRecovery extends LitElement {
     this.email = ''
     this.verifiedEmail = ''
     this.useKey = false
+    this.selectedMethod = ''
     this.resendSeconds = 0
     this.generation = 0
   }
@@ -48,6 +50,7 @@ class AccessRecovery extends LitElement {
     this.verifiedEmail = ''
     this.token = ''
     this.useKey = false
+    this.selectedMethod = ''
     this.error = ''
     this.notice = ''
     this.updateComplete.then(() => this.renderRoot.querySelector('[name="email"]')?.focus())
@@ -76,11 +79,20 @@ class AccessRecovery extends LitElement {
       this.email = result.email
       this.verifiedEmail = result.email
       this.useKey = false
+      this.selectedMethod = ''
     } catch (error) {
       if (generation === this.generation) this.error = error.message
     } finally {
       if (generation === this.generation) this.busy = false
     }
+  }
+
+  selectMethod(method) {
+    if (this.busy) return
+    this.selectedMethod = method
+    this.useKey = method === 'key'
+    this.error = ''
+    this.notice = ''
   }
 
   async submit(event, purpose) {
@@ -124,17 +136,9 @@ class AccessRecovery extends LitElement {
       mail: svg`<rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" />`,
       key: svg`<circle cx="8" cy="9" r="5" /><path d="m12 13 8 8m-4-4 3-3m-6 0 3-3" />`,
       resetKey: svg`<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" /><circle cx="12" cy="11" r="2" /><path d="M12 13v5" />`,
-      info: svg`<circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v1" />`,
     }
     return html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       stroke-width="1.8" aria-hidden="true">${paths[kind]}</svg>`
-  }
-
-  help(label, description) {
-    return html`<details class="recovery-help">
-      <summary aria-label=${`Información: ${label}`} title=${`Información: ${label}`}>${this.icon('info')}</summary>
-      <p>${description}</p>
-    </details>`
   }
 
   render() {
@@ -160,28 +164,38 @@ class AccessRecovery extends LitElement {
       </form>
       ${this.verifiedEmail ? html`
         <p class="success-message" role="status">Correo validado.</p>
-        <form class="auth-form recovery-options" autocomplete="off" @submit=${(event) => this.submit(event, event.submitter?.value)}>
+        <form class="auth-form recovery-options" autocomplete="off"
+          @submit=${(event) => this.submit(event, this.useKey ? undefined : this.selectedMethod)}>
           <div class="recovery-actions">
             <div class="recovery-action">
               <button class="quiet-button recovery-icon" type="button"
-                @click=${(event) => this.submit({ preventDefault() {}, currentTarget: event.currentTarget.form }, 'reset-password')}
+                @click=${() => this.selectMethod('reset-password')} aria-pressed=${String(this.selectedMethod === 'reset-password')}
                 aria-label="Recuperar contraseña por correo" title="Recuperar contraseña por correo"
-                ?disabled=${this.busy || this.resendSeconds > 0}>${this.icon('mail')}</button>
-              ${this.help('Recuperar contraseña por correo', 'Envía un enlace de un solo uso a tu correo para elegir una contraseña nueva. No necesitas la palabra clave. Caduca en 30 minutos.')}
+                ?disabled=${this.busy}>${this.icon('mail')}</button>
             </div>
             <div class="recovery-action">
               <button class="quiet-button recovery-icon" type="button" aria-label="Recuperar contraseña con palabra clave"
                 title="Recuperar contraseña con palabra clave" aria-pressed=${String(this.useKey)} ?disabled=${this.busy}
-                @click=${() => { this.useKey = !this.useKey; this.error = ''; this.notice = '' }}>${this.icon('key')}</button>
-              ${this.help('Recuperar contraseña con palabra clave', 'Escribe tu palabra clave de recuperación. Si es válida, aparecerá el campo para definir una nueva contraseña.')}
+                @click=${() => this.selectMethod('key')}>${this.icon('key')}</button>
             </div>
             <div class="recovery-action">
               <button class="quiet-button recovery-icon" type="button"
-                @click=${(event) => this.submit({ preventDefault() {}, currentTarget: event.currentTarget.form }, 'reset-recovery')}
+                @click=${() => this.selectMethod('reset-recovery')} aria-pressed=${String(this.selectedMethod === 'reset-recovery')}
                 aria-label="Recuperar palabra clave por correo" title="Recuperar palabra clave por correo"
-                ?disabled=${this.busy || this.resendSeconds > 0}>${this.icon('resetKey')}</button>
-              ${this.help('Recuperar palabra clave por correo', 'Envía un enlace para elegir una nueva palabra clave de recuperación. Tu contraseña de acceso no cambia. Caduca en 30 minutos.')}
+                ?disabled=${this.busy}>${this.icon('resetKey')}</button>
             </div>
+            <p aria-live="polite">${this.selectedMethod === 'reset-password'
+              ? 'Recuperar contraseña por correo: recibirás un enlace para elegir una contraseña nueva. No necesitas la palabra clave. El enlace caduca en 30 minutos.'
+              : this.selectedMethod === 'reset-recovery'
+                ? 'Recuperar palabra clave por correo: recibirás un enlace para elegir una palabra clave nueva. Tu contraseña de acceso no cambia. El enlace caduca en 30 minutos.'
+                : this.useKey
+                  ? 'Recuperar contraseña con palabra clave: escríbela para validarla y mostrar el cambio de contraseña.'
+                  : 'Selecciona un icono para elegir cómo recuperar tu acceso.'}</p>
+            ${['reset-password', 'reset-recovery'].includes(this.selectedMethod) ? html`
+              <button class="primary-button" type="submit" ?disabled=${this.busy || this.resendSeconds > 0}>
+                ${this.busy ? 'Enviando…' : this.selectedMethod === 'reset-password'
+                  ? 'Enviar enlace de contraseña al correo' : 'Enviar enlace de palabra clave al correo'}
+              </button>` : ''}
           </div>
           ${this.resendSeconds > 0 ? html`<p role="status">Espera ${this.resendSeconds} segundos para solicitar otro correo.</p>` : ''}
           ${this.useKey ? html`<label>Palabra clave de recuperación

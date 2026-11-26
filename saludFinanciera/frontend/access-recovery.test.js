@@ -15,7 +15,7 @@ const methods = components.get('access-recovery').prototype
 const emailMethods = components.get('email-settings').prototype
 const validated = () => ({
   email: 'ana@example.com', verifiedEmail: 'ana@example.com', useKey: true, generation: 0,
-  icon: methods.icon, help: methods.help,
+  icon: methods.icon,
 })
 
 function text(value) {
@@ -32,7 +32,7 @@ test('new password field is absent until the server validates email and recovery
   assert.match(checked, /name="accessRecoveryKey".*autocomplete="new-password"/)
   assert.match(checked, /\.value= required/)
   assert.match(checked, /aria-label="Editar correo"/)
-  assert.match(checked, /Información: Recuperar contraseña por correo/)
+  assert.doesNotMatch(checked, /Información:|recovery-help/)
   assert.match(checked, /Recuperar palabra clave por correo/)
   const second = text(methods.render.call({ token: 'a'.repeat(64) }))
   assert.match(second, /<email-settings .purpose=reset-password/)
@@ -40,6 +40,25 @@ test('new password field is absent until the server validates email and recovery
   const passwordForm = text(emailMethods.render.call({ purpose: 'reset-password', eye: () => '' }))
   assert.match(passwordForm, /name="password"/)
   assert.doesNotMatch(passwordForm, /name="recoveryKey"/)
+})
+
+test('selecting a method updates its explanation and shows a separate send action only for email methods', () => {
+  const state = validated()
+  for (const method of ['reset-password', 'reset-recovery', 'key']) {
+    methods.selectMethod.call(state, method)
+    assert.equal(state.selectedMethod, method)
+    assert.equal(state.useKey, method === 'key')
+    const markup = text(methods.render.call(state))
+    if (method === 'key') {
+      assert.match(markup, /escríbela para validarla/)
+      assert.doesNotMatch(markup, /Enviar enlace de/)
+    } else {
+      assert.match(markup, /recibirás un enlace/)
+      assert.match(markup, method === 'reset-password'
+        ? /Enviar enlace de contraseña al correo/ : /Enviar enlace de palabra clave al correo/)
+      assert.doesNotMatch(markup, /name="accessRecoveryKey"/)
+    }
+  }
 })
 
 for (const purpose of [undefined, 'reset-password', 'reset-recovery']) {
