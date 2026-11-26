@@ -91,6 +91,7 @@ test('new movement images use the verified email folder inside the configured se
   await uploadEvidence(7, 9, await image(), 'receipt.png')
   const reference = db.rows[0].archivo
   assert.match(reference, /^ana@example.com\/movimientos\/[a-f0-9-]{36}\.webp$/)
+  assert.deepEqual((await readdir(join(root, 'ana@example.com'))).sort(), ['movimientos', 'perfil'])
   assert.ok((await readFile(join(root, reference))).length > 0)
   assert.equal((await getEvidence(8, 9, 1)).length > 0, true)
   await deleteEvidence(7, 9, 1)

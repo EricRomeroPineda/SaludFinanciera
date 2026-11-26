@@ -100,7 +100,7 @@ Al crear o editar un movimiento puedes adjuntar hasta **5 imágenes JPG, PNG o W
 
 Ejecuta una sola vez `server/migrations/011-evidence-user-storage.sql` antes de actualizar el backend; amplía `movimiento_evidencia.archivo` para guardar referencias relativas. Las nuevas imágenes se guardan en `<PROFILE_PHOTO_DIR>/<correo-verificado>/movimientos/<uuid>.webp`, al lado de `perfil/`. Sin correo verificado se usa `usuario-<id>/movimientos/`; al verificarlo se trasladan las imágenes a su carpeta de correo y se actualizan las referencias en la misma transacción de verificación. Si falla, se conservan los originales. Las imágenes antiguas en `storage/evidence/` siguen disponibles sin moverlas manualmente; conserva y respalda también esa carpeta. Sin `PROFILE_PHOTO_DIR`, la raíz compartida es `storage/profile-photos/`.
 
-La carpeta se crea automáticamente y el usuario que ejecuta Node debe poder escribir en ella. **Respalda las carpetas junto con MySQL**; copiar solo la base no conserva las imágenes. El acceso es mediante `/api/movements/:id/evidence`, con sesión y comprobación de propiedad o membresía familiar actual en cada lectura. No son enlaces públicos ni se permiten modificaciones de las imágenes de otros usuarios.
+Al guardar la primera imagen se crea una sola carpeta del usuario con las dos subcarpetas `perfil/` y `movimientos/`, aunque una todavía esté vacía. El usuario que ejecuta Node debe poder escribir en ellas. **Respalda las carpetas junto con MySQL**; copiar solo la base no conserva las imágenes. El acceso es mediante `/api/movements/:id/evidence`, con sesión y comprobación de propiedad o membresía familiar actual en cada lectura. No son enlaces públicos ni se permiten modificaciones de las imágenes de otros usuarios.
 
 El botón **Evidencia (opcional)** aparece en el registro general, el detalle diario del calendario y los historiales de tarjetas, planes, suscripciones y préstamos. Permite consultar imágenes, abrirlas en otra pestaña y, en vista individual, agregar o eliminar las propias, incluso de desembolsos cuyo monto es fijo. La familia solo puede consultarlas. Adjuntar/quitar evidencia no altera montos ni saldos; eliminar el movimiento elimina sus referencias y después sus archivos. Un error de limpieza en disco se registra explícitamente en la consola como `[EVIDENCIA]`.
 
@@ -123,7 +123,7 @@ El lápiz sobre la foto abre un editor con vista circular, selección de archivo
 Configura en el `.env` del **equipo que ejecuta Node**:
 
 ```dotenv
-PROFILE_PHOTO_DIR=/home/lenovoserver/Imágenes/Servidor
+PROFILE_PHOTO_DIR=/run/media/lenovoserver/discoDuro/Servidor
 ```
 
 Los archivos se guardan en `<PROFILE_PHOTO_DIR>/<correo-verificado>/perfil/<uuid>.webp`. Sin correo verificado se usa `usuario-<id>/perfil/`; al verificarlo, la foto actual se traslada a la carpeta del correo. Los caracteres especiales del correo se codifican para evitar rutas inseguras. La carpeta se crea automáticamente si el usuario del proceso tiene permisos; sin la variable se utiliza `storage/profile-photos` dentro del proyecto. No se debe publicar esta carpeta mediante un servidor de archivos: la API exige sesión y solo sirve la foto actual de su propietario. No se comparte con la vista familiar.

@@ -52,6 +52,7 @@ test('unverified uploads are optimized in a user folder and move to the verified
   const { state, connection } = await setup(t)
   const first = await uploadProfilePhoto(7, image)
   assert.match(first, /^\/api\/profile-photo\/7\/usuario-7\//)
+  assert.deepEqual((await readdir(join(state.root, 'usuario-7'))).sort(), ['movimientos', 'perfil'])
   const metadata = await sharp(await readFile(diskPath(state.root, first))).metadata()
   assert.equal(metadata.format, 'webp')
   assert.equal(metadata.width, 800)

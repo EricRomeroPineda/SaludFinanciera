@@ -1,11 +1,10 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { readFile, unlink, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { pool } from './db.js'
 import { normalizeEvidence } from './evidence-files.js'
 import { readImage } from './evidence.js'
-import { userFolder, userStoragePath } from './user-storage.js'
+import { ensureUserStorage, userFolder, userStoragePath } from './user-storage.js'
 
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const pattern = /^\/api\/profile-photo\/([1-9]\d*)\/([^/]+)\/([a-f0-9-]{36}\.webp)$/
@@ -35,7 +34,7 @@ async function writePhoto(userId, email, buffer) {
   const photo = `/api/profile-photo/${userId}/${encodeURIComponent(folder)}/${randomUUID()}.webp`
   if (photo.length > 500) throw invalid('El correo es demasiado largo para crear la carpeta de perfil.')
   const { file } = location(photo)
-  await mkdir(resolve(file, '..'), { recursive: true, mode: 0o700 })
+  await ensureUserStorage(folder)
   try {
     await writeFile(file, buffer, { flag: 'wx', mode: 0o600 })
   } catch (error) {

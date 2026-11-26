@@ -1,8 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
-import { dirname } from 'node:path'
-import { userFolder, userStoragePath } from './user-storage.js'
+import { ensureUserStorage, userFolder, userStoragePath } from './user-storage.js'
 
 const directory = new URL('../storage/evidence/', import.meta.url)
 export const maxEvidenceBytes = 5 * 1024 * 1024
@@ -40,7 +39,8 @@ export async function writeEvidence(buffer, owner) {
   const name = owner ? `${userFolder(owner.id, owner.email)}/movimientos/${filename}` : filename
   if (name.length > 500) throw Object.assign(new Error('El correo es demasiado largo para la carpeta de movimientos.'), { statusCode: 400 })
   try {
-    await mkdir(owner ? dirname(fileUrl(name)) : directory, { recursive: true, mode: 0o700 })
+    if (owner) await ensureUserStorage(userFolder(owner.id, owner.email))
+    else await mkdir(directory, { recursive: true, mode: 0o700 })
     await writeFile(fileUrl(name), buffer, { flag: 'wx', mode: 0o600 })
   } catch (error) {
     if (error.code !== 'EEXIST') await removeEvidenceFiles([name])
