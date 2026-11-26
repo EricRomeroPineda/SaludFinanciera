@@ -7,7 +7,7 @@ import financeStyles from '../frontend/styles.css?inline'
 import responsiveStyles from '../frontend/responsive.css?inline'
 import styles from './styles.css?inline'
 import { calculateCosts, daysUntilBilling, frequencies, isWeekly, weekdays } from './calculations.js'
-import { sortByDue, viewToggle } from '../frontend/record-view.js'
+import { addIcon, sortByDue, viewToggle } from '../frontend/record-view.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 
@@ -274,7 +274,7 @@ class Subscriptions extends LitElement {
           ${viewToggle(this.listView, () => { this.listView = !this.listView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
             @click=${() => this.showForm ? (this.showForm = false) : this.openForm()}>
-            ${this.showForm ? 'Cerrar formulario' : '+ Agregar suscripción'}
+            ${this.showForm ? 'Cerrar formulario' : html`${addIcon()}Agregar suscripción`}
           </button>
         </div>
         ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}

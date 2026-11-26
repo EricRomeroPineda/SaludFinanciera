@@ -1,6 +1,6 @@
 :host { display: block; }
 
-.dashboard { width: calc(100% - 48px); }
+.dashboard { width: calc(100% - 150px); }
 .back-to-menu { margin-bottom: 24px; }
 
 [hidden] { display: none !important; }
@@ -67,7 +67,7 @@
 .record-list .credit-progress small { margin-top: 3px; font-size: 10px; }
 .record-list .card-trash-button, .record-list .trash-button { width: 30px; height: 30px; padding: 6px; }
 .record-list :is(.text-button, dd, dt) { overflow-wrap: anywhere; white-space: normal; }
-@media (min-width: 1100px) {
+@media (min-width: 1250px) {
   .record-list > article { grid-template-columns: minmax(140px, 1fr) minmax(145px, 1fr) minmax(160px, 1.1fr) minmax(300px, 2.2fr) minmax(130px, .9fr); }
   .record-list > article > h3 { grid-column: 1; grid-row: 1; }
   .record-list > article > :is(.credit-card-heading, .subscription-heading) { grid-column: 1; grid-row: 2; }

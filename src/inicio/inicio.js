@@ -228,7 +228,7 @@ class Inicio extends LitElement {
 
   renderHeader() {
     return html`
-      <header class="app-header">
+      <header class=${`app-header${this.activeSection === 'finance' && this.activeTab !== 'profile' ? ' finance-header' : ''}`}>
         <a class="brand" href="/" aria-label="Salud Financiera">
           <span class="brand-icon" aria-hidden="true">$</span>
           Salud <span>Financiera</span>

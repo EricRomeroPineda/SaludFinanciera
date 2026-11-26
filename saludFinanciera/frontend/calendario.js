@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
+import { addIcon } from './record-view.js'
 import './movement-evidence.js'
 import './google-calendar-sync.js'
 import calendarStyles from './calendario.css?inline'
@@ -253,7 +254,7 @@ class FinancialCalendar extends LitElement {
         <section class="day-card">
           <h2 class="day-title">${dayFormat.format(selectedDate)}</h2>
           <p class="day-total">${this.loading || this.error ? 'Consulta del día pendiente' : selected ? `${selected.count} movimiento${selected.count === 1 ? '' : 's'} en este día` : '0 movimientos registrados en este día'}</p>
-          ${!this.familyView ? html`<button class="calendar-primary" type="button" @click=${() => this.requestMovement()}>+ Registrar movimiento en este día</button>` : ''}
+          ${!this.familyView ? html`<button class="calendar-primary" type="button" @click=${() => this.requestMovement()}>${addIcon()} Registrar movimiento en este día</button>` : ''}
           ${scheduled.some((event) => event.date === this.selectedDay) ? html`
             <div class="scheduled-list">
               <h3>Programado para este día</h3>

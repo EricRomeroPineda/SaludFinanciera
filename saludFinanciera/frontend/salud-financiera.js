@@ -5,7 +5,7 @@ import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types
 import { calculateAccountSummary, calculatePeriodActivity, cardPaymentStatus } from '../account-summary.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
-import { sortByDue, viewToggle } from './record-view.js'
+import { addIcon, sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -734,7 +734,7 @@ class SaludFinanciera extends LitElement {
             this.formLimit = ''
             this.formAvailable = '0'
           }}>
-            ${this.showAccountForm ? 'Cancelar' : '+ Nueva cuenta'}
+            ${this.showAccountForm ? 'Cancelar' : html`${addIcon()}Nueva cuenta`}
           </button>
         </div>
         ${this.showAccountForm ? this.renderAccountForm() : ''}
@@ -819,7 +819,7 @@ class SaludFinanciera extends LitElement {
         <div class="section-heading viewer-heading">
           <h2>Mis tarjetas</h2>
           ${viewToggle(this.cardsListView, () => { this.cardsListView = !this.cardsListView })}
-          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${this.startCardCreation}>+ Nueva tarjeta</button>
+          <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${this.startCardCreation}>${addIcon()}Nueva tarjeta</button>
         </div>
         <div class=${`card-type-columns${this.cardsListView ? ' list-groups' : ''}`}>
           ${groups.map((group) => html`
@@ -952,7 +952,7 @@ class SaludFinanciera extends LitElement {
             this.planUnit = ''
             this.showPlanForm = !this.showPlanForm
           }}>
-            ${this.showPlanForm ? 'Cancelar' : '+ Nuevo plan'}
+            ${this.showPlanForm ? 'Cancelar' : html`${addIcon()}Nuevo plan`}
           </button>
         </div>
         ${this.showPlanForm ? html`
@@ -1098,9 +1098,9 @@ class SaludFinanciera extends LitElement {
               this.showCategoryForm = !this.showCategoryForm
               this.categoryError = ''
               this.categoryNotice = ''
-            }}>${this.showCategoryForm ? 'Cerrar categorías' : '+ Registrar categoría'}</button>
+            }}>${this.showCategoryForm ? 'Cerrar categorías' : html`${addIcon()}Registrar categoría`}</button>
             <button class="primary-button compact-button" type="button"
-              @click=${() => this.openCalendarMovement({ date: localDateInput() })}>+ Nuevo movimiento</button>
+              @click=${() => this.openCalendarMovement({ date: localDateInput() })}>${addIcon()}Nuevo movimiento</button>
           </div>
         </div>
         ${this.showCategoryForm && !this.showMovementForm ? this.renderCategoryForm() : ''}
@@ -1182,7 +1182,7 @@ class SaludFinanciera extends LitElement {
           this.showCategoryForm = !this.showCategoryForm
           this.categoryError = ''
           this.categoryNotice = ''
-        }}>${this.showCategoryForm ? 'Cerrar categorías' : '+ Registrar categoría'}</button>
+        }}>${this.showCategoryForm ? 'Cerrar categorías' : html`${addIcon()}Registrar categoría`}</button>
         ${this.showCategoryForm ? this.renderCategoryForm() : ''}
       </dialog>
     `

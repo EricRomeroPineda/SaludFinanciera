@@ -1,7 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
-import { sortByDue, viewToggle } from './record-view.js'
+import { addIcon, sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -169,7 +169,7 @@ class Loans extends LitElement {
           ${viewToggle(this.listView, () => { this.listView = !this.listView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} ?disabled=${this.busy}
             @click=${() => this.showForm ? (this.showForm = false) : this.openForm()}>
-            ${this.showForm ? 'Cerrar formulario' : '+ Nuevo préstamo'}
+            ${this.showForm ? 'Cerrar formulario' : html`${addIcon()}Nuevo préstamo`}
           </button>
         </div>
         ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
