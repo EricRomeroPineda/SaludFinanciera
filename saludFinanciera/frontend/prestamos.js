@@ -1,7 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
-import { addIcon, sortByDue, viewToggle } from './record-view.js'
+import { addIcon, editIcon, sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -213,7 +213,7 @@ class Loans extends LitElement {
                 ${item.type === 'debo' && item.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${item.depositDetails}</p>` : ''}
                 <div class="card-actions" ?hidden=${this.familyView}>
                   <button class="text-button" type="button" ?disabled=${this.busy || completed} @click=${() => this.registerPayment(item)}>Registrar abono</button>
-                  <button class="text-button" type="button" ?disabled=${this.busy} @click=${() => this.openForm(item)}>Editar</button>
+                  <button class="edit-button" type="button" aria-label=${`Editar préstamo de ${item.name}`} title="Editar préstamo" ?disabled=${this.busy} @click=${() => this.openForm(item)}>${editIcon()}</button>
                   <button class="card-trash-button" type="button" ?disabled=${this.busy} aria-label=${`Eliminar préstamo de ${item.name}`}
                     title="Eliminar préstamo" @click=${() => { this.error = ''; this.pendingDelete = item }}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" /></svg>

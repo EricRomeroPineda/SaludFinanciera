@@ -1,7 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
-import { addIcon } from './record-view.js'
+import { addIcon, editIcon } from './record-view.js'
 import './movement-evidence.js'
 import './google-calendar-sync.js'
 import calendarStyles from './calendario.css?inline'
@@ -161,7 +161,7 @@ class FinancialCalendar extends LitElement {
                       </button></td>
                       <td><div class="monthly-actions">
                         ${!this.familyView && item.loanKind !== 'desembolso' ? html`
-                          <button class="calendar-action" type="button" @click=${() => this.movementAction('edit-movement', item)}>Editar</button>
+                          <button class="calendar-action" type="button" aria-label=${`Editar movimiento ${item.id}`} title="Editar movimiento" @click=${() => this.movementAction('edit-movement', item)}>${editIcon()}</button>
                           <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
                         ` : item.loanKind === 'desembolso' ? 'Desembolso fijo' : 'Solo consulta'}
                       </div></td>

@@ -154,11 +154,11 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     const passwordHash = await bcrypt.hash(normalizedPassword, 12)
     const recoveryHash = await bcrypt.hash(normalizedKey, 12)
     const [result] = await connection.execute(
-      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira) VALUES (?, ?, ?, ?, ?, NULL)',
-      [normalizedName, passwordHash, photo, theme, recoveryHash],
+      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira, apariencia) VALUES (?, ?, ?, ?, ?, NULL, ?)',
+      [normalizedName, passwordHash, photo, theme, recoveryHash, theme === 'oscuro' ? 'night' : 'day'],
     )
 
-    return { id: result.insertId, name: normalizedName, photo, theme, sessionVersion: passwordVersion(passwordHash) }
+    return { id: result.insertId, name: normalizedName, photo, theme, appearance: theme === 'oscuro' ? 'night' : 'day', sessionVersion: passwordVersion(passwordHash) }
   } finally {
     try {
       await connection.execute('SELECT RELEASE_LOCK(?)', [lockName])
@@ -178,7 +178,7 @@ export async function authenticateUser(name, password) {
   }
 
   const [users] = await pool.execute(
-    'SELECT id, nombre, password_hash, foto_perfil, tema FROM usuario WHERE nombre = ? LIMIT 2',
+    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance FROM usuario WHERE nombre = ? LIMIT 2',
     [normalizedName],
   )
   if (users.length !== 1 || !await bcrypt.compare(normalizedPassword, users[0].password_hash)) {
@@ -187,13 +187,13 @@ export async function authenticateUser(name, password) {
     throw error
   }
 
-  const { id, nombre, foto_perfil: photo, tema: theme, password_hash: passwordHash } = users[0]
-  return { id, name: nombre, photo, theme, sessionVersion: passwordVersion(passwordHash) }
+  const { id, nombre, foto_perfil: photo, tema: theme, appearance, password_hash: passwordHash } = users[0]
+  return { id, name: nombre, photo, theme, appearance, sessionVersion: passwordVersion(passwordHash) }
 }
 
 export async function findSessionUser(userId) {
   const [users] = await pool.execute(
-    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
+    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, apariencia AS appearance, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
     [userId],
   )
   return users[0] || null
@@ -226,10 +226,26 @@ export async function updateProfile(userId, { photo, theme, recoveryKey, current
   return user
 }
 
-export async function updateTheme(userId, theme) {
-  validateTheme(theme)
-  await pool.execute('UPDATE usuario SET tema = ? WHERE id = ?', [theme, userId])
-  return findSessionUser(userId)
+export async function updateTheme(userId, theme, appearance) {
+  if (theme === undefined && appearance === undefined) invalidInput('Selecciona el color o el modo de apariencia.')
+  if (theme !== undefined) validateTheme(theme)
+  if (appearance !== undefined && !['day', 'night'].includes(appearance)) {
+    invalidInput('Selecciona el modo de día o noche.')
+  }
+  if (theme !== undefined && appearance !== undefined) {
+    await pool.execute('UPDATE usuario SET tema = ?, apariencia = ? WHERE id = ?', [theme, appearance, userId])
+  } else if (theme !== undefined) {
+    await pool.execute('UPDATE usuario SET tema = ? WHERE id = ?', [theme, userId])
+  } else {
+    await pool.execute('UPDATE usuario SET apariencia = ? WHERE id = ?', [appearance, userId])
+  }
+  const user = await findSessionUser(userId)
+  if (!user) {
+    const error = new Error('El usuario que intentas modificar ya no existe.')
+    error.statusCode = 404
+    throw error
+  }
+  return user
 }
 
 const recoveryAttempts = new Map()

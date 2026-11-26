@@ -7,7 +7,7 @@ import financeStyles from '../frontend/styles.css?inline'
 import responsiveStyles from '../frontend/responsive.css?inline'
 import styles from './styles.css?inline'
 import { calculateCosts, daysUntilBilling, frequencies, isWeekly, weekdays } from './calculations.js'
-import { addIcon, sortByDue, viewToggle } from '../frontend/record-view.js'
+import { addIcon, editIcon, sortByDue, viewToggle } from '../frontend/record-view.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 
@@ -317,7 +317,7 @@ class Subscriptions extends LitElement {
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}
                       @click=${() => { this.selectedSubscription = item }}>Ver movimientos</button>
-                    <button class="text-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting} @click=${() => this.openForm(item)}>Editar</button>
+                    <button class="edit-button" type="button" aria-label=${`Editar ${item.name}`} title="Editar suscripción" ?hidden=${this.familyView} ?disabled=${this.submitting} @click=${() => this.openForm(item)}>${editIcon()}</button>
                     <button class="trash-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
                       aria-label=${`Eliminar ${item.name}`} title="Eliminar suscripción" @click=${() => this.requestDelete(item)}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">

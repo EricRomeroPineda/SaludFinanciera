@@ -132,8 +132,8 @@ export const server = createServer(async (request, response) => {
     if (route === 'PUT /api/auth/theme') {
       const userId = await getUserId(request, response)
       if (!userId) return
-      const { theme } = await readJson(request)
-      sendJson(response, 200, { user: await updateTheme(userId, theme) })
+      const { theme, appearance } = await readJson(request)
+      sendJson(response, 200, { user: await updateTheme(userId, theme, appearance) })
       return
     }
 

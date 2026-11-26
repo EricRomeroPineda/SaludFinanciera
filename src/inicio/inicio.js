@@ -23,6 +23,8 @@ class Inicio extends LitElement {
     savingTheme: { state: true },
     brokenPhoto: { state: true },
     appearance: { state: true },
+    showThemePicker: { state: true },
+    styleError: { state: true },
   }
 
   constructor() {
@@ -39,17 +41,42 @@ class Inicio extends LitElement {
     this.savingTheme = false
     this.brokenPhoto = false
     this.appearance = null
+    this.showThemePicker = false
+    this.styleError = ''
   }
 
   get effectiveAppearance() {
-    return this.appearance || (this.user?.theme === 'oscuro' ? 'night' : 'day')
+    return this.user?.appearance || this.appearance || (this.user?.theme === 'oscuro' ? 'night' : 'day')
   }
 
-  toggleAppearance() {
-    this.appearance = this.effectiveAppearance === 'night' ? 'day' : 'night'
+  async toggleAppearance() {
+    if (this.savingTheme || this.submitting) return
+    const appearance = this.effectiveAppearance === 'night' ? 'day' : 'night'
+    if (!this.user) {
+      this.appearance = appearance
+      return
+    }
+    this.savingTheme = true
+    this.styleError = ''
+    try {
+      const { user } = await apiRequest('/api/auth/theme', {
+        method: 'PUT', body: JSON.stringify({ appearance }),
+      })
+      this.user = user
+      this.appearance = null
+    } catch (error) {
+      this.styleError = error.message
+    } finally {
+      this.savingTheme = false
+    }
   }
 
   updated(changed) {
+    if (changed.has('showThemePicker')) {
+      const dialog = this.renderRoot.querySelector('#theme-picker')
+      if (this.showThemePicker && dialog && !dialog.open) dialog.showModal()
+      else if (!this.showThemePicker && dialog?.open) dialog.close()
+    }
     if (changed.has('user') || changed.has('appearance')) {
       this.setAttribute('data-appearance', this.effectiveAppearance)
     }
@@ -71,6 +98,8 @@ class Inicio extends LitElement {
       this.user = user
       this.activeSection = 'menu'
       this.appearance = null
+      this.styleError = ''
+      this.showThemePicker = false
     } catch (error) {
       if (error.status !== 401) this.error = error.message
     } finally {
@@ -123,6 +152,8 @@ class Inicio extends LitElement {
       this.appearance = null
       this.authMode = 'login'
       this.activeSection = 'menu'
+      this.showThemePicker = false
+      this.styleError = ''
       this.photoDraft = ''
       this.notice = ''
     } catch (error) {
@@ -143,11 +174,12 @@ class Inicio extends LitElement {
   }
 
   async handleThemeChange(event) {
-    const select = event.currentTarget
-    const theme = select.value
+    if (this.savingTheme || this.submitting) return
+    const theme = event.currentTarget.value
     this.error = ''
     this.notice = ''
     this.savingTheme = true
+    this.styleError = ''
     try {
       const { user } = await apiRequest('/api/auth/theme', {
         method: 'PUT',
@@ -155,10 +187,9 @@ class Inicio extends LitElement {
       })
       this.user = user
       this.appearance = null
-      this.notice = 'Tema guardado.'
+      this.showThemePicker = false
     } catch (error) {
-      this.error = error.message
-      select.value = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
+      this.styleError = error.message
     } finally {
       this.savingTheme = false
     }
@@ -235,6 +266,7 @@ class Inicio extends LitElement {
         </a>
         <div class="user-actions">
           ${this.renderAppearanceToggle()}
+          ${this.renderThemeToggle()}
           <button class="user-profile-button" type="button" aria-label=${`Abrir perfil de ${this.user.name}`}
             title="Mi perfil" @click=${() => this.openFinancialSection('profile')}>
             <img class="profile-photo"
@@ -250,6 +282,8 @@ class Inicio extends LitElement {
           <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
         </div>
       </header>
+      ${this.styleError && !this.showThemePicker ? html`<p class="error-message style-error" role="alert">${this.styleError}</p>` : ''}
+      ${this.renderThemePicker()}
     `
   }
 
@@ -258,12 +292,42 @@ class Inicio extends LitElement {
     const label = night ? 'Activar vista de día' : 'Activar vista de noche'
     return html`
       <button class="quiet-button appearance-toggle" type="button" aria-label=${label}
-        title=${label} aria-pressed=${String(night)} @click=${this.toggleAppearance}>
+        title=${label} aria-pressed=${String(night)} ?disabled=${this.savingTheme || this.submitting} @click=${this.toggleAppearance}>
         ${night ? html`<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></svg>`
           : html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z" /></svg>`}
         <span>${night ? 'Día' : 'Noche'}</span>
       </button>
     `
+  }
+
+  renderThemeToggle() {
+    return html`<button class="quiet-button appearance-toggle theme-toggle" type="button"
+      aria-label="Elegir color del tema" title="Elegir color del tema" aria-haspopup="dialog"
+      ?disabled=${this.savingTheme || this.submitting}
+      @click=${() => { this.styleError = ''; this.showThemePicker = true }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.5 1.5 0 0 1 1.1-2.6H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z" />
+        <circle cx="7.5" cy="10" r=".7" /><circle cx="10" cy="6.5" r=".7" /><circle cx="14.5" cy="7" r=".7" /><circle cx="17.5" cy="10.5" r=".7" /></svg>
+    </button>`
+  }
+
+  renderThemePicker() {
+    return html`<dialog id="theme-picker" class="theme-dialog" aria-labelledby="theme-picker-title"
+      @cancel=${(event) => {
+        event.preventDefault()
+        if (!this.savingTheme) this.showThemePicker = false
+      }}>
+      <div class="section-heading"><h2 id="theme-picker-title">Color del tema</h2>
+        <button class="quiet-button" type="button" ?disabled=${this.savingTheme}
+          @click=${() => { this.showThemePicker = false }}>Cerrar</button></div>
+      <p>El color se aplica al fondo, paneles y controles. Día y noche se guardan por separado del color.</p>
+      <div class="theme-options">${themes.map(({ id, label }) => html`
+        <button class="theme-option" data-color=${id} type="button" value=${id}
+          aria-pressed=${String(this.user?.theme === id)} ?disabled=${this.savingTheme || this.submitting}
+          @click=${this.handleThemeChange}><span class="theme-swatch" aria-hidden="true"></span>${label}</button>
+      `)}</div>
+      ${this.savingTheme ? html`<p role="status">Guardando apariencia…</p>` : ''}
+      ${this.styleError ? html`<p class="error-message" role="alert">${this.styleError}</p>` : ''}
+    </dialog>`
   }
 
   renderMenu() {
@@ -391,22 +455,9 @@ class Inicio extends LitElement {
   }
 
   renderProfile() {
-    const selectedTheme = themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde'
     return html`
       <section class="data-card profile-settings">
         <div class="section-heading"><h2>Mi perfil</h2></div>
-        <label class="theme-label">
-          Tema
-          <select ?disabled=${this.savingTheme || this.submitting}
-            @change=${this.handleThemeChange}>
-            ${themes.map(({ id, label }) => html`
-              <option value=${id}
-                .selected=${id === selectedTheme}
-              >${label}</option>
-            `)}
-          </select>
-          <small>${this.savingTheme ? 'Guardando tema…' : 'Cada cambio se guarda automáticamente en tu usuario.'}</small>
-        </label>
         <form class="auth-form" @submit=${this.handleProfileSubmit}>
           ${this.renderPhotoFields()}
           <label>

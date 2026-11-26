@@ -13,6 +13,12 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Color y modo día/noche
+
+Aplica `server/migrations/009-user-appearance.sql` antes de iniciar esta versión. El icono de paleta, junto a Día/Noche en el encabezado, abre un cuadro para seleccionar Verde, Azul, Violeta u Oscuro. El selector ya no aparece en el formulario del perfil. El color tiñe el fondo, paneles, bordes y controles; el modo nocturno conserva la misma paleta en tonos más oscuros. Los colores de ingresos, gastos y transferencias mantienen su significado.
+
+Ambas preferencias se guardan por usuario en MySQL (`tema` y `apariencia`) y se recuperan al iniciar sesión o recargar. Cambiar color no cambia el modo día/noche y viceversa. Si falla el guardado se muestra el error y se conserva la apariencia anterior. En la pantalla de acceso, sin usuario, Día/Noche solo cambia esa vista temporalmente. La migración conserva el modo nocturno de los usuarios que ya tenían el tema Oscuro. Los botones de editar usan un lápiz con descripción y nombre accesible.
+
 ## Vistas y orden de los registros
 
 En **Suscripciones, Planes futuros, Deudores y Tarjetas**, el botón con icono de **lista / cuadrícula** cambia la presentación sin modificar los datos ni la selección del historial; su descripción indica «Ver lista» o «Ver tarjetas» al pasar el cursor y para lectores de pantalla. El área financiera y su encabezado usan `calc(100% - 150px)` en PC, con márgenes laterales de 75 px; en móvil conservan sus márgenes reducidos. Los botones para agregar muestran un icono junto al texto. La lista usa filas compactas con información y acciones en columnas en pantallas amplias, y se adapta a móvil sin ocultar datos. Las dos vistas mantienen la información, acciones y consulta de movimientos, también en la vista familiar de solo lectura.

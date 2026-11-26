@@ -6,6 +6,12 @@ export function addIcon() {
     aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>`
 }
 
+export function editIcon() {
+  return html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true" focusable="false"><path d="m16 3 5 5L8 21H3v-5L16 3Zm-3 3 5 5" /></svg>`
+}
+
 export function sortByDue(items, dueValue) {
   return items.map((item) => {
     const due = dueValue(item)

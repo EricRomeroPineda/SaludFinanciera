@@ -101,7 +101,7 @@ test('restored sessions land on the menu', async (t) => {
 })
 
 test('the shared header uses the saved photo or a default image instead of an initial', () => {
-  const state = { user: { name: 'Eric', photo }, brokenPhoto: false, renderAppearanceToggle: () => '' }
+  const state = { user: { name: 'Eric', photo }, brokenPhoto: false, renderAppearanceToggle: () => '', renderThemeToggle: () => '', renderThemePicker: () => '' }
   const header = handlers.renderHeader.call(state)
   assert.ok(header.values.includes(photo))
   assert.ok(header.strings.join('').includes('<img class="profile-photo"'))
@@ -121,7 +121,7 @@ test('the profile beside logout displays the current user name and corresponding
     { name: 'Eric', photo: 'https://example.com/eric.jpg' },
     { name: 'Ana', photo: 'https://example.com/ana.jpg' },
   ]) {
-    const header = handlers.renderHeader.call({ user, brokenPhoto: false, renderAppearanceToggle: () => '' })
+    const header = handlers.renderHeader.call({ user, brokenPhoto: false, renderAppearanceToggle: () => '', renderThemeToggle: () => '', renderThemePicker: () => '' })
     const markup = header.strings.join('')
     assert.ok(header.values.includes(user.photo))
     assert.ok(header.values.includes(user.name))
@@ -130,20 +130,59 @@ test('the profile beside logout displays the current user name and corresponding
   }
 })
 
-test('day and night change appearance without modifying the saved color theme', () => {
+test('day and night persist per user independently of the color theme', async (t) => {
+  const requests = []
+  let state
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    const body = JSON.parse(options.body)
+    requests.push({ path, body })
+    return new Response(JSON.stringify({ user: { ...state.user, appearance: body.appearance } }))
+  })
   const effectiveAppearance = Object.getOwnPropertyDescriptor(handlers, 'effectiveAppearance').get
   for (const theme of ['verde', 'azul', 'violeta', 'oscuro']) {
-    const state = { user: { theme }, appearance: null }
+    state = { user: { theme }, appearance: null }
     Object.defineProperty(state, 'effectiveAppearance', { get: () => effectiveAppearance.call(state) })
     const initial = theme === 'oscuro' ? 'night' : 'day'
     assert.equal(state.effectiveAppearance, initial)
-    handlers.toggleAppearance.call(state)
+    await handlers.toggleAppearance.call(state)
     assert.equal(state.effectiveAppearance, initial === 'night' ? 'day' : 'night')
     assert.equal(state.user.theme, theme)
-    handlers.toggleAppearance.call(state)
+    await handlers.toggleAppearance.call(state)
     assert.equal(state.effectiveAppearance, initial)
     assert.equal(state.user.theme, theme)
   }
+  assert.equal(requests.length, 8)
+  assert.ok(requests.every(({ path, body }) => path === '/api/auth/theme' && Object.keys(body).join() === 'appearance'))
+})
+
+test('saved appearance is restored and failed saves do not claim a mode or color change', async (t) => {
+  const effective = Object.getOwnPropertyDescriptor(handlers, 'effectiveAppearance').get
+  const state = { user: { theme: 'azul', appearance: 'night' }, appearance: null, showThemePicker: true }
+  Object.defineProperty(state, 'effectiveAppearance', { get: () => effective.call(state) })
+  assert.equal(state.effectiveAppearance, 'night')
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: 'Sin conexión' }), { status: 503 }))
+  await handlers.toggleAppearance.call(state)
+  assert.equal(state.effectiveAppearance, 'night')
+  assert.equal(state.savingTheme, false)
+  assert.equal(state.styleError, 'Sin conexión')
+  await handlers.handleThemeChange.call(state, { currentTarget: { value: 'violeta' } })
+  assert.equal(state.user.theme, 'azul')
+  assert.equal(state.showThemePicker, true)
+  assert.equal(state.styleError, 'Sin conexión')
+})
+
+test('the color selector lives in a header dialog, not the profile form', () => {
+  const flatten = (value) => Array.isArray(value) ? value.map(flatten).join('')
+    : value?.strings ? value.strings.reduce((output, part, index) => output + part + flatten(value.values[index]), '')
+      : value == null || typeof value === 'function' ? '' : String(value)
+  const toggle = flatten(handlers.renderThemeToggle.call({}))
+  assert.match(toggle, /aria-label="Elegir color del tema"/)
+  assert.match(toggle, /aria-haspopup="dialog"/)
+  const picker = flatten(handlers.renderThemePicker.call({ user: { theme: 'azul' } }))
+  assert.match(picker, /<dialog id="theme-picker"/)
+  for (const color of ['Verde', 'Azul', 'Violeta', 'Oscuro']) assert.ok(picker.includes(color))
+  const profile = flatten(handlers.renderProfile.call({ user: { name: 'Ana' }, renderPhotoFields: () => '' }))
+  assert.doesNotMatch(profile, /theme-label|<select|Color del tema/)
 })
 
 test('finance module owns its navigation and loans outside the orchestrator', () => {

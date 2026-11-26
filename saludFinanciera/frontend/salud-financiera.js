@@ -5,7 +5,7 @@ import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types
 import { calculateAccountSummary, calculatePeriodActivity, cardPaymentStatus } from '../account-summary.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
-import { addIcon, sortByDue, viewToggle } from './record-view.js'
+import { addIcon, editIcon, sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -749,9 +749,9 @@ class SaludFinanciera extends LitElement {
                   <td>${account.total == null ? '—' : this.formatMoney(account.total)}</td>
                   <td>${this.formatDate(account.paymentDueDate)}</td>
                   <td class="row-actions" ?hidden=${this.familyView}>
-                    <button class="text-button" type="button" @click=${() => {
+                    <button class="edit-button" type="button" aria-label=${`Editar ${account.name}`} title="Editar cuenta" @click=${() => {
                       this.startAccountEdit(account)
-                    }}>Editar</button>
+                    }}>${editIcon()}</button>
                     <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteAccount(account)}>Eliminar</button>
                   </td>
                 </tr>
@@ -925,7 +925,7 @@ class SaludFinanciera extends LitElement {
                       <button class="text-button" type="button" ?disabled=${this.submitting}
                         @click=${() => this.handleConfirmCardPayment(card)}>${cardPaymentStatus(card, this.today).manual
                           ? 'Retirar confirmación manual' : 'Confirmar pago manualmente'}</button>` : ''}
-                    <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
+                    <button class="edit-button" type="button" aria-label=${`Editar tarjeta ${card.name}`} title="Editar tarjeta" @click=${() => this.startAccountEdit(card)}>${editIcon()}</button>
                     <button class="card-trash-button" type="button" aria-label=${`Eliminar ${card.name}`}
                       title="Eliminar tarjeta" @click=${() => this.handleDeleteAccount(card)}>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1051,12 +1051,12 @@ class SaludFinanciera extends LitElement {
         <div class="card-actions" ?hidden=${this.familyView}>
           <button class="text-button" type="button" ?disabled=${this.submitting}
             @click=${() => this.startPlanMovement(plan)}>Registrar movimiento</button>
-          <button class="text-button" type="button" @click=${() => {
+          <button class="edit-button" type="button" aria-label=${`Editar plan ${plan.name}`} title="Editar plan" @click=${() => {
             this.activeTab = 'plans'
             this.editingPlan = plan
             this.planUnit = ['semana', 'mes'].includes(plan.periodUnit) ? plan.periodUnit : ''
             this.showPlanForm = true
-          }}>Editar plan</button>
+          }}>${editIcon()}</button>
           <button class="card-trash-button" type="button" ?disabled=${this.submitting}
             aria-label=${`Eliminar ${plan.name}`} title="Eliminar plan" @click=${() => this.requestDeletePlan(plan)}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1354,7 +1354,7 @@ class SaludFinanciera extends LitElement {
           </span>
           ${actions && !this.familyView ? html`
             <span class="movement-actions">
-              <button class="text-button" type="button" @click=${() => this.startMovementEdit(item)}>Editar</button>
+              <button class="edit-button" type="button" aria-label=${`Editar movimiento ${item.id}`} title="Editar movimiento" @click=${() => this.startMovementEdit(item)}>${editIcon()}</button>
               <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteMovement(item.id)} aria-label="Eliminar movimiento">×</button>
             </span>
           ` : ''}

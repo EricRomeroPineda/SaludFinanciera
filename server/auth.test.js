@@ -51,7 +51,8 @@ test('registration stores photo, theme and a hashed recovery key', async (t) => 
     release: () => { released = true },
   }))
   const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul')
-  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', sessionVersion: versionFor(inserted[1]) })
+  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', sessionVersion: versionFor(inserted[1]) })
+  assert.equal(inserted[5], 'day')
   assert.equal(inserted[2], photo)
   assert.equal(inserted[3], 'azul')
   assert.notEqual(inserted[4], recoveryKey)
@@ -71,14 +72,14 @@ test('registration rejects missing photos, recovery keys and invalid themes befo
 test('login and restored sessions return saved profile fields without exposing hashes', async (t) => {
   t.mock.method(pool, 'execute', async (sql) => {
     if (sql.includes('WHERE nombre')) return [[{
-      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta',
+      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', appearance: 'night',
     }]]
-    return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', hasRecoveryKey: 1 }]]
+    return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 }]]
   })
   assert.deepEqual(await authenticateUser('Ana', password), {
-    id: 7, name: 'Ana', photo, theme: 'violeta', sessionVersion: versionFor(passwordHash),
+    id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', sessionVersion: versionFor(passwordHash),
   })
-  assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', hasRecoveryKey: 1 })
+  assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 })
   await assert.rejects(authenticateUser('Ana', 'wrong'), { statusCode: 401 })
 })
 
@@ -96,6 +97,29 @@ test('all four themes persist independently of an existing profile photo', async
   assert.equal(themes.length, 4)
   for (const { id } of themes) assert.equal((await updateTheme(7, id)).theme, id)
   await assert.rejects(updateTheme(7, 'invalid'), { statusCode: 400 })
+})
+
+test('appearance changes persist only the authenticated user mode and preserve the color', async (t) => {
+  let appearance = 'day'
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    if (sql.startsWith('UPDATE')) {
+      assert.equal(sql, 'UPDATE usuario SET apariencia = ? WHERE id = ?')
+      assert.equal(params[1], 7)
+      appearance = params[0]
+      return [{ affectedRows: 1 }]
+    }
+    assert.match(sql, /apariencia AS appearance/)
+    return [[{ id: 7, name: 'Ana', photo, theme: 'azul', appearance }]]
+  })
+  for (const mode of ['night', 'day']) {
+    const user = await updateTheme(7, undefined, mode)
+    assert.equal(user.appearance, mode)
+    assert.equal(user.theme, 'azul')
+  }
+  for (const mode of ['dark', '', null, {}, 1]) {
+    await assert.rejects(updateTheme(7, undefined, mode), { statusCode: 400 })
+  }
+  await assert.rejects(updateTheme(7), { statusCode: 400 })
 })
 
 test('profile photo updates preserve the recovery key when omitted', async (t) => {
