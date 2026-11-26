@@ -1,4 +1,4 @@
-import { html } from 'lit'
+import { html, svg } from 'lit'
 
 export function sortByDue(items, dueValue) {
   return items.map((item) => {
@@ -11,8 +11,19 @@ export function sortByDue(items, dueValue) {
 }
 
 export function viewToggle(listView, toggle) {
+  const label = listView ? 'Ver tarjetas' : 'Ver lista'
   return html`<button class="quiet-button view-toggle" type="button"
-    aria-label=${listView ? 'Ver tarjetas' : 'Ver lista'} @click=${toggle}>
-    ${listView ? 'Ver tarjetas' : 'Ver lista'}
+    aria-label=${label} title=${label} @click=${toggle}>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      ${listView ? svg`
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      ` : svg`
+        <path d="M8 5h13M8 12h13M8 19h13" />
+        <path d="M3 5h.01M3 12h.01M3 19h.01" />
+      `}
+    </svg>
   </button>`
 }

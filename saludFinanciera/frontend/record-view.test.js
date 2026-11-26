@@ -56,6 +56,17 @@ test('due sorting is nonmutating, overdue first, no date last and names break ti
   assert.match(text(viewToggle(listView, () => {})), /Ver tarjetas/)
 })
 
+test('view toggle is icon-only with an accessible label and hover description for each target view', () => {
+  for (const listView of [false, true]) {
+    const markup = text(viewToggle(listView, () => {}))
+    const label = listView ? 'Ver tarjetas' : 'Ver lista'
+    assert.ok(markup.includes(`aria-label=${label} title=${label}`))
+    assert.match(markup, /<svg[^>]*aria-hidden="true"[^>]*focusable="false"/)
+    assert.doesNotMatch(markup.replace(/<[^>]*>/g, '').trim(), /\S/)
+    assert.match(markup, listView ? /<rect/ : /<path/)
+  }
+})
+
 test('cards keep their categories and sort pending credit by deadline in both independent views', () => {
   const credit = { type: 'Tarjeta de crédito', available: '80', total: '100',
     paymentToAvoidInterest: '20', statementDate: '2026-11-01' }
