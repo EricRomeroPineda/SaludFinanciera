@@ -134,6 +134,16 @@ export async function requestPublicRecovery(input, address, send = sendAccountEm
   return { ok: true, retryAfterSeconds: 30, message: 'Si el correo está registrado y verificado, recibirás un enlace. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a solicitarlo.' }
 }
 
+export async function checkRecoveryEmail(input, address) {
+  limit(`check-email-ip:${address}`)
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw invalid('Escribe un correo electrónico válido.')
+  limit(`check-email:${createHash('sha256').update(email).digest('hex')}`)
+  const [users] = await pool.execute('SELECT id FROM usuario WHERE correo = ? AND correo_verificado = 1', [email])
+  if (users.length !== 1) throw invalid('No hay una cuenta con ese correo verificado. Revisa la dirección o verifica tu correo desde Mi perfil.')
+  return { ok: true, email }
+}
+
 export async function authorizePasswordRecovery(input, address) {
   const connection = await pool.getConnection()
   try {
@@ -218,6 +228,10 @@ export async function consumeEmailLink(purpose, input, address) {
 
 export async function handleEmailRoute(request, response, url, { getUserId, readJson, sendJson }) {
   if (request.method !== 'POST') return false
+  if (url.pathname === '/api/auth/email/check-recovery-email') {
+    sendJson(response, 200, await checkRecoveryEmail(await readJson(request), request.socket.remoteAddress))
+    return true
+  }
   if (url.pathname === '/api/auth/email/request-access-link' || url.pathname === '/api/auth/email/validate-recovery-key') {
     const input = await readJson(request)
     const address = request.socket.remoteAddress

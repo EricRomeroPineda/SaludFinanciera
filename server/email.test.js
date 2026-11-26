@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import bcrypt from 'bcryptjs'
 import nodemailer from 'nodemailer'
 import { pool } from './db.js'
-import { requestEmailLink, consumeEmailLink, handleEmailRoute, sendAccountEmail, requestPublicRecovery, authorizePasswordRecovery } from './email.js'
+import { requestEmailLink, consumeEmailLink, handleEmailRoute, sendAccountEmail, requestPublicRecovery, authorizePasswordRecovery, checkRecoveryEmail } from './email.js'
 
 const password = 'a-long-test-password'
 const passwordHash = await bcrypt.hash(password, 4)
@@ -346,6 +346,30 @@ test('public recovery routes work without a session and never expose account inf
       getUserId: () => assert.fail('Public recovery must not require login'),
       readJson: async () => ({ email: 'missing@example.com', purpose: 'reset-password' }),
       sendJson: (_, status, payload) => { assert.equal(status, 200); response = payload },
+    })
+
+    test('email precheck accepts only existing verified addresses and returns no account details', async (t) => {
+      let found = true
+      t.mock.method(pool, 'execute', async (sql, params) => {
+        assert.equal(sql, 'SELECT id FROM usuario WHERE correo = ? AND correo_verificado = 1')
+        assert.deepEqual(params, ['precheck@example.com'])
+        return [found ? [{ id: 150 }] : []]
+      })
+      assert.deepEqual(await checkRecoveryEmail({ email: ' Precheck@Example.com ' }, 'check-test'),
+        { ok: true, email: 'precheck@example.com' })
+      found = false
+      await assert.rejects(checkRecoveryEmail({ email: 'precheck@example.com' }, 'check-test'),
+        { statusCode: 400, message: 'No hay una cuenta con ese correo verificado. Revisa la dirección o verifica tu correo desde Mi perfil.' })
+      await assert.rejects(checkRecoveryEmail({ email: 'bad' }, 'check-test'), { statusCode: 400 })
+    })
+
+    test('email precheck is rate limited before further database lookups', async (t) => {
+      const execute = t.mock.method(pool, 'execute', async () => [[{ id: 151 }]])
+      for (let index = 0; index < 5; index++) {
+        await checkRecoveryEmail({ email: `limit-${index}@example.com` }, 'check-limit')
+      }
+      await assert.rejects(checkRecoveryEmail({ email: 'sixth@example.com' }, 'check-limit'), { statusCode: 429 })
+      assert.equal(execute.mock.callCount(), 5)
     })
   assert.equal(handled, true)
   assert.equal(response.retryAfterSeconds, 30)

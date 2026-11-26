@@ -1,4 +1,4 @@
-import { LitElement, html, unsafeCSS } from 'lit'
+import { LitElement, html, svg, unsafeCSS } from 'lit'
 import { apiRequest } from '../api.js'
 import styles from './styles.css?inline'
 import './email-settings.js'
@@ -8,6 +8,7 @@ class AccessRecovery extends LitElement {
   static properties = {
     busy: { state: true }, error: { state: true }, notice: { state: true },
     token: { state: true }, resendSeconds: { state: true },
+    email: { state: true }, verifiedEmail: { state: true }, useKey: { state: true },
   }
 
   constructor() {
@@ -16,13 +17,20 @@ class AccessRecovery extends LitElement {
     this.error = ''
     this.notice = ''
     this.token = ''
+    this.email = ''
+    this.verifiedEmail = ''
+    this.useKey = false
     this.resendSeconds = 0
+    this.generation = 0
   }
 
   disconnectedCallback() {
     super.disconnectedCallback()
     clearInterval(this.clock)
+    this.generation++
     this.token = ''
+    this.verifiedEmail = ''
+    this.useKey = false
   }
 
   countdown() {
@@ -34,13 +42,54 @@ class AccessRecovery extends LitElement {
     }, 1000)
   }
 
+  editEmail() {
+    this.generation++
+    this.busy = false
+    this.verifiedEmail = ''
+    this.token = ''
+    this.useKey = false
+    this.error = ''
+    this.notice = ''
+    this.updateComplete.then(() => this.renderRoot.querySelector('[name="email"]')?.focus())
+  }
+
+  changeEmail(event) {
+    this.email = event.target.value
+    this.editEmail()
+  }
+
+  async checkEmail(event) {
+    event.preventDefault()
+    if (this.busy) return
+    const form = event.currentTarget
+    if (!form.reportValidity()) return
+    const email = form.querySelector('[name="email"]').value.trim().toLowerCase()
+    const generation = this.generation
+    this.error = ''
+    this.notice = ''
+    this.busy = true
+    try {
+      const result = await apiRequest('/api/auth/email/check-recovery-email', {
+        method: 'POST', body: JSON.stringify({ email }),
+      })
+      if (generation !== this.generation) return
+      this.email = result.email
+      this.verifiedEmail = result.email
+      this.useKey = false
+    } catch (error) {
+      if (generation === this.generation) this.error = error.message
+    } finally {
+      if (generation === this.generation) this.busy = false
+    }
+  }
+
   async submit(event, purpose) {
     event.preventDefault()
-    if (this.busy || (purpose && this.resendSeconds)) return
+    if (this.busy || !this.verifiedEmail || this.email !== this.verifiedEmail || (purpose && this.resendSeconds)) return
+    if (!purpose && !this.useKey) return
     const form = event.currentTarget
-    const email = form.querySelector('[name="email"]')
-    if (!email.reportValidity()) return
     if (!purpose && !form.reportValidity()) return
+    const generation = this.generation
     this.error = ''
     this.notice = ''
     this.busy = true
@@ -48,9 +97,10 @@ class AccessRecovery extends LitElement {
       const data = new FormData(form)
       const result = await apiRequest(`/api/auth/email/${purpose ? 'request-access-link' : 'validate-recovery-key'}`, {
         method: 'POST', body: JSON.stringify(purpose
-          ? { email: data.get('email'), purpose }
-          : { email: data.get('email'), recoveryKey: data.get('recoveryKey') }),
+          ? { email: this.verifiedEmail, purpose }
+          : { email: this.verifiedEmail, recoveryKey: data.get('accessRecoveryKey') }),
       })
+      if (generation !== this.generation) return
       if (purpose) {
         this.notice = result.message
         this.countdown()
@@ -59,35 +109,91 @@ class AccessRecovery extends LitElement {
         form.reset()
       }
     } catch (error) {
+      if (generation !== this.generation) return
       this.error = error.message
       if (purpose && error.status === 429) this.countdown()
     } finally {
-      this.busy = false
+      if (generation === this.generation) this.busy = false
     }
+  }
+
+  icon(kind) {
+    const paths = {
+      check: svg`<path d="m5 12 4 4L19 6" />`,
+      edit: svg`<path d="m16 3 5 5L8 21H3v-5L16 3Z M13 6l5 5" />`,
+      mail: svg`<rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" />`,
+      key: svg`<circle cx="8" cy="9" r="5" /><path d="m12 13 8 8m-4-4 3-3m-6 0 3-3" />`,
+      resetKey: svg`<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6" /><circle cx="12" cy="11" r="2" /><path d="M12 13v5" />`,
+      info: svg`<circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v1" />`,
+    }
+    return html`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.8" aria-hidden="true">${paths[kind]}</svg>`
+  }
+
+  help(label, description) {
+    return html`<details class="recovery-help">
+      <summary aria-label=${`Información: ${label}`} title=${`Información: ${label}`}>${this.icon('info')}</summary>
+      <p>${description}</p>
+    </details>`
   }
 
   render() {
     if (this.token) return html`
       <p>Correo y palabra clave validados. Define tu nueva contraseña; este permiso caduca en 10 minutos.</p>
       <email-settings .purpose=${'reset-password'} .token=${this.token}></email-settings>
-      <button class="quiet-button" type="button" @click=${() => { this.token = ''; this.error = ''; this.notice = '' }}>Volver a validar</button>`
+      <button class="quiet-button" type="button" @click=${this.editEmail}>Cambiar correo o volver a validar</button>`
     return html`
-      <p>Escribe tu correo verificado y tu palabra clave. Después de validarlos aparecerá el cambio de contraseña.</p>
+      <p>Valida primero tu correo registrado y verificado para elegir cómo recuperar el acceso.</p>
       ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
       ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
-      <form class="auth-form" @submit=${(event) => this.submit(event, event.submitter?.value)}>
+      <form class="auth-form" @submit=${this.checkEmail}>
         <label>Correo electrónico
-          <input name="email" type="email" maxlength="254" autocomplete="email" required ?disabled=${this.busy} /></label>
-        <label>Palabra clave de recuperación
-          <input name="recoveryKey" type="password" minlength="4" maxlength="72" autocomplete="off" required ?disabled=${this.busy} /></label>
-        <button class="primary-button" type="submit" ?disabled=${this.busy}>${this.busy ? 'Procesando…' : 'Validar correo y palabra clave'}</button>
-        <p>Si olvidaste tu contraseña o tu palabra clave, solicita un enlace al correo verificado.</p>
-        ${this.resendSeconds > 0 ? html`<p role="status">Espera ${this.resendSeconds} segundos para solicitar otro correo.</p>` : ''}
-        <button class="quiet-button" type="submit" value="reset-password" formnovalidate
-          ?disabled=${this.busy || this.resendSeconds > 0}>Recuperar contraseña por correo</button>
-        <button class="quiet-button" type="submit" value="reset-recovery" formnovalidate
-          ?disabled=${this.busy || this.resendSeconds > 0}>Recuperar palabra clave por correo</button>
-      </form>`
+          <div class="recovery-email">
+            <input name="email" type="email" maxlength="254" autocomplete="email" required
+              .value=${this.email} ?disabled=${this.busy || Boolean(this.verifiedEmail)} @input=${this.changeEmail} />
+            ${this.verifiedEmail ? html`<button class="quiet-button recovery-icon" type="button" aria-label="Editar correo" title="Editar correo"
+              ?disabled=${this.busy} @click=${this.editEmail}>${this.icon('edit')}</button>`
+              : html`<button class="primary-button recovery-icon" type="submit" aria-label="Validar correo" title="Validar correo"
+                ?disabled=${this.busy}>${this.icon('check')}</button>`}
+          </div>
+        </label>
+      </form>
+      ${this.verifiedEmail ? html`
+        <p class="success-message" role="status">Correo validado.</p>
+        <form class="auth-form recovery-options" autocomplete="off" @submit=${(event) => this.submit(event, event.submitter?.value)}>
+          <div class="recovery-actions">
+            <div class="recovery-action">
+              <button class="quiet-button recovery-icon" type="button"
+                @click=${(event) => this.submit({ preventDefault() {}, currentTarget: event.currentTarget.form }, 'reset-password')}
+                aria-label="Recuperar contraseña por correo" title="Recuperar contraseña por correo"
+                ?disabled=${this.busy || this.resendSeconds > 0}>${this.icon('mail')}</button>
+              ${this.help('Recuperar contraseña por correo', 'Envía un enlace de un solo uso a tu correo para elegir una contraseña nueva. No necesitas la palabra clave. Caduca en 30 minutos.')}
+            </div>
+            <div class="recovery-action">
+              <button class="quiet-button recovery-icon" type="button" aria-label="Recuperar contraseña con palabra clave"
+                title="Recuperar contraseña con palabra clave" aria-pressed=${String(this.useKey)} ?disabled=${this.busy}
+                @click=${() => { this.useKey = !this.useKey; this.error = ''; this.notice = '' }}>${this.icon('key')}</button>
+              ${this.help('Recuperar contraseña con palabra clave', 'Escribe tu palabra clave de recuperación. Si es válida, aparecerá el campo para definir una nueva contraseña.')}
+            </div>
+            <div class="recovery-action">
+              <button class="quiet-button recovery-icon" type="button"
+                @click=${(event) => this.submit({ preventDefault() {}, currentTarget: event.currentTarget.form }, 'reset-recovery')}
+                aria-label="Recuperar palabra clave por correo" title="Recuperar palabra clave por correo"
+                ?disabled=${this.busy || this.resendSeconds > 0}>${this.icon('resetKey')}</button>
+              ${this.help('Recuperar palabra clave por correo', 'Envía un enlace para elegir una nueva palabra clave de recuperación. Tu contraseña de acceso no cambia. Caduca en 30 minutos.')}
+            </div>
+          </div>
+          ${this.resendSeconds > 0 ? html`<p role="status">Espera ${this.resendSeconds} segundos para solicitar otro correo.</p>` : ''}
+          ${this.useKey ? html`<label>Palabra clave de recuperación
+            <div class="recovery-email">
+              <input name="accessRecoveryKey" type="password" minlength="4" maxlength="72" autocomplete="new-password"
+                .value=${''} required ?disabled=${this.busy} />
+              <button class="primary-button recovery-icon" type="submit" value="" aria-label="Validar palabra clave"
+                title="Validar palabra clave" ?disabled=${this.busy}>${this.icon('check')}</button>
+            </div>
+          </label>` : ''}
+        </form>` : ''}
+    `
   }
 }
 
