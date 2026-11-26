@@ -94,11 +94,24 @@ test('all available themes persist independently of an existing profile photo', 
     }
     return [[{ id: 7, name: 'Ana', photo: null, theme: savedTheme }]]
   })
+
   assert.equal(themes.length, 9)
   for (const { id } of themes) assert.equal((await updateTheme(7, id)).theme, id)
   await assert.rejects(updateTheme(7, 'invalid'), { statusCode: 400 })
 })
 
+test('login accepts a verified email or username and rejects ambiguous matches', async (t) => {
+    let ambiguous = false
+    t.mock.method(pool, 'execute', async (sql, params) => {
+      assert.match(sql, /nombre = \? OR \(correo = \? AND correo_verificado = 1\)/)
+      assert.deepEqual(params, ['Ana@Example.com', 'ana@example.com'])
+      const user = { id: 7, nombre: 'Ana', password_hash: passwordHash, correo: 'ana@example.com' }
+      return [ambiguous ? [user, { ...user, id: 8 }] : [user]]
+    })
+    assert.equal((await authenticateUser(' Ana@Example.com ', password)).id, 7)
+    ambiguous = true
+    await assert.rejects(authenticateUser('Ana@Example.com', password), { statusCode: 401 })
+  })
 test('appearance changes persist only the authenticated user mode and preserve the color', async (t) => {
   let appearance = 'day'
   t.mock.method(pool, 'execute', async (sql, params) => {

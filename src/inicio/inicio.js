@@ -410,7 +410,7 @@ class Inicio extends LitElement {
             <p>${registering
               ? 'Registra tu usuario, foto y palabra clave para empezar a organizar tus finanzas.'
               : recovering ? 'Escribe tu usuario, palabra clave y una contraseña nueva.'
-                : 'Entra con el usuario registrado en Salud Financiera.'}</p>
+                : 'Entra con tu usuario o correo verificado en Salud Financiera.'}</p>
           </div>
 
           ${this.error ? html`<div class="error-message" role="alert">${this.error}</div>` : ''}
@@ -418,8 +418,8 @@ class Inicio extends LitElement {
 
           <form class="auth-form" @submit=${this.handleAuthSubmit}>
             <label>
-              Nombre de usuario
-              <input name="name" type="text" maxlength="100" autocomplete="username" required />
+              ${registering || recovering ? 'Nombre de usuario' : 'Usuario o correo electrónico'}
+              <input name="name" type="text" maxlength=${registering || recovering ? '100' : '254'} autocomplete="username" required />
             </label>
             <label>
               ${recovering ? 'Nueva contraseña' : 'Contraseña'}

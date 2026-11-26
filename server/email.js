@@ -57,15 +57,23 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
     const user = users[0]
     let email = user.correo
     if (purpose === 'verify-email') {
+      if (Number(user.correo_verificado)) throw invalid('El correo ya está verificado y no se puede cambiar.', 409)
       email = String(input.email || '').trim().toLowerCase()
       if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw invalid('Escribe un correo electrónico válido.')
       if (typeof input.currentPassword !== 'string'
         || !await bcrypt.compare(input.currentPassword, user.password_hash)) throw invalid('La contraseña actual no es correcta.')
-      if (email === user.correo && Number(user.correo_verificado)) throw invalid('Este correo ya está verificado.')
-      await connection.execute('UPDATE usuario SET correo = ?, correo_verificado = 0 WHERE id = ?', [email, userId])
-      await connection.execute('DELETE FROM usuario_enlace_correo WHERE id_usuario = ?', [userId])
     } else if (purpose !== 'reset-recovery' || !email || !Number(user.correo_verificado)) {
       throw invalid('Primero registra y verifica tu correo electrónico.')
+    }
+    const [recent] = await connection.execute(
+      `SELECT id_usuario FROM usuario_enlace_correo
+       WHERE id_usuario = ? AND expira > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1770 SECOND)`,
+      [userId],
+    )
+    if (recent.length) throw invalid('Correo enviado recientemente. Espera 30 segundos antes de volver a enviarlo.', 429)
+    if (purpose === 'verify-email') {
+      await connection.execute('UPDATE usuario SET correo = ?, correo_verificado = 0 WHERE id = ?', [email, userId])
+      await connection.execute('DELETE FROM usuario_enlace_correo WHERE id_usuario = ?', [userId])
     }
     const token = randomBytes(32).toString('hex')
     await connection.execute(
@@ -76,7 +84,7 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
     )
     await send(email, purpose, token)
     await connection.commit()
-    return { ok: true, message: 'Correo enviado. Revisa tu bandeja de entrada y spam. El enlace caduca en 30 minutos.' }
+    return { ok: true, retryAfterSeconds: 30, message: 'Correo enviado. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a enviarlo. El enlace caduca en 30 minutos.' }
   } catch (error) {
     await connection.rollback()
     if (error.code === 'ER_DUP_ENTRY') throw invalid('Ya hay una cuenta registrada con ese correo.', 409)

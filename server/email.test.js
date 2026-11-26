@@ -54,6 +54,7 @@ function database(t, execute) {
     execute: async (sql, params) => {
       state.writes.push({ sql, params })
       assert.equal((sql.match(/\?/g) || []).length, params.length)
+      if (sql.includes('INTERVAL 1770 SECOND')) return [[]]
       return execute(sql, params)
     },
   }))
@@ -137,9 +138,34 @@ test('verification only verifies the bound address and authenticated sends never
     if (sql.startsWith('SELECT')) return [[{ id_usuario: 7 }]]
     return [{ affectedRows: 1 }]
   })
+
   await consumeEmailLink('verify-email', { token: 'b'.repeat(64) }, 'test-2')
   assert.ok(state.writes.some(({ sql }) => sql.includes('SET correo_verificado = 1')))
   assert.equal(await handleEmailRoute({ method: 'POST' }, {}, new URL('http://localhost/api/auth/email/send-recovery'), {
     getUserId: async () => null, readJson: () => assert.fail('Must authenticate first'), sendJson: () => assert.fail('Must authenticate first'),
   }), true)
 })
+
+test('verified addresses cannot be replaced even with a correct password', async (t) => {
+    const state = database(t, async () => [[{
+      correo: 'ana@example.com', correo_verificado: 1, password_hash: passwordHash,
+    }]])
+    await assert.rejects(requestEmailLink(110, 'verify-email', {
+      email: 'different@example.com', currentPassword: password,
+    }, () => assert.fail('Must not send')), { statusCode: 409 })
+    assert.equal(state.writes.some(({ sql }) => sql.startsWith('UPDATE')), false)
+  })
+
+test('resend cooldown is enforced under the user lock before any token replacement or email', async (t) => {
+    let sent = 0
+    t.mock.method(pool, 'getConnection', async () => ({
+      beginTransaction: async () => {}, rollback: async () => {}, release() {},
+      execute: async (sql) => {
+        if (sql.includes('FROM usuario WHERE')) return [[{ correo: 'ana@example.com', correo_verificado: 1 }]]
+        assert.match(sql, /INTERVAL 1770 SECOND/)
+        return [[{ id_usuario: 111 }]]
+      },
+    }))
+    await assert.rejects(requestEmailLink(111, 'reset-recovery', {}, async () => { sent++ }), { statusCode: 429 })
+    assert.equal(sent, 0)
+  })

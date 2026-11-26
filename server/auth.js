@@ -178,11 +178,11 @@ export async function authenticateUser(name, password) {
   }
 
   const [users] = await pool.execute(
-    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified FROM usuario WHERE nombre = ? LIMIT 2',
-    [normalizedName],
+    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified FROM usuario WHERE nombre = ? OR (correo = ? AND correo_verificado = 1) LIMIT 2',
+    [normalizedName, normalizedName.toLowerCase()],
   )
   if (users.length !== 1 || !await bcrypt.compare(normalizedPassword, users[0].password_hash)) {
-    const error = new Error('Usuario o contraseña incorrectos.')
+    const error = new Error('Usuario, correo o contraseña incorrectos.')
     error.statusCode = 401
     throw error
   }

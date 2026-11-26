@@ -15,7 +15,9 @@ El backend verifica la conexión al arrancar. También puedes comprobarla en `ht
 
 ## Correo verificado y palabra clave de recuperación
 
-Ejecuta `server/migrations/010-user-email.sql` una sola vez. En **Mi perfil → Correo electrónico y recuperación**, registra un correo único y confirma tu contraseña actual. Se enviará un enlace para verificar la dirección; si ya está registrada en otra cuenta se mostrará el error. Hasta verificarla no se puede solicitar el enlace para cambiar la palabra clave. Cambiar la dirección desactiva su verificación anterior.
+Ejecuta `server/migrations/010-user-email.sql` una sola vez. En **Mi perfil → Correo electrónico y recuperación**, registra un correo único y confirma tu contraseña actual. Se enviará un enlace para verificar la dirección; si ya está registrada en otra cuenta se mostrará el error. Hasta verificarla no se puede solicitar el enlace para cambiar la palabra clave. Una vez verificado, el correo no se puede cambiar desde la aplicación (se bloquea tanto en pantalla como en la API). Puedes iniciar sesión con tu usuario o tu correo verificado y tu contraseña; los correos sin verificar no permiten acceso por correo.
+
+Después de enviar un correo se muestra una confirmación y una cuenta regresiva de 30 segundos para reenviar. El servidor aplica también esta espera, incluso al recargar la página. El ojo solo muestra la contraseña que escribes, nunca recupera una contraseña guardada.
 
 Configura en el `.env` privado `APP_BASE_URL=https://lifekit.work`, `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER`, `SMTP_PASSWORD` (contraseña de aplicación de Gmail con verificación en dos pasos) y `SMTP_FROM` (misma cuenta o alias autorizado). No compartas estas credenciales. Gmail y sus límites de envío aplican; revisa también spam. Cloudflare debe dirigir el dominio a esta aplicación y no almacenar en caché `/api/*`. No se requiere abrir MySQL a Internet.
 

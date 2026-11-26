@@ -38,3 +38,14 @@ test('recovery requires both a saved email and verification, not just a verifica
     assert.ok(markup.includes(`?disabled=${disabled}\n          @click=`))
   }
 })
+
+test('verified email hides the registration form and resend countdown blocks mail buttons', () => {
+  const methods = Component.prototype
+  const verified = text(methods.render.call({
+    user: { email: 'ana@example.com', emailVerified: 1 }, eye: methods.eye, busy: false, resendSeconds: 30,
+  }))
+  assert.match(verified, /no se puede cambiar/)
+  assert.doesNotMatch(verified, /name="email"|name="currentPassword"|Enviar verificación al correo/)
+  assert.match(verified, /Espera 30 segundos/)
+  assert.match(verified, /\?disabled=true/)
+})

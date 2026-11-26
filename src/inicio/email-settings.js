@@ -8,6 +8,7 @@ class EmailSettings extends LitElement {
     user: { attribute: false }, purpose: { attribute: false }, token: { attribute: false },
     busy: { state: true }, error: { state: true }, notice: { state: true }, done: { state: true },
     showPassword: { state: true }, showKey: { state: true },
+    resendSeconds: { state: true },
   }
 
   constructor() {
@@ -18,10 +19,26 @@ class EmailSettings extends LitElement {
     this.done = false
     this.showPassword = false
     this.showKey = false
+    this.resendSeconds = 0
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    clearInterval(this.resendClock)
+  }
+
+  startResendCountdown(seconds = 30) {
+    clearInterval(this.resendClock)
+    this.resendSeconds = seconds
+    this.resendClock = setInterval(() => {
+      this.resendSeconds = Math.max(0, this.resendSeconds - 1)
+      if (!this.resendSeconds) clearInterval(this.resendClock)
+    }, 1000)
   }
 
   async perform(path, body) {
     if (this.busy) return
+    if (path.startsWith('send-') && this.resendSeconds > 0) return
     this.busy = true
     this.error = ''
     this.notice = ''
@@ -38,12 +55,14 @@ class EmailSettings extends LitElement {
           : 'Palabra clave de recuperación actualizada. Ya puedes usarla para recuperar tu contraseña.'
       } else {
         this.notice = result.message
+        this.startResendCountdown(result.retryAfterSeconds || 30)
       }
       if (this.user) {
         this.user = (await apiRequest('/api/auth/me')).user
         this.dispatchEvent(new CustomEvent('email-updated', { detail: this.user, bubbles: true, composed: true }))
       }
     } catch (error) {
+      if (!saved && error.status === 429 && path.startsWith('send-')) this.startResendCountdown()
       this.error = saved ? `La operación se completó, pero no se pudo actualizar el perfil: ${error.message}` : error.message
     } finally {
       this.busy = false
@@ -82,6 +101,7 @@ class EmailSettings extends LitElement {
       ` : html`
         <p>${this.user?.email || 'No tienes un correo registrado. Captura tu correo y verifícalo para habilitar la recuperación.'}
           ${this.user?.email ? Number(this.user.emailVerified) ? ' · Verificado' : ' · Pendiente de verificación' : ''}</p>
+        ${Number(this.user?.emailVerified) ? html`<p>Tu correo está verificado y no se puede cambiar.</p>` : html`
         <form class="auth-form" @submit=${(event) => {
           event.preventDefault()
           const data = new FormData(event.currentTarget)
@@ -92,13 +112,14 @@ class EmailSettings extends LitElement {
           <label>Correo electrónico<input name="email" type="email" maxlength="254" autocomplete="section-profile-email email"
             placeholder="tu-correo@ejemplo.com"
             .value=${this.user?.email || ''} required ?disabled=${this.busy} /></label>
-          <label>Contraseña actual para registrar o cambiar el correo
+          <label>Escribe tu contraseña actual para registrar o verificar el correo
             <div class="secret-field"><input name="currentPassword" type=${this.showPassword ? 'text' : 'password'}
               autocomplete="section-profile-email current-password" required ?disabled=${this.busy} />${this.eye(false)}</div></label>
-          <button class="primary-button" ?disabled=${this.busy}>Enviar verificación al correo</button>
+          <button class="primary-button" ?disabled=${this.busy || this.resendSeconds > 0}>Enviar verificación al correo</button>
         </form>
-        <p>Cambiar el correo requiere verificar la nueva dirección. Cada nuevo envío invalida el enlace anterior.</p>
-        <button class="quiet-button" type="button" ?disabled=${this.busy || !this.user?.email || !Number(this.user?.emailVerified)}
+        <p>Verifica la dirección para registrarla definitivamente. Cada nuevo envío invalida el enlace anterior.</p>`}
+        ${this.resendSeconds > 0 ? html`<p role="status">Espera ${this.resendSeconds} segundos para volver a enviar un correo.</p>` : ''}
+        <button class="quiet-button" type="button" ?disabled=${this.busy || this.resendSeconds > 0 || !this.user?.email || !Number(this.user?.emailVerified)}
           @click=${() => this.perform('send-recovery', {})}>Enviar enlace para cambiar mi palabra clave</button>
         <p>No podemos mostrar ni enviar tu contraseña ni tu palabra clave actuales: se almacenan como hashes.</p>
       `}
