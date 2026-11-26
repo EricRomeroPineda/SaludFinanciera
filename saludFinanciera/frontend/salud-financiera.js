@@ -1,4 +1,4 @@
-import { LitElement, html, unsafeCSS } from 'lit'
+import { LitElement, html, svg, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
@@ -153,6 +153,7 @@ class SaludFinanciera extends LitElement {
   }
 
   changeView(event) {
+    if (this.submitting) return
     this.pendingEvidenceMovementId = null
     this.familyView = event.currentTarget.value === 'family'
     this.dashboard = null
@@ -192,23 +193,32 @@ class SaludFinanciera extends LitElement {
 
     return html`
       <main class="dashboard">
+        <div class="finance-topbar">
         <button class="quiet-button back-to-menu" type="button" @click=${() => {
           this.dispatchEvent(new CustomEvent('back-to-menu', { bubbles: true, composed: true }))
         }}>← Menú principal</button>
+        <button class="quiet-button scope-toggle" type="button"
+          aria-label=${this.familyView ? 'Vista familiar. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
+          title=${this.familyView ? 'Vista familiar · Solo consulta. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
+          aria-pressed=${String(Boolean(this.familyView))} ?disabled=${this.submitting}
+          @click=${() => this.changeView({ currentTarget: { value: this.familyView ? 'individual' : 'family' } })}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="7" r="3" /><path d="M6 21v-3a6 6 0 0 1 12 0v3" />
+            ${this.familyView ? svg`<path d="M5 4a3 3 0 0 0 0 6M2 19v-3a4 4 0 0 1 3-4M19 4a3 3 0 0 1 0 6m3 9v-3a4 4 0 0 0-3-4" />` : ''}
+          </svg>
+        </button>
+        </div>
+        ${this.familyView ? html`<p class="family-view-notice" role="status">
+          <strong>Vista familiar: esta sección es de solo consulta.</strong>
+          Para registrar, editar o eliminar, cambia a Individual con el icono superior.
+          Administra los integrantes y las invitaciones en Mi perfil → Mi familia.
+        </p>` : ''}
         <div class="dashboard-heading">
           <div>
             <p class="eyebrow">SALUD FINANCIERA</p>
             <h1>${title}</h1>
             <p>${this.familyView ? `Consulta familiar${this.dashboard?.family ? ` · ${this.dashboard.family.name}` : ''}. Los nombres identifican al propietario de cada registro.`
               : 'La información que ves pertenece a tu usuario.'}</p>
-            <label>Vista
-              <select .value=${this.familyView ? 'family' : 'individual'} @change=${this.changeView} ?disabled=${this.submitting}>
-                <option value="individual">Individual</option>
-                <option value="family">Familiar · Solo consulta</option>
-              </select>
-            </label>
-            ${this.familyView ? html`<p>Para registrar, editar o eliminar, cambia a Individual.
-              Administra los integrantes y las invitaciones en Mi perfil → Mi familia.</p>` : ''}
           </div>
         </div>
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}

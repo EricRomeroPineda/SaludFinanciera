@@ -2,6 +2,12 @@
 
 .dashboard { width: calc(100% - 150px); }
 .back-to-menu { margin-bottom: 24px; }
+.finance-topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
+.finance-topbar .back-to-menu { margin-bottom: 0; }
+.quiet-button.scope-toggle { display: inline-grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; padding: 8px; }
+.scope-toggle svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.scope-toggle[aria-pressed="true"] { border-color: var(--transfer); color: var(--transfer); background: var(--transfer-bg); }
+.family-view-notice { display: grid; gap: 5px; margin: 0 0 24px; padding: 12px 16px; border: 1px solid var(--transfer); border-radius: 9px; background: var(--transfer-bg); color: var(--transfer); font-size: 12px; line-height: 1.5; }
 
 [hidden] { display: none !important; }
 .tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 20px; border-bottom: 1px solid var(--line); }

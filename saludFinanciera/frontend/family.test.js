@@ -85,6 +85,29 @@ test('a late family response cannot replace the subsequently selected individual
   assert.equal(state.dashboard.accounts[0].name, 'Solo yo')
 })
 
+test('top scope icon replaces the select and family mode announces read-only access', () => {
+  const state = {
+    loading: true, renderPlanDeleteDialog: () => '', renderMovementDialog: () => '',
+    dashboard: null, activeTab: 'overview',
+  }
+  const individual = text(finance.render.call(state))
+  assert.match(individual, /finance-topbar/)
+  assert.match(individual, /Vista individual\. Cambiar a familiar/)
+  assert.doesNotMatch(individual, /<select|family-view-notice/)
+  const combined = text(finance.render.call({ ...state, familyView: true }))
+  assert.match(combined, /Vista familiar\. Cambiar a individual/)
+  assert.match(combined, /class="family-view-notice" role="status"/)
+  assert.match(combined, /esta sección es de solo consulta/)
+  assert.match(combined, /<circle cx="12"/)
+  assert.match(combined, /M5 4a3/)
+})
+
+test('switching scope is blocked while submitting', () => {
+  const state = { submitting: true, familyView: false, loadDashboard: () => assert.fail('Must not switch') }
+  finance.changeView.call(state, { currentTarget: { value: 'family' } })
+  assert.equal(state.familyView, false)
+})
+
 test('calendar family mode uses authorized family reads and suppresses all movement writes', async (t) => {
   const calendar = components.get('financial-calendar').prototype
   let path
