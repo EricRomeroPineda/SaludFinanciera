@@ -2,7 +2,7 @@ import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
 import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
-import { calculateAccountSummary } from '../account-summary.js'
+import { calculateAccountSummary, calculatePeriodActivity, cardPaymentStatus } from '../account-summary.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
@@ -540,24 +540,58 @@ class SaludFinanciera extends LitElement {
     this.activeTab = 'accounts'
   }
 
+  async handleConfirmCardPayment(card) {
+    if (this.familyView || this.submitting) return
+    const status = cardPaymentStatus(card, this.today)
+    if (!status) return
+    if (!window.confirm(status.manual
+      ? `¿Retirar la confirmación manual del pago de "${card.name}"?`
+      : `¿Confirmas que ya cubriste ${this.formatMoney(status.required)} de "${card.name}" con vencimiento ${this.formatDate(card.paymentDueDate)}? Esto no registra movimientos ni cambia saldos.`)) return
+    this.error = ''
+    this.submitting = true
+    let saved = false
+    try {
+      await apiRequest(`/api/accounts/${card.id}/payment-confirmation`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          confirmed: !status.manual, paymentDueDate: card.paymentDueDate,
+          paymentToAvoidInterest: card.paymentToAvoidInterest,
+        }),
+      })
+      saved = true
+      await this.refreshDashboard()
+    } catch (error) {
+      this.error = `${saved ? 'La confirmación se guardó, pero no se pudo actualizar el panorama: ' : ''}${error.message}`
+    } finally {
+      this.submitting = false
+    }
+  }
+
   renderOverview() {
     const { summary, accounts, subscriptions, plans, movements } = this.dashboard
     const period = this.overviewPeriod || `${this.today.getFullYear()}-${String(this.today.getMonth() + 1).padStart(2, '0')}`
-    const totals = calculateAccountSummary(accounts, period, this.overviewScope)
+    const totals = calculateAccountSummary(accounts, period, this.overviewScope, this.today)
+    const activity = calculatePeriodActivity(this.dashboard.activityByMonth || [], period, this.overviewScope)
+    const periodLabel = this.overviewScope === 'year' ? period.slice(0, 4) : period
+    const payments = accounts.filter((account) => isCreditAccount(account.type))
+      .map((account) => ({ account, status: cardPaymentStatus(account, this.today) }))
+      .filter(({ status }) => status && status.period.startsWith(periodLabel))
     const metrics = [
       ['Saldo disponible', this.formatMoney(totals.available), 'Actual · Débito + efectivo', 'positive'],
       ['Disponible con crédito', this.formatMoney(totals.availableWithCredit), 'Actual · Débito + efectivo + crédito sin utilizar', 'transfer'],
       ['Deuda total', this.formatMoney(totals.debt), totals.missingLimits
         ? `Actual · ${totals.missingLimits} créditos sin límite: no incluidos` : 'Actual · Crédito utilizado', 'negative'],
       ['Pago para no generar intereses', this.formatMoney(totals.payment),
-        `Vencimiento en ${this.overviewScope === 'year' ? period.slice(0, 4) : period}`],
+        `Pendiente del periodo ${periodLabel}`],
+      ['Ingresos del periodo', this.formatMoney(activity.income), periodLabel, 'positive'],
+      ['Gastos del periodo', this.formatMoney(activity.expenses), periodLabel, 'negative'],
       ['Suscripciones activas', summary.activeSubscriptionsCount, `${this.formatMoney(summary.monthlySubscriptionTotal)} al mes`],
       ['Planes futuros', summary.plansCount, 'Metas registradas'],
       ['Movimientos recientes', summary.movementsCount, 'Hasta 250 registros'],
     ]
 
     return html`
-      <section class="data-card" aria-label="Periodo de consulta">
+      <section class="data-card overview-period" aria-label="Periodo de consulta">
         <div class="section-heading">
           <h2>Panorama</h2>
           <label>Consultar
@@ -588,9 +622,10 @@ class SaludFinanciera extends LitElement {
             this.overviewScope = 'month'
           }}>Mes actual</button>
         </div>
-        <p class="form-hint">El periodo filtra únicamente el pago para no generar intereses por fecha límite.
-          Saldos y deuda son actuales. Los pagos son importes capturados, no un historial ni una confirmación de pago;
-          al actualizar los datos de una tarjeta se reemplazan sus valores anteriores.</p>
+        <p class="form-hint">El periodo filtra ingresos, gastos y pagos pendientes. Los vencimientos del día 1 al 14
+          corresponden al mes anterior; lo pendiente se arrastra al mes actual. Saldos y deuda son actuales.
+          Los pagos se descuentan con transferencias a la tarjeta desde el día siguiente al vencimiento anterior
+          (un mes antes), incluso antes del corte, o con tu confirmación manual. Transferencias y préstamos no cuentan como ingresos ni gastos.</p>
         ${totals.missingPayments ? html`<p class="form-hint">${totals.missingPayments} créditos sin fecha límite o importe de pago: no incluidos en el pago del periodo.</p>` : ''}
       </section>
       <section class="metric-grid" aria-label="Resumen">
@@ -601,6 +636,27 @@ class SaludFinanciera extends LitElement {
             <small>${detail}</small>
           </article>
         `)}
+      </section>
+
+      <section class="data-card overview-payments" aria-label="Pagos de tarjetas del periodo">
+        <div class="section-heading"><h2>Pagos de tarjetas · ${periodLabel}</h2></div>
+        <p class="form-hint">Importes del último corte capturado, no un historial de estados de cuenta.
+          Si ya venció, el banco puede haber cambiado el importe: revísalo y actualiza la tarjeta.</p>
+        ${payments.length ? html`<ul class="payment-list">
+          ${payments.map(({ account, status }) => html`<li>
+            <div class="payment-description"><strong>${account.name}</strong>
+              <span>Límite: ${this.formatDate(account.paymentDueDate)} · Importe: ${this.formatMoney(status.required)}</span>
+              <span>Abonos detectados: ${this.formatMoney(status.paid)} · Pendiente: ${this.formatMoney(status.remaining)}</span>
+              ${this.renderCardPaymentCountdown(account)}
+            </div>
+            <div class="payment-actions" ?hidden=${this.familyView}>
+              ${status.remaining > 0 ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(account)}>Registrar abono</button>` : ''}
+              <button class="text-button" type="button" ?disabled=${this.submitting}
+                @click=${() => this.handleConfirmCardPayment(account)}>${status.manual ? 'Retirar confirmación manual' : 'Confirmar pago manualmente'}</button>
+              ${status.overdue ? html`<button class="text-button" type="button" @click=${() => this.startAccountEdit(account)}>Revisar importe</button>` : ''}
+            </div>
+          </li>`)}
+        </ul>` : this.emptyMessage('No hay pagos de tarjetas asignados a este periodo.')}
       </section>
 
       <div class="overview-grid">
@@ -795,6 +851,11 @@ class SaludFinanciera extends LitElement {
   }
 
   renderCardPaymentCountdown(card) {
+    const status = cardPaymentStatus(card, this.today)
+    if (status?.remaining === 0) {
+      return html`<p class="card-payment-countdown paid" role="status"><strong>${status.manual
+        ? 'Pago confirmado manualmente' : 'Pago cubierto con los abonos registrados'}</strong></p>`
+    }
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(card.paymentDueDate || ''))
     if (!match) return html`<p class="card-payment-countdown">Configura la fecha límite de pago.</p>`
     const due = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
@@ -802,9 +863,9 @@ class SaludFinanciera extends LitElement {
     const days = Math.round((due - today) / 86400000)
     return html`
       <p class="card-payment-countdown ${days <= 2 ? 'urgent' : ''}" role="status">
-        <strong>${days < 0 ? `Fecha de pago vencida hace ${Math.abs(days)} ${days === -1 ? 'día' : 'días'}`
-          : days === 0 ? '¡Hoy es el último día para pagar!'
-            : days === 1 ? 'Falta 1 día para pagar' : `Faltan ${days} días para pagar`}</strong>
+        <strong>${days < 0 ? `⚠ Pago vencido hace ${Math.abs(days)} ${days === -1 ? 'día' : 'días'}. No se ha registrado el pago completo; revisa el nuevo pago para no generar intereses.`
+          : days === 0 ? '⚠ ¡Hoy es el último día para pagar!'
+            : days === 1 ? '⚠ Falta 1 día para pagar' : days === 2 ? '⚠ Faltan 2 días para pagar' : `Faltan ${days} días para pagar`}</strong>
       </p>
     `
   }
@@ -850,6 +911,10 @@ class SaludFinanciera extends LitElement {
                   ${card.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${card.depositDetails}</p>` : ''}
                   <div class="card-actions" ?hidden=${this.familyView}>
                     ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
+                    ${isCreditAccount(card.type) && cardPaymentStatus(card, this.today) ? html`
+                      <button class="text-button" type="button" ?disabled=${this.submitting}
+                        @click=${() => this.handleConfirmCardPayment(card)}>${cardPaymentStatus(card, this.today).manual
+                          ? 'Retirar confirmación manual' : 'Confirmar pago manualmente'}</button>` : ''}
                     <button class="text-button" type="button" @click=${() => this.startAccountEdit(card)}>Editar tarjeta</button>
                     <button class="card-trash-button" type="button" aria-label=${`Eliminar ${card.name}`}
                       title="Eliminar tarjeta" @click=${() => this.handleDeleteAccount(card)}>

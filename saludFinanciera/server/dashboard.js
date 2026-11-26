@@ -25,7 +25,17 @@ export async function getDashboardData(userId) {
     `SELECT id, nombre AS name, tipo AS type, total, disponible AS available,
             DATE_FORMAT(fecha_corte, '%Y-%m-%d') AS statementDate,
             DATE_FORMAT(fecha_limite_pago, '%Y-%m-%d') AS paymentDueDate,
-            pago_para_no_generar_intereses AS paymentToAvoidInterest, datos_deposito AS depositDetails
+            pago_para_no_generar_intereses AS paymentToAvoidInterest, datos_deposito AS depositDetails,
+            DATE_FORMAT(fecha_pago_confirmado, '%Y-%m-%d') AS confirmedPaymentDueDate,
+            monto_pago_confirmado AS confirmedPaymentAmount,
+            (SELECT COALESCE(SUM(payment.monto), 0)
+             FROM movimiento AS payment
+             WHERE payment.id_usuario = cuenta.id_usuario
+               AND payment.id_cuenta_destino = cuenta.id
+               AND payment.id_cuenta_origen IS NOT NULL
+               AND payment.id_categoria IS NULL AND payment.id_prestamo IS NULL
+               AND payment.fecha > DATE_SUB(cuenta.fecha_limite_pago, INTERVAL 1 MONTH)
+               AND payment.fecha < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) AS paymentTransfers
      FROM cuenta
      WHERE id_usuario = ?
      ORDER BY nombre, id`,
@@ -70,6 +80,22 @@ export async function getDashboardData(userId) {
     [userId],
   )
 
+  const [activityByMonth] = await pool.execute(
+    `SELECT DATE_FORMAT(m.fecha, '%Y-%m') AS month,
+            SUM(CASE WHEN m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
+              OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL))
+              THEN m.monto ELSE 0 END) AS income,
+            SUM(CASE WHEN m.id_prestamo IS NULL AND (cat.tipo = 'gasto'
+              OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL))
+              THEN m.monto ELSE 0 END) AS expenses
+     FROM movimiento AS m
+     LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
+     WHERE m.id_usuario = ?
+     GROUP BY DATE_FORMAT(m.fecha, '%Y-%m')
+     ORDER BY month`,
+    [userId],
+  )
+
   const availableTotal = accounts.reduce(
     (totalCents, account) => totalCents + Math.round(Number(account.available || 0) * 100),
     0,
@@ -87,6 +113,7 @@ export async function getDashboardData(userId) {
     plans,
     categories,
     movements,
+    activityByMonth,
     loans: await getLoans(userId),
     summary: {
       accountsCount: accounts.length,
@@ -99,6 +126,28 @@ export async function getDashboardData(userId) {
       movementsCount: movements.length,
     },
   }
+}
+
+export async function confirmAccountPayment(userId, id, input) {
+  if (typeof input.confirmed !== 'boolean'
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(input.paymentDueDate || ''))) {
+    throw invalid('Indica la fecha límite y si confirmas o retiras la confirmación del pago.')
+  }
+  const amount = decimalValue(input.paymentToAvoidInterest, 'El pago para evitar intereses')
+  if (amount == null) throw invalid('Indica el importe del pago que estás confirmando.')
+  const [result] = await pool.execute(
+    `UPDATE cuenta
+     SET fecha_pago_confirmado = CASE WHEN ? THEN fecha_limite_pago ELSE NULL END,
+         monto_pago_confirmado = CASE WHEN ? THEN pago_para_no_generar_intereses ELSE NULL END
+     WHERE id = ? AND id_usuario = ?
+       AND tipo IN ('Tarjeta de crédito', 'Crédito')
+       AND fecha_limite_pago = ? AND pago_para_no_generar_intereses = ?`,
+    [input.confirmed, input.confirmed, id, userId, input.paymentDueDate, amount],
+  )
+  if (!result.affectedRows) {
+    throw invalid('La tarjeta no está disponible o cambió su fecha o importe. Actualiza el panorama antes de confirmar.', 409)
+  }
+  return { ok: true, id }
 }
 
 function accountFields(input) {

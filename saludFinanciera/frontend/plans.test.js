@@ -61,16 +61,77 @@ test('overview period controls switch monthly and annual payment totals without 
   })
   let markup = text(ctx.renderOverview())
   assert.match(markup, /type="month"/)
-  assert.match(markup, /Vencimiento en 2026-11/)
+  assert.match(markup, /Pendiente del periodo 2026-11/)
   assert.match(markup, /Disponible con crédito/)
   assert.match(markup, /Deuda total/)
   ctx.overviewPeriod = '2026-12'
   markup = text(ctx.renderOverview())
-  assert.match(markup, /Vencimiento en 2026-12/)
+  assert.match(markup, /Pendiente del periodo 2026-12/)
   ctx.overviewScope = 'year'
   markup = text(ctx.renderOverview())
   assert.match(markup, /type="number" min="1000" max="9999"/)
-  assert.match(markup, /Vencimiento en 2026</)
+  assert.match(markup, /Pendiente del periodo 2026</)
+})
+
+test('overview shows complete period activity, remaining card sums, warnings and manual controls', () => {
+  const ctx = state({
+    today: new Date(2027, 0, 11),
+    dashboard: {
+      plans: [], subscriptions: [], movements: [], summary: {},
+      activityByMonth: [{ month: '2027-01', income: '10000.10', expenses: '3000.20' }],
+      accounts: [{ id: 1, type: 'Crédito', name: 'Banco', available: '10', total: '100',
+        paymentDueDate: '2027-01-10', paymentToAvoidInterest: '90', paymentTransfers: '20' }],
+    },
+  })
+  let markup = text(ctx.renderOverview())
+  assert.match(markup, /Ingresos del periodo/)
+  assert.match(markup, /10,000\.10/)
+  assert.match(markup, /Gastos del periodo/)
+  assert.match(markup, /3,000\.20/)
+  assert.match(markup, /Pago para no generar intereses[\s\S]*?\$70\.00/)
+  assert.match(markup, /⚠ Pago vencido/)
+  assert.match(markup, /revisa el nuevo pago para no generar intereses/)
+  assert.match(markup, /Confirmar pago manualmente/)
+  assert.match(markup, /Revisar importe/)
+  assert.match(markup, /class="data-card overview-period"/)
+  ctx.dashboard.accounts[0].confirmedPaymentDueDate = '2027-01-10'
+  ctx.dashboard.accounts[0].confirmedPaymentAmount = '90'
+  const cardMarkup = text(ctx.renderBankCard(ctx.dashboard.accounts[0]))
+  assert.match(cardMarkup, /Pago confirmado manualmente/)
+  assert.doesNotMatch(cardMarkup, /⚠ Pago vencido/)
+  assert.match(cardMarkup, /Retirar confirmación manual/)
+  ctx.dashboard.accounts[0].confirmedPaymentDueDate = null
+  ctx.dashboard.accounts[0].paymentTransfers = '90'
+  assert.match(text(ctx.renderBankCard(ctx.dashboard.accounts[0])), /Pago cubierto con los abonos registrados/)
+})
+
+test('manual card confirmation sends the shown cycle, refreshes the dashboard and reports refresh failures explicitly', async (t) => {
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    requests.push({ url, options })
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  })
+  const previousWindow = globalThis.window
+  globalThis.window = { confirm: () => true }
+  t.after(() => { globalThis.window = previousWindow })
+  let refreshed = 0
+  const ctx = state({ refreshDashboard: async () => { refreshed++ } })
+  const card = { id: 5, paymentDueDate: '2027-01-10', paymentToAvoidInterest: '100' }
+  await ctx.handleConfirmCardPayment(card)
+  assert.equal(requests[0].url, '/api/accounts/5/payment-confirmation')
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    confirmed: true, paymentDueDate: '2027-01-10', paymentToAvoidInterest: '100',
+  })
+  assert.equal(refreshed, 1)
+  assert.equal(ctx.submitting, false)
+  await ctx.handleConfirmCardPayment({ ...card, confirmedPaymentDueDate: card.paymentDueDate, confirmedPaymentAmount: '100' })
+  assert.equal(JSON.parse(requests[1].options.body).confirmed, false)
+  ctx.refreshDashboard = async () => { throw new Error('Sin conexión') }
+  await ctx.handleConfirmCardPayment(card)
+  assert.match(ctx.error, /La confirmación se guardó, pero no se pudo actualizar el panorama: Sin conexión/)
+  ctx.familyView = true
+  await ctx.handleConfirmCardPayment(card)
+  assert.equal(requests.length, 3)
 })
 
 test('plan viewer renders cards, calculated progress and monthly dates rather than a table', () => {

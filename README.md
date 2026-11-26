@@ -13,6 +13,16 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Panorama: actividad y pagos de tarjetas
+
+Aplica `server/migrations/008-card-payment-confirmation.sql` antes de iniciar esta versión. Los ingresos y gastos del mes/año se suman desde todos los movimientos del periodo, sin el límite de 250 registros recientes. Se excluyen transferencias entre cuentas y operaciones de préstamos, igual que en Movimiento. La vista familiar suma la actividad de sus integrantes.
+
+Los pagos con vencimiento del día **1 al 14** se presupuestan en el mes anterior; los del 15 en adelante en su propio mes. El importe pendiente se arrastra al mes actual hasta cubrirlo. Por ejemplo, el pago del 10 de enero se muestra en diciembre y, si queda pendiente, pasa a enero. Dos días antes y el día límite se marca como urgente; después del vencimiento aparece una advertencia para revisar con el banco el nuevo importe para no generar intereses. La aplicación no calcula intereses ni cambia por sí sola el importe o la fecha del banco.
+
+Se suman las transferencias registradas hacia la tarjeta desde el día siguiente a su fecha límite anterior (la fecha límite capturada menos un mes) hasta hoy. Así se admiten abonos parciales y anticipados al corte, sin contar pagos del ciclo anterior, préstamos ni movimientos futuros. El saldo pendiente es el importe requerido menos estos abonos, nunca negativo. Editar o eliminar un movimiento recalcula el resultado. Registra como transferencia los pagos hechos desde efectivo u otra cuenta; una compra o un ingreso no se considera abono de tarjeta.
+
+**Confirmar pago manualmente**, en Panorama o Tarjetas, cubre el importe del vencimiento capturado sin crear movimientos ni modificar saldos; requiere confirmación y puede deshacerse. Se guarda para esa fecha e importe: al cambiar cualquiera de ellos se deja de considerar confirmado. Una confirmación manual tampoco modifica los eventos ya exportados a Google. La vista familiar es de solo consulta. Se conserva únicamente el último corte de cada tarjeta, no un historial de estados de cuenta; actualiza sus datos al recibir el siguiente corte.
+
 ## Recordatorios en Google Calendar
 
 En **Movimiento**, junto a los marcadores del calendario, **Sincronizar con Google Calendar** abre una vista previa del **mes seleccionado**. Consulta nuevamente los datos de tu usuario antes de mostrar pagos de tarjetas, suscripciones, aportaciones y compromisos de deudas. No exporta los movimientos realizados, archivos de evidencia, contraseñas ni datos bancarios de conexión. Está disponible únicamente en vista Individual; cada usuario autoriza la cuenta Google de su elección.

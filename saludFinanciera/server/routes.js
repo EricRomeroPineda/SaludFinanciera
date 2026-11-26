@@ -1,6 +1,7 @@
 import { handleSubscriptionRoute } from '../suscripciones/routes.js'
 import {
   createAccount,
+  confirmAccountPayment,
   deleteAccount,
   getDashboardData,
   updateAccount,
@@ -81,6 +82,18 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
     if (!userId) return true
     const account = await createAccount(userId, await readJson(request))
     sendJson(response, 201, account)
+    return true
+  }
+
+  const paymentRoute = /^\/api\/accounts\/(\d+)\/payment-confirmation$/.exec(url.pathname)
+  if (paymentRoute && request.method === 'PUT') {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    const id = Number(paymentRoute[1])
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw Object.assign(new Error('La cuenta no es válida.'), { statusCode: 400 })
+    }
+    sendJson(response, 200, await confirmAccountPayment(userId, id, await readJson(request)))
     return true
   }
 
