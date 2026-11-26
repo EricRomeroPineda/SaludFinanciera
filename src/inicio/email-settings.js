@@ -80,22 +80,25 @@ class EmailSettings extends LitElement {
           <button class="primary-button" ?disabled=${this.busy}>${this.busy ? 'Procesando…' : this.purpose === 'verify-email' ? 'Verificar mi correo' : 'Guardar nueva palabra clave'}</button>
         </form>
       ` : html`
-        <p>${this.user?.email || 'No tienes un correo registrado.'}
+        <p>${this.user?.email || 'No tienes un correo registrado. Captura tu correo y verifícalo para habilitar la recuperación.'}
           ${this.user?.email ? Number(this.user.emailVerified) ? ' · Verificado' : ' · Pendiente de verificación' : ''}</p>
         <form class="auth-form" @submit=${(event) => {
           event.preventDefault()
           const data = new FormData(event.currentTarget)
           this.perform('send-verification', { email: data.get('email'), currentPassword: data.get('currentPassword') })
         }}>
-          <label>Correo electrónico<input name="email" type="email" maxlength="254" autocomplete="email"
+          <input name="username" type="text" autocomplete="section-profile-email username"
+            .value=${this.user?.name || ''} hidden readonly />
+          <label>Correo electrónico<input name="email" type="email" maxlength="254" autocomplete="section-profile-email email"
+            placeholder="tu-correo@ejemplo.com"
             .value=${this.user?.email || ''} required ?disabled=${this.busy} /></label>
           <label>Contraseña actual para registrar o cambiar el correo
             <div class="secret-field"><input name="currentPassword" type=${this.showPassword ? 'text' : 'password'}
-              autocomplete="current-password" required ?disabled=${this.busy} />${this.eye(false)}</div></label>
+              autocomplete="section-profile-email current-password" required ?disabled=${this.busy} />${this.eye(false)}</div></label>
           <button class="primary-button" ?disabled=${this.busy}>Enviar verificación al correo</button>
         </form>
         <p>Cambiar el correo requiere verificar la nueva dirección. Cada nuevo envío invalida el enlace anterior.</p>
-        <button class="quiet-button" type="button" ?disabled=${this.busy || !Number(this.user?.emailVerified)}
+        <button class="quiet-button" type="button" ?disabled=${this.busy || !this.user?.email || !Number(this.user?.emailVerified)}
           @click=${() => this.perform('send-recovery', {})}>Enviar enlace para cambiar mi palabra clave</button>
         <p>No podemos mostrar ni enviar tu contraseña ni tu palabra clave actuales: se almacenan como hashes.</p>
       `}
