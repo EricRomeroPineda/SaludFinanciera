@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { pool } from './db.js'
 import { normalizeRecoveryKey } from './auth.js'
 import { promoteProfilePhoto, removeProfilePhoto } from './profile-photo.js'
+import { promoteMovementImages, removeEvidenceFiles } from './evidence-files.js'
 
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const attempts = new Map()
@@ -126,6 +127,7 @@ export async function consumeEmailLink(purpose, input, address) {
   }
   const connection = await pool.getConnection()
   let movedPhoto
+  let movedImages = []
   let committed = false
   try {
     await connection.beginTransaction()
@@ -145,6 +147,7 @@ export async function consumeEmailLink(purpose, input, address) {
     if (!valid.length) throw invalid('El enlace no es válido, ya se usó o caducó.')
     if (purpose === 'verify-email') {
       movedPhoto = await promoteProfilePhoto(connection, id)
+      movedImages = await promoteMovementImages(connection, id)
       await connection.execute('UPDATE usuario SET correo_verificado = 1 WHERE id = ?', [id])
     } else {
       await connection.execute(
@@ -161,6 +164,7 @@ export async function consumeEmailLink(purpose, input, address) {
   } finally {
     connection.release()
     if (movedPhoto) await removeProfilePhoto(committed ? movedPhoto.old : movedPhoto.photo)
+    await removeEvidenceFiles(movedImages.map((image) => committed ? image.old : image.next))
   }
 }
 

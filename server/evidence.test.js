@@ -1,23 +1,27 @@
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
 import { test } from 'node:test'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import sharp from 'sharp'
 import { pool } from './db.js'
 import { deleteEvidence, getEvidence, handleEvidenceRoute, listEvidence, uploadEvidence } from './evidence.js'
-import { maxEvidenceBytes, normalizeEvidence, readEvidence, removeEvidenceFiles, writeEvidence } from './evidence-files.js'
+import { maxEvidenceBytes, normalizeEvidence, promoteMovementImages, readEvidence, removeEvidenceFiles, writeEvidence } from './evidence-files.js'
 import { deleteMovement } from '../saludFinanciera/server/movements.js'
 
 async function image() {
   return sharp({ create: { width: 10, height: 10, channels: 3, background: '#112233' } }).png().toBuffer()
 }
 
-function database(t, { owner = 7, viewer = 7, count = 0, failInsert = false } = {}) {
+function database(t, { owner = 7, viewer = 7, count = 0, failInsert = false, verified = false } = {}) {
   const rows = []
   const calls = []
   let committed = false
   let rolledBack = false
   const execute = async (sql, params) => {
     calls.push({ sql, params })
+    if (sql.startsWith('SELECT correo, correo_verificado')) return [[{ correo: 'ana@example.com', correo_verificado: Number(verified) }]]
     if (sql.includes('SELECT m.id_usuario AS ownerId')) {
       if (sql.includes('FOR UPDATE')) return [viewer === owner ? [{ ownerId: owner }] : []]
       return [[{ ownerId: owner }]]
@@ -57,12 +61,78 @@ test('images are fully decoded and re-encoded as WebP without EXIF; disguised an
   }
   await assert.rejects(normalizeEvidence(Buffer.alloc(maxEvidenceBytes + 1)), { statusCode: 413 })
   const tooLarge = await sharp({ create: { width: 5000, height: 5000, channels: 3, background: '#000' } }).png().toBuffer()
-  await assert.rejects(normalizeEvidence(tooLarge), { statusCode: 400 })
+  const reduced = await sharp(await normalizeEvidence(tooLarge)).metadata()
+  assert.ok(reduced.width * reduced.height <= 20000000)
+  assert.equal(reduced.width, reduced.height)
+  const beyondLimit = await sharp({ create: { width: 10001, height: 10000, channels: 3, background: '#000' } }).png().toBuffer()
+  await assert.rejects(normalizeEvidence(beyondLimit), { statusCode: 400 })
   const firstFrame = await image()
   const secondFrame = await sharp(firstFrame).negate().png().toBuffer()
   const animation = await sharp([firstFrame, secondFrame], { join: { animated: true } }).webp({ delay: [100, 100] }).toBuffer()
   assert.equal((await sharp(animation).metadata()).pages, 2)
   await assert.rejects(normalizeEvidence(animation), { statusCode: 400 })
+})
+
+async function storage(t) {
+  const root = await mkdtemp(join(tmpdir(), 'salud-movimientos-'))
+  const previous = process.env.PROFILE_PHOTO_DIR
+  process.env.PROFILE_PHOTO_DIR = root
+  t.after(async () => {
+    if (previous === undefined) delete process.env.PROFILE_PHOTO_DIR
+    else process.env.PROFILE_PHOTO_DIR = previous
+    await rm(root, { recursive: true, force: true })
+  })
+  return root
+}
+
+test('new movement images use the verified email folder inside the configured server root', async (t) => {
+  const root = await storage(t)
+  const db = database(t, { verified: true })
+  await uploadEvidence(7, 9, await image(), 'receipt.png')
+  const reference = db.rows[0].archivo
+  assert.match(reference, /^ana@example.com\/movimientos\/[a-f0-9-]{36}\.webp$/)
+  assert.ok((await readFile(join(root, reference))).length > 0)
+  assert.equal((await getEvidence(8, 9, 1)).length > 0, true)
+  await deleteEvidence(7, 9, 1)
+  await assert.rejects(readFile(join(root, reference)), { code: 'ENOENT' })
+})
+
+test('verification prepares movement relocation and retains originals until the transaction commits', async (t) => {
+  const root = await storage(t)
+  const old = await writeEvidence(await normalizeEvidence(await image()), { id: 7 })
+  const moved = await promoteMovementImages({
+    execute: async (sql, params) => {
+      if (sql.startsWith('SELECT correo')) return [[{ correo: 'ana@example.com' }]]
+      if (sql.startsWith('SELECT e.id')) {
+        assert.match(sql, /m.id_usuario = \? FOR UPDATE/)
+        assert.deepEqual(params, [7])
+        return [[{ id: 1, archivo: old }]]
+      }
+      assert.match(sql, /^UPDATE movimiento_evidencia SET archivo/)
+      assert.equal(params[1], 1)
+      return [{ affectedRows: 1 }]
+    },
+  }, 7)
+  assert.equal(moved[0].old, old)
+  assert.match(moved[0].next, /^ana@example.com\/movimientos\//)
+  await readFile(join(root, old))
+  await readFile(join(root, moved[0].next))
+  await removeEvidenceFiles(moved.map((item) => item.old))
+  await assert.rejects(readEvidence(old), { code: 'ENOENT' })
+})
+
+test('failed movement relocation removes destination copies but preserves source files', async (t) => {
+  const root = await storage(t)
+  const old = await writeEvidence(await normalizeEvidence(await image()), { id: 7 })
+  await assert.rejects(promoteMovementImages({
+    execute: async (sql) => {
+      if (sql.startsWith('SELECT correo')) return [[{ correo: 'ana@example.com' }]]
+      if (sql.startsWith('SELECT e.id')) return [[{ id: 1, archivo: old }]]
+      throw new Error('Movement relocation failed')
+    },
+  }, 7), /Movement relocation failed/)
+  await readEvidence(old)
+  assert.deepEqual(await readdir(join(root, 'ana@example.com', 'movimientos')), [])
 })
 
 test('owner can upload/list/read/remove images independently without touching financial balances', async (t) => {
@@ -71,7 +141,7 @@ test('owner can upload/list/read/remove images independently without touching fi
   const filename = db.rows[0].archivo
   t.after(() => removeEvidenceFiles([filename]))
   assert.equal(db.committed(), true)
-  assert.match(filename, /^[a-f0-9-]{36}\.webp$/)
+  assert.match(filename, /^usuario-7\/movimientos\/[a-f0-9-]{36}\.webp$/)
   assert.deepEqual(result, { image: { id: 1, name: 'recibo.png' } })
   assert.deepEqual(await listEvidence(7, 9), { images: [{ id: 1, name: 'recibo.png' }], canManage: true })
   assert.equal((await sharp(await getEvidence(7, 9, 1)).metadata()).format, 'webp')

@@ -1,10 +1,11 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { resolve, join } from 'node:path'
+import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { pool } from './db.js'
 import { normalizeEvidence } from './evidence-files.js'
 import { readImage } from './evidence.js'
+import { userFolder, userStoragePath } from './user-storage.js'
 
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 const pattern = /^\/api\/profile-photo\/([1-9]\d*)\/([^/]+)\/([a-f0-9-]{36}\.webp)$/
@@ -16,8 +17,7 @@ function location(photo) {
   if (!/^[a-z0-9@._+%!-]+$/i.test(folder) || ['.', '..'].includes(folder)) {
     throw invalid('La carpeta de perfil no es válida.')
   }
-  const root = resolve(process.env.PROFILE_PHOTO_DIR || 'storage/profile-photos')
-  return { id: Number(match[1]), file: join(root, folder, 'perfil', match[3]) }
+  return { id: Number(match[1]), file: userStoragePath(folder, 'perfil', match[3]) }
 }
 
 export async function removeProfilePhoto(photo) {
@@ -31,7 +31,7 @@ export async function removeProfilePhoto(photo) {
 }
 
 async function writePhoto(userId, email, buffer) {
-  const folder = email ? encodeURIComponent(email.toLowerCase()).replace(/%40/g, '@') : `usuario-${userId}`
+  const folder = userFolder(userId, email)
   const photo = `/api/profile-photo/${userId}/${encodeURIComponent(folder)}/${randomUUID()}.webp`
   if (photo.length > 500) throw invalid('El correo es demasiado largo para crear la carpeta de perfil.')
   const { file } = location(photo)

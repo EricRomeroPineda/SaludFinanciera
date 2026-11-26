@@ -37,12 +37,16 @@ export async function uploadEvidence(userId, movementId, buffer, originalName) {
   let committed = false
   try {
     await connection.beginTransaction()
+    const [users] = await connection.execute(
+      'SELECT correo, correo_verificado FROM usuario WHERE id = ? FOR UPDATE', [userId],
+    )
+    if (!users.length) throw invalid('No se encontró el usuario.', 404)
     await authorize(connection, userId, movementId, true)
     const [existing] = await connection.execute(
       'SELECT id FROM movimiento_evidencia WHERE id_movimiento = ? FOR UPDATE', [movementId],
     )
     if (existing.length >= maxEvidenceCount) throw invalid('Cada movimiento admite hasta 5 imágenes.', 409)
-    filename = await writeEvidence(normalized)
+    filename = await writeEvidence(normalized, { id: userId, email: Number(users[0].correo_verificado) ? users[0].correo : null })
     const [result] = await connection.execute(
       'INSERT INTO movimiento_evidencia (id_movimiento, archivo, nombre) VALUES (?, ?, ?)',
       [movementId, filename, name],

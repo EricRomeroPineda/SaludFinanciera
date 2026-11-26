@@ -63,6 +63,7 @@ function database(t, execute) {
     execute: async (sql, params) => {
       state.writes.push({ sql, params })
       assert.equal((sql.match(/\?/g) || []).length, params.length)
+      if (sql.includes('FROM movimiento_evidencia e')) return [[]]
       if (sql.includes('INTERVAL 1770 SECOND')) return [[]]
       return execute(sql, params)
     },

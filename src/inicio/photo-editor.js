@@ -61,15 +61,28 @@ class PhotoEditor extends LitElement {
       image.src = src
       await image.decode()
       if (generation !== this.generation) return
-      if (image.naturalWidth * image.naturalHeight > 20000000) throw new Error('La imagen supera los 20 megapíxeles.')
-      this.image = image
+      if (image.naturalWidth * image.naturalHeight > 100000000) throw new Error('La imagen supera el límite de seguridad de 100 megapíxeles.')
+      if (image.naturalWidth * image.naturalHeight > 20000000) {
+        const scale = Math.sqrt(20000000 / (image.naturalWidth * image.naturalHeight))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.floor(image.naturalWidth * scale)
+        canvas.height = Math.floor(image.naturalHeight * scale)
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+        const reduced = new Image()
+        reduced.src = canvas.toDataURL('image/webp', .9)
+        await reduced.decode()
+        if (generation !== this.generation) return
+        this.image = reduced
+      } else {
+        this.image = image
+      }
       this.source = src
       this.reset()
       await this.updateComplete
       this.draw()
     } catch (error) {
       if (generation !== this.generation) return
-      this.error = error.message === 'La imagen supera los 20 megapíxeles.' ? error.message
+      this.error = error.message === 'La imagen supera el límite de seguridad de 100 megapíxeles.' ? error.message
         : 'No se pudo abrir la imagen para editarla. Selecciona un archivo JPG, PNG o WebP de tu equipo.'
     } finally {
       if (generation === this.generation) this.busy = false
@@ -146,6 +159,7 @@ class PhotoEditor extends LitElement {
   render() {
     return html`<dialog aria-labelledby="photo-title" @close=${this.close} @cancel=${this.close}>
       <h2 id="photo-title">Ajustar foto de perfil</h2>
+      <p>Las imágenes de más de 20 megapíxeles se reducen automáticamente. Máximo 5 MB y 100 megapíxeles.</p>
       <input type="file" accept="image/jpeg,image/png,image/webp" hidden @change=${this.select} />
       <button type="button" ?disabled=${this.busy}
         @click=${() => this.renderRoot.querySelector('input[type=file]').click()}>Seleccionar otra foto</button>

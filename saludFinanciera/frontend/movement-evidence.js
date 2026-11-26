@@ -152,7 +152,7 @@ export class MovementEvidence extends LitElement {
               <input type="file" accept="image/jpeg,image/png,image/webp" multiple
                 ?disabled=${this.busy || this.loading || this.locked} @change=${this.selectFiles} />
             </label>
-            <p>Hasta 5 imágenes por movimiento, 5 MB y 20 megapíxeles por imagen.
+            <p>Hasta 5 imágenes por movimiento y 5 MB por imagen. Las mayores de 20 megapíxeles se reducen automáticamente (máximo 100 megapíxeles).
               Se guardan en WebP sin metadatos de ubicación. No se admiten animaciones.
               Solo tú y tu familia autorizada pueden consultarlas.</p>
             ${this.pending.length ? html`

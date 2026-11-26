@@ -9,6 +9,7 @@ import { pool } from './db.js'
 import { handleProfilePhotoRoute, promoteProfilePhoto, removeProfilePhoto, uploadProfilePhoto } from './profile-photo.js'
 import { updateProfile } from './auth.js'
 import { consumeEmailLink } from './email.js'
+import { writeEvidence, readEvidence } from './evidence-files.js'
 
 const image = await sharp({ create: { width: 1000, height: 900, channels: 3, background: '#4488aa' } }).png().toBuffer()
 
@@ -21,7 +22,7 @@ async function setup(t, verified = 0) {
     else process.env.PROFILE_PHOTO_DIR = previous
     await rm(root, { recursive: true, force: true })
   })
-  const state = { root, user: { foto_perfil: 'https://example.com/old.png', correo: 'ana@example.com', correo_verificado: verified }, writes: [], committed: false, rolledBack: false, fail: false }
+  const state = { root, user: { foto_perfil: 'https://example.com/old.png', correo: 'ana@example.com', correo_verificado: verified }, images: [], writes: [], committed: false, rolledBack: false, fail: false }
   const connection = {
     beginTransaction: async () => {},
     commit: async () => { state.committed = true },
@@ -29,9 +30,11 @@ async function setup(t, verified = 0) {
     release() {},
     execute: async (sql, params) => {
       state.writes.push({ sql, params })
+      if (sql.includes('FROM movimiento_evidencia e')) return [state.images]
       if (sql.startsWith('SELECT')) return [[{ ...state.user, id: 7, id_usuario: 7 }]]
       if (state.fail) throw new Error('Database write failed')
       if (sql.startsWith('UPDATE usuario SET foto_perfil')) state.user.foto_perfil = params[0]
+      if (sql.startsWith('UPDATE movimiento_evidencia')) state.images.find((image) => image.id === params[1]).archivo = params[0]
       return [{ affectedRows: 1 }]
     },
   }
@@ -79,16 +82,23 @@ test('failed database update removes the new file and retains the existing photo
 test('consuming email verification promotes the photo and deletes the temporary file after commit', async (t) => {
   const { state } = await setup(t)
   const before = await uploadProfilePhoto(7, image)
+  const evidence = await writeEvidence(image, { id: 7 })
+  state.images.push({ id: 9, archivo: evidence })
   await consumeEmailLink('verify-email', { token: 'e'.repeat(64) }, 'profile-photo-verification')
   assert.match(state.user.foto_perfil, /ana%40example.com/)
   await readFile(diskPath(state.root, state.user.foto_perfil))
   await assert.rejects(readFile(diskPath(state.root, before)), { code: 'ENOENT' })
   assert.equal(state.writes.some(({ sql }) => sql.includes('SET correo_verificado = 1')), true)
+  assert.match(state.images[0].archivo, /^ana@example.com\/movimientos\//)
+  await readEvidence(state.images[0].archivo)
+  await assert.rejects(readEvidence(evidence), { code: 'ENOENT' })
 })
 
 test('failed verification retains the temporary photo and removes the promoted copy', async (t) => {
   const { state, connection } = await setup(t)
   const before = await uploadProfilePhoto(7, image)
+  const evidence = await writeEvidence(image, { id: 7 })
+  state.images.push({ id: 9, archivo: evidence })
   const execute = connection.execute
   connection.execute = async (sql, params) => {
     if (sql.includes('SET correo_verificado = 1')) throw new Error('Verification update failed')
@@ -98,6 +108,8 @@ test('failed verification retains the temporary photo and removes the promoted c
   assert.equal(state.rolledBack, true)
   await readFile(diskPath(state.root, before))
   assert.deepEqual(await readdir(join(state.root, 'ana@example.com', 'perfil')), [])
+  await readEvidence(evidence)
+  assert.deepEqual(await readdir(join(state.root, 'ana@example.com', 'movimientos')), [])
 })
 
 test('invalid, oversized or disguised images cannot reach storage', async (t) => {
