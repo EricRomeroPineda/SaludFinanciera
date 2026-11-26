@@ -48,10 +48,11 @@ class EmailSettings extends LitElement {
       saved = true
       const password = this.renderRoot?.querySelector('[name="currentPassword"]')
       if (password) password.value = ''
-      if (path === 'verify' || path === 'reset-recovery') {
+      if (['verify', 'reset-recovery', 'reset-password'].includes(path)) {
         this.done = true
         this.token = ''
-        this.notice = path === 'verify' ? 'Correo verificado. Ya puedes usarlo desde Mi perfil.'
+        this.notice = path === 'reset-password' ? 'Contraseña restablecida. Inicia sesión con tu nueva contraseña.'
+          : path === 'verify' ? 'Correo verificado. Ya puedes usarlo desde Mi perfil.'
           : 'Palabra clave de recuperación actualizada. Ya puedes usarla para recuperar tu contraseña.'
       } else {
         this.notice = result.message
@@ -89,14 +90,18 @@ class EmailSettings extends LitElement {
         <form class="auth-form" @submit=${(event) => {
           event.preventDefault()
           const data = new FormData(event.currentTarget)
-          this.perform(this.purpose === 'verify-email' ? 'verify' : 'reset-recovery', {
-            token: this.token, recoveryKey: data.get('recoveryKey'),
+          this.perform(this.purpose === 'verify-email' ? 'verify' : this.purpose, {
+            token: this.token, recoveryKey: data.get('recoveryKey'), password: data.get('password'),
           })
         }}>
           ${this.purpose === 'reset-recovery' ? html`<label>Nueva palabra clave de recuperación
             <div class="secret-field"><input name="recoveryKey" type=${this.showKey ? 'text' : 'password'}
               minlength="4" maxlength="72" autocomplete="off" required />${this.eye(true)}</div></label>` : ''}
-          <button class="primary-button" ?disabled=${this.busy}>${this.busy ? 'Procesando…' : this.purpose === 'verify-email' ? 'Verificar mi correo' : 'Guardar nueva palabra clave'}</button>
+          ${this.purpose === 'reset-password' ? html`<label>Nueva contraseña
+            <div class="secret-field"><input name="password" type=${this.showPassword ? 'text' : 'password'}
+              minlength="10" autocomplete="new-password" required />${this.eye(false)}</div>
+            <small>Al menos 10 caracteres, máximo 72 bytes.</small></label>` : ''}
+          <button class="primary-button" ?disabled=${this.busy}>${this.busy ? 'Procesando…' : this.purpose === 'reset-password' ? 'Guardar nueva contraseña' : this.purpose === 'verify-email' ? 'Verificar mi correo' : 'Guardar nueva palabra clave'}</button>
         </form>
       ` : html`
         <p>${this.user?.email || 'No tienes un correo registrado. Captura tu correo y verifícalo para habilitar la recuperación.'}

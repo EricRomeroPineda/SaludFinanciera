@@ -93,7 +93,7 @@ function invalidInput(message) {
   throw error
 }
 
-function validatePassword(password) {
+export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 10 || Buffer.byteLength(password) > 72) {
     invalidInput('La contraseña debe tener al menos 10 caracteres y no exceder 72 bytes.')
   }
@@ -299,6 +299,26 @@ function limitRecovery(key, limit) {
 }
 
 const dummyRecoveryHash = bcrypt.hashSync('unused-recovery-key', 12)
+
+export async function validateEmailRecovery(connection, email, recoveryKey, address) {
+  limitRecovery(`email-ip:${address}`, 10)
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+  if (!normalizedEmail || normalizedEmail.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(normalizedEmail)) {
+    invalidInput('Escribe un correo electrónico válido.')
+  }
+  limitRecovery(`email:${createHash('sha256').update(normalizedEmail).digest('hex')}`, 5)
+  const key = normalizeRecoveryKey(recoveryKey)
+  const [users] = await connection.execute(
+    `SELECT id, correo, recuperacion_token_hash FROM usuario WHERE correo = ? AND correo_verificado = 1
+     AND (recuperacion_expira IS NULL OR recuperacion_expira > CURRENT_TIMESTAMP) FOR UPDATE`, [normalizedEmail],
+  )
+  const user = users[0]
+  const hash = user?.recuperacion_token_hash
+  const valid = typeof hash === 'string' && /^\$2[ab]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash)
+  const matches = await bcrypt.compare(key, valid ? hash : dummyRecoveryHash)
+  if (!valid || !matches) invalidInput('El correo o la palabra clave no son correctos, o el correo no está verificado.')
+  return user
+}
 
 export async function recoverPassword(name, recoveryKey, password, address) {
   limitRecovery(`ip:${address}`, 10)

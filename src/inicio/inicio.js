@@ -10,6 +10,7 @@ import defaultAvatar from '../assets/default-avatar.svg'
 import './familia.js'
 import './email-settings.js'
 import './photo-editor.js'
+import './access-recovery.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -110,7 +111,7 @@ class Inicio extends LitElement {
   readEmailLink() {
     const params = new URLSearchParams(window.location.hash.slice(1))
     const query = new URLSearchParams(window.location.search)
-    for (const purpose of ['verify-email', 'reset-recovery']) {
+    for (const purpose of ['verify-email', 'reset-recovery', 'reset-password']) {
       const token = params.get(purpose) || query.get(purpose)
       if (token) {
         this.emailLink = { purpose, token }
@@ -449,14 +450,14 @@ class Inicio extends LitElement {
             <h2 id="auth-title">${registering ? 'Crea tu usuario' : recovering ? 'Recupera tu acceso' : 'Inicia sesión'}</h2>
             <p>${registering
               ? 'Registra tu usuario, foto y palabra clave para empezar a organizar tus finanzas.'
-              : recovering ? 'Escribe tu usuario, palabra clave y una contraseña nueva.'
+              : recovering ? 'Recupera tu acceso con tu correo verificado.'
                 : 'Entra con tu usuario o correo verificado en Salud Financiera.'}</p>
           </div>
 
           ${this.error ? html`<div class="error-message" role="alert">${this.error}</div>` : ''}
           ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
 
-          <form class="auth-form" @submit=${this.handleAuthSubmit}>
+          ${recovering ? html`<access-recovery></access-recovery>` : html`<form class="auth-form" @submit=${this.handleAuthSubmit}>
             <label>
               ${registering || recovering ? 'Nombre de usuario' : 'Usuario o correo electrónico'}
               <input name="name" type="text" maxlength=${registering || recovering ? '100' : '254'} autocomplete="username" required />
@@ -485,7 +486,7 @@ class Inicio extends LitElement {
               ${this.submitting ? 'Un momento…' : registering ? 'Crear usuario' : recovering ? 'Restablecer contraseña' : 'Entrar'}
               <span aria-hidden="true">→</span>
             </button>
-          </form>
+          </form>`}
 
           <p class="auth-switch">
             ${registering || recovering ? '¿Ya tienes usuario?' : '¿Primera vez aquí?'}

@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer'
 import { randomBytes, createHash } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from './db.js'
-import { normalizeRecoveryKey } from './auth.js'
+import { normalizeRecoveryKey, validateEmailRecovery, validatePassword } from './auth.js'
 import { promoteProfilePhoto, removeProfilePhoto } from './profile-photo.js'
 import { promoteMovementImages, removeEvidenceFiles } from './evidence-files.js'
 
@@ -39,10 +39,11 @@ export async function sendAccountEmail(to, purpose, token) {
     const result = await transport.sendMail({
       from, to,
       subject: purpose === 'recovery-key' ? 'Tu nueva palabra clave · Salud Financiera'
-        : purpose === 'verify-email' ? 'Verifica tu correo · Salud Financiera' : 'Cambia tu palabra clave de recuperación · Salud Financiera',
+        : purpose === 'reset-password' ? 'Recupera tu contraseña · Salud Financiera'
+          : purpose === 'verify-email' ? 'Verifica tu correo · Salud Financiera' : 'Cambia tu palabra clave de recuperación · Salud Financiera',
       text: purpose === 'recovery-key'
-        ? `Tu nueva palabra clave de recuperación es:\n\n${token}\n\nReemplaza la anterior. Úsala junto con tu usuario en «Olvidé mi contraseña». No cambia tu contraseña de acceso. Para elegir otra palabra clave, solicita el enlace de cambio desde Mi perfil. No compartas esta clave. Si no lo solicitaste, revisa el acceso a tu cuenta.`
-        : `Abre este enlace para ${purpose === 'verify-email' ? 'verificar tu correo' : 'crear una nueva palabra clave de recuperación'}:\n\n${link.href}\n\nCaduca en 30 minutos y solo puede usarse una vez. Si no lo solicitaste, ignora este correo. Nunca compartas el enlace.`,
+        ? `Tu nueva palabra clave de recuperación es:\n\n${token}\n\nReemplaza la anterior. Úsala junto con tu correo verificado en «Olvidé mi contraseña». No cambia tu contraseña de acceso. Para elegir otra palabra clave, solicita el enlace de cambio desde Mi perfil o la pantalla de recuperación. No compartas esta clave. Si no lo solicitaste, revisa el acceso a tu cuenta.`
+        : `Abre este enlace para ${purpose === 'reset-password' ? 'crear una nueva contraseña de acceso' : purpose === 'verify-email' ? 'verificar tu correo' : 'crear una nueva palabra clave de recuperación'}:\n\n${link.href}\n\nCaduca en 30 minutos y solo puede usarse una vez. Si no lo solicitaste, ignora este correo. Nunca compartas el enlace.`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('El servidor de correo rechazó al destinatario.')
   } finally {
@@ -67,9 +68,10 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
       if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw invalid('Escribe un correo electrónico válido.')
       if (typeof input.currentPassword !== 'string'
         || !await bcrypt.compare(input.currentPassword, user.password_hash)) throw invalid('La contraseña actual no es correcta.')
-    } else if (!['reset-recovery', 'recovery-key'].includes(purpose) || !email || !Number(user.correo_verificado)) {
+    } else if (!['reset-recovery', 'recovery-key', 'reset-password'].includes(purpose) || !email || !Number(user.correo_verificado)) {
       throw invalid('Primero registra y verifica tu correo electrónico.')
     }
+    if (input.expectedEmail && email !== input.expectedEmail) throw invalid('El correo registrado cambió. Intenta de nuevo.', 409)
     const [recent] = await connection.execute(
       `SELECT id_usuario FROM usuario_enlace_correo
        WHERE id_usuario = ? AND expira > DATE_ADD(UTC_TIMESTAMP(), INTERVAL 1770 SECOND)`,
@@ -115,15 +117,59 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
   }
 }
 
+export async function requestPublicRecovery(input, address, send = sendAccountEmail) {
+  limit(`public-send:${address}`)
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw invalid('Escribe un correo electrónico válido.')
+  if (!['reset-password', 'reset-recovery'].includes(input.purpose)) throw invalid('Selecciona el tipo de recuperación.')
+  const [users] = await pool.execute('SELECT id FROM usuario WHERE correo = ? AND correo_verificado = 1', [email])
+  if (users.length === 1) {
+    try {
+      await requestEmailLink(users[0].id, input.purpose, { expectedEmail: email }, send)
+    } catch (error) {
+      // Do not disclose account existence through per-account cooldowns.
+      if (error.statusCode !== 429) throw error
+    }
+  }
+  return { ok: true, retryAfterSeconds: 30, message: 'Si el correo está registrado y verificado, recibirás un enlace. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a solicitarlo.' }
+}
+
+export async function authorizePasswordRecovery(input, address) {
+  const connection = await pool.getConnection()
+  try {
+    await connection.beginTransaction()
+    const user = await validateEmailRecovery(connection, input.email, input.recoveryKey, address)
+    const token = randomBytes(32).toString('hex')
+    await connection.execute(
+      `INSERT INTO usuario_enlace_correo (id_usuario, proposito, token_hash, correo, expira)
+       VALUES (?, 'reset-password', ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 10 MINUTE))
+       ON DUPLICATE KEY UPDATE token_hash = VALUES(token_hash), correo = VALUES(correo), expira = VALUES(expira)`,
+      [user.id, createHash('sha256').update(token).digest('hex'), user.correo],
+    )
+    await connection.commit()
+    return { ok: true, token }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 export async function consumeEmailLink(purpose, input, address) {
   limit(`consume:${address}`)
-  if (!['verify-email', 'reset-recovery'].includes(purpose) || !/^[a-f0-9]{64}$/.test(input.token || '')) {
+  if (!['verify-email', 'reset-recovery', 'reset-password'].includes(purpose) || !/^[a-f0-9]{64}$/.test(input.token || '')) {
     throw invalid('El enlace no es válido o ya caducó.')
   }
   let recoveryHash
   if (purpose === 'reset-recovery') {
     const key = normalizeRecoveryKey(input.recoveryKey)
     recoveryHash = await bcrypt.hash(key, 12)
+  }
+  let passwordHash
+  if (purpose === 'reset-password') {
+    validatePassword(input.password)
+    passwordHash = await bcrypt.hash(input.password, 12)
   }
   const connection = await pool.getConnection()
   let movedPhoto
@@ -149,6 +195,8 @@ export async function consumeEmailLink(purpose, input, address) {
       movedPhoto = await promoteProfilePhoto(connection, id)
       movedImages = await promoteMovementImages(connection, id)
       await connection.execute('UPDATE usuario SET correo_verificado = 1 WHERE id = ?', [id])
+    } else if (purpose === 'reset-password') {
+      await connection.execute('UPDATE usuario SET password_hash = ? WHERE id = ?', [passwordHash, id])
     } else {
       await connection.execute(
         'UPDATE usuario SET recuperacion_token_hash = ?, recuperacion_expira = NULL WHERE id = ?', [recoveryHash, id],
@@ -170,12 +218,21 @@ export async function consumeEmailLink(purpose, input, address) {
 
 export async function handleEmailRoute(request, response, url, { getUserId, readJson, sendJson }) {
   if (request.method !== 'POST') return false
+  if (url.pathname === '/api/auth/email/request-access-link' || url.pathname === '/api/auth/email/validate-recovery-key') {
+    const input = await readJson(request)
+    const address = request.socket.remoteAddress
+    const result = url.pathname.endsWith('validate-recovery-key')
+      ? await authorizePasswordRecovery(input, address) : await requestPublicRecovery(input, address)
+    sendJson(response, 200, result)
+    return true
+  }
   const action = {
     '/api/auth/email/send-verification': ['send', 'verify-email'],
     '/api/auth/email/send-recovery': ['send', 'reset-recovery'],
     '/api/auth/email/send-key': ['send', 'recovery-key'],
     '/api/auth/email/verify': ['consume', 'verify-email'],
     '/api/auth/email/reset-recovery': ['consume', 'reset-recovery'],
+    '/api/auth/email/reset-password': ['consume', 'reset-password'],
   }[url.pathname]
   if (!action) return false
   if (action[0] === 'send') {

@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import bcrypt from 'bcryptjs'
 import nodemailer from 'nodemailer'
 import { pool } from './db.js'
-import { requestEmailLink, consumeEmailLink, handleEmailRoute, sendAccountEmail } from './email.js'
+import { requestEmailLink, consumeEmailLink, handleEmailRoute, sendAccountEmail, requestPublicRecovery, authorizePasswordRecovery } from './email.js'
 
 const password = 'a-long-test-password'
 const passwordHash = await bcrypt.hash(password, 4)
@@ -24,6 +24,7 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
   })
   let closed = false
   let generated = false
+  let resetPassword = false
   t.mock.method(nodemailer, 'createTransport', (config) => {
     assert.equal(config.secure, true)
     assert.equal(config.port, 465)
@@ -31,7 +32,11 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
     return {
       sendMail: async (message) => {
         assert.equal(message.to, 'ana@example.com')
-        if (generated) {
+        if (resetPassword) {
+          assert.match(message.subject, /Recupera tu contraseña/)
+          assert.match(message.text, /#reset-password=/)
+          assert.match(message.text, /nueva contraseña de acceso/)
+        } else if (generated) {
           assert.match(message.subject, /Tu nueva palabra clave/)
           assert.match(message.text, /\n\nnew-generated-key\n\n/)
           assert.doesNotMatch(message.text, /#recovery-key=|Caduca en 30 minutos/)
@@ -49,6 +54,8 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
   assert.equal(closed, true)
   generated = true
   await sendAccountEmail('ana@example.com', 'recovery-key', 'new-generated-key')
+  resetPassword = true
+  await sendAccountEmail('ana@example.com', 'reset-password', 'd'.repeat(64))
   process.env.APP_BASE_URL = 'http://untrusted.example'
   await assert.rejects(sendAccountEmail('ana@example.com', 'verify-email', 'c'.repeat(64)), /HTTPS/)
 })
@@ -224,3 +231,124 @@ test('resend cooldown is enforced under the user lock before any token replaceme
     await assert.rejects(requestEmailLink(111, 'recovery-key', {}, async () => { sent++ }), { statusCode: 429 })
     assert.equal(sent, 0)
   })
+
+test('public recovery sends only to a stored verified email and responds identically for missing accounts', async (t) => {
+  let found = true
+  t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.match(sql, /correo = \? AND correo_verificado = 1/)
+    assert.deepEqual(params, ['ana@example.com'])
+    return [found ? [{ id: 130 }] : []]
+  })
+  const state = database(t, async (sql) => sql.startsWith('SELECT')
+    ? [[{ correo: 'ana@example.com', correo_verificado: 1 }]] : [{ affectedRows: 1 }])
+  let deliveries = 0
+  const send = async (email, purpose, token) => {
+    assert.equal(email, 'ana@example.com')
+    assert.ok(['reset-password', 'reset-recovery'].includes(purpose))
+    assert.match(token, /^[a-f0-9]{64}$/)
+    deliveries++
+  }
+  const known = await requestPublicRecovery({ email: ' Ana@Example.com ', purpose: 'reset-password' }, 'public-1', send)
+  await requestPublicRecovery({ email: 'ana@example.com', purpose: 'reset-recovery' }, 'public-1', send)
+  found = false
+  const missing = await requestPublicRecovery({ email: 'ana@example.com', purpose: 'reset-password' }, 'public-2', send)
+  assert.deepEqual(known, missing)
+  assert.equal(deliveries, 2)
+  assert.ok(state.committed)
+  assert.equal(JSON.stringify(known).includes('token'), false)
+  assert.equal(state.writes.some(({ sql }) => sql.startsWith('UPDATE usuario')), false)
+})
+
+test('public recovery rejects unsupported purposes and surfaces SMTP errors', async (t) => {
+  await assert.rejects(requestPublicRecovery({ email: 'bad', purpose: 'reset-password' }, 'public-invalid'), { statusCode: 400 })
+  await assert.rejects(requestPublicRecovery({ email: 'ana@example.com', purpose: 'recovery-key' }, 'public-invalid'), { statusCode: 400 })
+  t.mock.method(pool, 'execute', async () => [[{ id: 131 }]])
+  database(t, async (sql) => sql.startsWith('SELECT')
+    ? [[{ correo: 'ana@example.com', correo_verificado: 1 }]] : [{ affectedRows: 1 }])
+  t.mock.method(console, 'error', () => {})
+  await assert.rejects(requestPublicRecovery({ email: 'ana@example.com', purpose: 'reset-password' }, 'public-smtp',
+    async () => { throw new Error('SMTP failed') }), { statusCode: 503 })
+})
+
+test('validating email and key grants a short-lived hashed one-use password reset token without changing the password', async (t) => {
+  const recoveryHash = await bcrypt.hash('private-key', 4)
+  let savedToken
+  const state = database(t, async (sql, params) => {
+    if (sql.startsWith('SELECT')) {
+      assert.match(sql, /correo_verificado = 1/)
+      assert.match(sql, /recuperacion_expira/)
+      assert.match(sql, /FOR UPDATE/)
+      assert.deepEqual(params, ['ana@example.com'])
+      return [[{ id: 132, correo: 'ana@example.com', recuperacion_token_hash: recoveryHash }]]
+    }
+    assert.match(sql, /INTERVAL 10 MINUTE/)
+    assert.match(sql, /'reset-password'/)
+    savedToken = params[1]
+    return [{ affectedRows: 1 }]
+  })
+  const result = await authorizePasswordRecovery({ email: ' Ana@Example.com ', recoveryKey: ' Private-Key ' }, 'key-valid')
+  assert.match(result.token, /^[a-f0-9]{64}$/)
+  assert.equal(savedToken, createHash('sha256').update(result.token).digest('hex'))
+  assert.ok(state.committed)
+  assert.equal(state.writes.some(({ sql }) => sql.startsWith('UPDATE')), false)
+})
+
+test('wrong keys, missing or unverified accounts never receive a password reset token', async (t) => {
+  const hash = await bcrypt.hash('correct-key', 4)
+  let missing = false
+  const state = database(t, async (sql) => {
+    assert.match(sql, /^SELECT/)
+    return [missing ? [] : [{ id: 133, correo: 'ana@example.com', recuperacion_token_hash: hash }]]
+  })
+  await assert.rejects(authorizePasswordRecovery({ email: 'ana@example.com', recoveryKey: 'wrong-key' }, 'key-wrong'), { statusCode: 400 })
+  missing = true
+  await assert.rejects(authorizePasswordRecovery({ email: 'missing@example.com', recoveryKey: 'correct-key' }, 'key-missing'), { statusCode: 400 })
+  assert.ok(state.rolledBack)
+  assert.equal(state.writes.some(({ sql }) => sql.startsWith('INSERT')), false)
+})
+
+test('password reset consumes only its verified-email-bound token, hashes password and rejects replay', async (t) => {
+  let valid = true
+  let stored
+  const state = database(t, async (sql, params) => {
+    if (sql.startsWith('SELECT id_usuario')) {
+      assert.equal(params[1], 'reset-password')
+      return [[{ id_usuario: 134 }]]
+    }
+    if (sql.startsWith('SELECT id FROM usuario')) return [[{ id: 134 }]]
+    if (sql.startsWith('SELECT e.id_usuario')) {
+      assert.match(sql, /e.expira > UTC_TIMESTAMP/)
+      assert.match(sql, /u.correo = e.correo/)
+      assert.match(sql, /u.correo_verificado = 1/)
+      return [valid ? [{ id_usuario: 134 }] : []]
+    }
+    if (sql.startsWith('UPDATE')) {
+      assert.equal(sql, 'UPDATE usuario SET password_hash = ? WHERE id = ?')
+      stored = params[0]
+    }
+    if (sql.startsWith('DELETE')) valid = false
+    return [{ affectedRows: 1 }]
+  })
+  const input = { token: 'd'.repeat(64), password: 'a-brand-new-password' }
+  await assert.rejects(consumeEmailLink('reset-password', { ...input, password: 'short' }, 'password-invalid'), { statusCode: 400 })
+  await consumeEmailLink('reset-password', input, 'password-valid')
+  assert.equal(await bcrypt.compare(input.password, stored), true)
+  assert.ok(state.committed)
+  await assert.rejects(consumeEmailLink('reset-password', input, 'password-replay'), { statusCode: 400 })
+  assert.equal(state.writes.filter(({ sql }) => sql.startsWith('UPDATE')).length, 1)
+})
+
+test('public recovery routes work without a session and never expose account information', async (t) => {
+  t.mock.method(pool, 'execute', async () => [[]])
+  let response
+  const handled = await handleEmailRoute({ method: 'POST', socket: { remoteAddress: 'public-route' } }, {},
+    new URL('http://localhost/api/auth/email/request-access-link'), {
+      getUserId: () => assert.fail('Public recovery must not require login'),
+      readJson: async () => ({ email: 'missing@example.com', purpose: 'reset-password' }),
+      sendJson: (_, status, payload) => { assert.equal(status, 200); response = payload },
+    })
+  assert.equal(handled, true)
+  assert.equal(response.retryAfterSeconds, 30)
+  assert.match(response.message, /^Si el correo/)
+  assert.deepEqual(Object.keys(response).sort(), ['message', 'ok', 'retryAfterSeconds'])
+})
