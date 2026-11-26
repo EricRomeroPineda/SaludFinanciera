@@ -67,6 +67,8 @@ Selecciona los marcadores, revisa los nombres, fechas, montos y datos de depósi
 
 ### Datos de depósito opcionales
 
+El icono **Copiar datos de depósito** copia el texto completo, conservando ceros iniciales, desde tarjetas, planes, suscripciones, deudas y la vista previa de Google Calendar. También está en los formularios y copia lo escrito en ese momento. Muestra confirmación o un error explícito si el navegador no permite acceder al portapapeles; requiere HTTPS o localhost.
+
 Antes de ejecutar esta versión, respalda la base y aplica una sola vez `server/migrations/007-deposit-details.sql` en la base configurada en `.env`. Agrega `datos_deposito VARCHAR(500) NULL` a `cuenta`, `plan_futuro`, `suscripciones` y `prestamo`; no modifica registros ni saldos existentes.
 
 En crear/editar tarjetas o cuentas, planes, suscripciones y deudas **Yo debo**, puedes capturar **Datos de depósito (opcional)**: banco, titular, cuenta, CLABE o referencia, en un texto de hasta 500 caracteres. Se guarda como texto para conservar ceros iniciales. No ingreses NIP, CVV ni contraseñas. En **Me deben** no se captura ni se incluye ese dato en los eventos. Cada registro conserva su propio destino de depósito, separado de la cuenta de origen/sugerida para movimientos: no se deduce automáticamente de dónde sale tu dinero.

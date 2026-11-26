@@ -93,9 +93,18 @@ test('Google preview explicitly discloses deposit sharing and both days of fixed
   assert.match(markup, /<copy-deposit .value=Banco prueba/)
 })
 
+function clipboard(t, writeText) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText } } })
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'navigator', original)
+    else delete globalThis.navigator
+  })
+}
+
 test('copy preserves all deposit text including leading zeroes', async (t) => {
   let written
-  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async (value) => { written = value } } })
+  clipboard(t, async (value) => { written = value })
   const state = { value: deposit }
   await copy.copy.call(state)
   assert.equal(written, deposit)
@@ -106,7 +115,7 @@ test('copy preserves all deposit text including leading zeroes', async (t) => {
 
 test('form copy reads the current edited input instead of the saved text', async (t) => {
   let written
-  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async (value) => { written = value } } })
+  clipboard(t, async (value) => { written = value })
   const state = { field: true, value: 'old', closest: () => ({ querySelector: () => ({ value: 'CLABE 00001234' }) }) }
   await copy.copy.call(state)
   assert.equal(written, 'CLABE 00001234')
@@ -116,7 +125,7 @@ test('missing data and denied clipboard access report errors, never success', as
   const state = { value: '' }
   await copy.copy.call(state)
   assert.match(state.error, /No hay datos/)
-  t.mock.property(globalThis, 'navigator', { clipboard: { writeText: async () => { throw new Error('Denied') } } })
+  clipboard(t, async () => { throw new Error('Denied') })
   state.value = deposit
   await copy.copy.call(state)
   assert.match(state.error, /No se pudo copiar/)
