@@ -5,6 +5,7 @@ import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types
 import { calculateAccountSummary, calculatePeriodActivity, cardPaymentStatus } from '../account-summary.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
+import { sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -49,6 +50,8 @@ class SaludFinanciera extends LitElement {
     today: { state: true },
     overviewPeriod: { state: true },
     overviewScope: { state: true },
+    cardsListView: { state: true },
+    plansListView: { state: true },
     loading: { state: true },
     submitting: { state: true },
     showAccountForm: { state: true },
@@ -83,6 +86,8 @@ class SaludFinanciera extends LitElement {
     this.today = new Date()
     this.overviewPeriod = ''
     this.overviewScope = 'month'
+    this.cardsListView = false
+    this.plansListView = false
     this.loading = true
     this.submitting = false
     this.showAccountForm = false
@@ -800,23 +805,28 @@ class SaludFinanciera extends LitElement {
   }
 
   renderCards() {
-    const cards = this.dashboard.accounts.filter(isCardAccount)
+    const cards = sortByDue(this.dashboard.accounts.filter(isCardAccount), (card) => {
+      if (!isCreditAccount(card.type)) return null
+      const status = cardPaymentStatus(card, this.today)
+      return status?.remaining > 0 ? status.days : null
+    })
     const groups = [
       { title: 'Nómina / Débito / Efectivo', cards: cards.filter((card) => !isCreditAccount(card.type)) },
       { title: 'Crédito', cards: cards.filter((card) => isCreditAccount(card.type)) },
     ]
     return html`
       <section>
-        <div class="section-heading">
+        <div class="section-heading viewer-heading">
           <h2>Mis tarjetas</h2>
+          ${viewToggle(this.cardsListView, () => { this.cardsListView = !this.cardsListView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${this.startCardCreation}>+ Nueva tarjeta</button>
         </div>
-        <div class="card-type-columns">
+        <div class=${`card-type-columns${this.cardsListView ? ' list-groups' : ''}`}>
           ${groups.map((group) => html`
             <section class="card-type-group" aria-label=${group.title}>
               <h3 class="card-group-title">${group.title}</h3>
               ${group.cards.length ? html`
-                <div class="card-grid">${group.cards.map((card) => this.renderBankCard(card))}</div>
+                <div class=${this.cardsListView ? 'record-list' : 'card-grid'}>${group.cards.map((card) => this.renderBankCard(card))}</div>
               ` : html`<p class="empty-state">No tienes tarjetas de ${group.title.toLowerCase()}.</p>`}
             </section>
           `)}
@@ -928,11 +938,15 @@ class SaludFinanciera extends LitElement {
   }
 
   renderPlans() {
-    const items = this.dashboard.plans
+    const items = sortByDue(this.dashboard.plans, (plan) => {
+      const projection = calculatePlanProjection(plan, this.today)
+      return projection.nextContributionDate ? Date.parse(`${projection.nextContributionDate}T00:00:00Z`) : null
+    })
     return html`
       <section class="data-card">
-        <div class="section-heading">
+        <div class="section-heading viewer-heading">
           <div><p class="eyebrow">METAS FINANCIERAS</p><h2>Planes futuros</h2></div>
+          ${viewToggle(this.plansListView, () => { this.plansListView = !this.plansListView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} @click=${() => {
             this.editingPlan = null
             this.planUnit = ''
@@ -979,7 +993,7 @@ class SaludFinanciera extends LitElement {
           </form>
         ` : ''}
         ${items.length
-          ? html`<div class="card-grid">${items.map((item) => this.renderPlanCard(item))}</div>`
+          ? html`<div class=${this.plansListView ? 'record-list' : 'card-grid'}>${items.map((item) => this.renderPlanCard(item))}</div>`
           : this.emptyMessage('No tienes planes futuros registrados.')}
         ${this.renderPlanMovements(items)}
       </section>

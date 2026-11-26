@@ -4,6 +4,8 @@
 }
 
 @media (max-width: 650px) {
+  .record-list > article { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .record-list > article > :is(.credit-card-heading, .subscription-heading, .card-dates, dl) { grid-column: 1; }
   .dashboard { width: calc(100% - 36px); padding-top: 31px; }
   .dashboard-heading h1 { font-size: 29px; }
   .quiet-button { padding: 8px 9px; font-size: 10px; }

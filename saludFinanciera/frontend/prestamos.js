@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
+import { sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -19,6 +20,7 @@ class Loans extends LitElement {
     showForm: { state: true }, editing: { state: true }, selectedId: { state: true },
     error: { state: true }, busy: { state: true }, mode: { state: true }, loanType: { state: true },
     pendingDelete: { state: true },
+    listView: { state: true },
   }
 
   constructor() {
@@ -34,6 +36,7 @@ class Loans extends LitElement {
     this.mode = 'new'
     this.loanType = 'me_deben'
     this.pendingDelete = null
+    this.listView = false
   }
 
   updated(changed) {
@@ -153,10 +156,17 @@ class Loans extends LitElement {
   render() {
     const selected = this.items.find((item) => item.id === this.selectedId)
     const today = todayInput()
+    const items = sortByDue(this.items, (item) => Number(item.remaining) > 0
+      ? Date.parse(`${item.commitmentDate}T00:00:00Z`) : null)
+    const groups = [
+      { type: 'me_deben', title: 'Me deben' },
+      { type: 'debo', title: 'Yo debo' },
+    ]
     return html`
       <section class="data-card">
-        <div class="section-heading">
+        <div class="section-heading viewer-heading">
           <div><p class="eyebrow">PRÉSTAMOS Y ADEUDOS</p><h2>Deudores · Me deben y yo debo</h2></div>
+          ${viewToggle(this.listView, () => { this.listView = !this.listView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} ?disabled=${this.busy}
             @click=${() => this.showForm ? (this.showForm = false) : this.openForm()}>
             ${this.showForm ? 'Cerrar formulario' : '+ Nuevo préstamo'}
@@ -165,7 +175,12 @@ class Loans extends LitElement {
         ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
         ${this.showForm && !this.familyView ? keyed(this.editing?.id || 'new', this.renderForm()) : ''}
         ${this.items.length ? html`
-          <div class="card-grid">${this.items.map((item) => {
+          <div class=${`loan-type-groups${this.listView ? ' list-groups' : ''}`}>
+          ${groups.map((group) => html`
+            <section class="loan-type-group" aria-label=${group.title}>
+            <h3 class="card-group-title">${group.title}</h3>
+            ${items.some((item) => item.type === group.type) ? html`
+          <div class=${this.listView ? 'record-list' : 'card-grid'}>${items.filter((item) => item.type === group.type).map((item) => {
             const completed = Number(item.remaining) <= 0
             const days = Math.round((Date.parse(`${item.commitmentDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
             return html`
@@ -206,7 +221,10 @@ class Loans extends LitElement {
                 </div>
               </article>
             `
-          })}</div>
+          })}</div>` : html`<p class="empty-state">No hay préstamos en ${group.title}.</p>`}
+            </section>
+          `)}
+          </div>
         ` : html`<p class="empty-state">No tienes préstamos registrados.</p>`}
         ${selected ? keyed(this.items, html`<finance-related-movements relation="loan" .familyView=${this.familyView}
           .relationId=${selected.id} .label=${selected.name}></finance-related-movements>`) : ''}

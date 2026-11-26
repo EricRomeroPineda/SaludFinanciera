@@ -13,6 +13,12 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Vistas y orden de los registros
+
+En **Suscripciones, Planes futuros, Deudores y Tarjetas**, el botón **Ver lista / Ver tarjetas** cambia la presentación sin modificar los datos ni la selección del historial. Las dos vistas mantienen la información, acciones y consulta de movimientos, también en la vista familiar de solo lectura.
+
+El orden es por menor tiempo para el próximo pago, aportación o compromiso; los vencidos aparecen primero. Los planes usan su próxima aportación calculada y las suscripciones su próximo cobro programado. Los registros liquidados, cancelados o sin fecha calculable quedan al final; los empates se ordenan por nombre. Deudores se divide en **Me deben** y **Yo debo**, ordenados por fecha compromiso dentro de cada grupo. Tarjetas conserva sus grupos **Nómina / Débito / Efectivo** y **Crédito**, ordenando el crédito por fecha límite pendiente dentro de su grupo. Débito y efectivo, sin vencimiento, se ordenan por nombre. Cada sección mantiene su modo de vista mientras permanece abierta; Tarjetas y Planes tienen controles independientes.
+
 ## Panorama: actividad y pagos de tarjetas
 
 Aplica `server/migrations/008-card-payment-confirmation.sql` antes de iniciar esta versión. Los ingresos y gastos del mes/año se suman desde todos los movimientos del periodo, sin el límite de 250 registros recientes. Se excluyen transferencias entre cuentas y operaciones de préstamos, igual que en Movimiento. La vista familiar suma la actividad de sus integrantes.

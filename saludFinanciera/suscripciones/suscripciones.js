@@ -7,6 +7,7 @@ import financeStyles from '../frontend/styles.css?inline'
 import responsiveStyles from '../frontend/responsive.css?inline'
 import styles from './styles.css?inline'
 import { calculateCosts, daysUntilBilling, frequencies, isWeekly, weekdays } from './calculations.js'
+import { sortByDue, viewToggle } from '../frontend/record-view.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 
@@ -26,6 +27,7 @@ class Subscriptions extends LitElement {
     today: { state: true },
     pendingDelete: { state: true },
     selectedSubscription: { state: true },
+    listView: { state: true },
   }
 
   constructor() {
@@ -42,6 +44,7 @@ class Subscriptions extends LitElement {
     this.today = new Date()
     this.pendingDelete = null
     this.selectedSubscription = null
+    this.listView = false
   }
 
   connectedCallback() {
@@ -262,10 +265,13 @@ class Subscriptions extends LitElement {
   }
 
   render() {
+    const items = sortByDue(this.items, (item) => item.status.toLowerCase() === 'activa'
+      ? daysUntilBilling(item.frequency, item.billingDay, this.today, item.startDate) : null)
     return html`
       <section>
-        <div class="section-heading">
+        <div class="section-heading viewer-heading">
           <h2>Suscripciones y servicios</h2>
+          ${viewToggle(this.listView, () => { this.listView = !this.listView })}
           <button class="primary-button compact-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
             @click=${() => this.showForm ? (this.showForm = false) : this.openForm()}>
             ${this.showForm ? 'Cerrar formulario' : '+ Agregar suscripción'}
@@ -276,9 +282,15 @@ class Subscriptions extends LitElement {
         ${this.showForm ? keyed(this.editing?.id ?? 'new', this.renderForm()) : ''}
         ${this.loading ? html`<p class="empty-state" role="status">Cargando suscripciones…</p>`
           : this.items.length ? html`
-            <div class="subscription-grid">
-              ${this.items.map((item) => html`
-                <article class="subscription-card" @click=${(event) => {
+            <div class=${this.listView ? 'record-list' : 'subscription-grid'}>
+              ${items.map((item) => html`
+                <article class="subscription-card" tabindex="0" aria-label=${`${item.name}. Ver movimientos`}
+                  @keydown=${(event) => {
+                    if (event.target === event.currentTarget && ['Enter', ' '].includes(event.key)) {
+                      event.preventDefault()
+                      this.selectedSubscription = item
+                    }
+                  }} @click=${(event) => {
                   if (!event.target.closest('button')) this.selectedSubscription = item
                 }}>
                   <div class="subscription-heading">
