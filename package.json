@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "nodemailer": "^10.6.1",
     "bcryptjs": "^3.0.3",
     "dotenv": "^18.0.10",
     "lit": "^3.3.3",

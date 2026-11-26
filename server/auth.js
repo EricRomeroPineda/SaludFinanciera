@@ -99,7 +99,7 @@ function validatePassword(password) {
   }
 }
 
-function normalizeRecoveryKey(value) {
+export function normalizeRecoveryKey(value) {
   if (typeof value !== 'string') invalidInput('Escribe tu palabra clave de recuperación.')
   const normalized = value.trim().normalize('NFC').toLocaleLowerCase('es')
   if (normalized.length < 4 || Buffer.byteLength(normalized) > 72) {
@@ -178,7 +178,7 @@ export async function authenticateUser(name, password) {
   }
 
   const [users] = await pool.execute(
-    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance FROM usuario WHERE nombre = ? LIMIT 2',
+    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified FROM usuario WHERE nombre = ? LIMIT 2',
     [normalizedName],
   )
   if (users.length !== 1 || !await bcrypt.compare(normalizedPassword, users[0].password_hash)) {
@@ -187,13 +187,13 @@ export async function authenticateUser(name, password) {
     throw error
   }
 
-  const { id, nombre, foto_perfil: photo, tema: theme, appearance, password_hash: passwordHash } = users[0]
-  return { id, name: nombre, photo, theme, appearance, sessionVersion: passwordVersion(passwordHash) }
+  const { id, nombre, foto_perfil: photo, tema: theme, appearance, email, emailVerified, password_hash: passwordHash } = users[0]
+  return { id, name: nombre, photo, theme, appearance, email, emailVerified, sessionVersion: passwordVersion(passwordHash) }
 }
 
 export async function findSessionUser(userId) {
   const [users] = await pool.execute(
-    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, apariencia AS appearance, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
+    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
     [userId],
   )
   return users[0] || null

@@ -72,12 +72,12 @@ test('registration rejects missing photos, recovery keys and invalid themes befo
 test('login and restored sessions return saved profile fields without exposing hashes', async (t) => {
   t.mock.method(pool, 'execute', async (sql) => {
     if (sql.includes('WHERE nombre')) return [[{
-      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', appearance: 'night',
+      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1,
     }]]
     return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 }]]
   })
   assert.deepEqual(await authenticateUser('Ana', password), {
-    id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', sessionVersion: versionFor(passwordHash),
+    id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1, sessionVersion: versionFor(passwordHash),
   })
   assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 })
   await assert.rejects(authenticateUser('Ana', 'wrong'), { statusCode: 401 })

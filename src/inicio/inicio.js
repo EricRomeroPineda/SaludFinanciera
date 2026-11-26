@@ -1,4 +1,5 @@
 import { LitElement, html, unsafeCSS } from 'lit'
+import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../api.js'
 import '../../saludFinanciera/frontend/salud-financiera.js'
 import appearanceStyles from './appearance.css?inline'
@@ -7,6 +8,7 @@ import responsiveStyles from './responsive.css?inline'
 import { isValidPhoto, themes } from '../../shared/profile.js'
 import defaultAvatar from '../assets/default-avatar.svg'
 import './familia.js'
+import './email-settings.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -25,6 +27,8 @@ class Inicio extends LitElement {
     appearance: { state: true },
     showThemePicker: { state: true },
     styleError: { state: true },
+    emailLink: { state: true },
+    showProfileSecrets: { state: true },
   }
 
   constructor() {
@@ -89,7 +93,28 @@ class Inicio extends LitElement {
 
   connectedCallback() {
     super.connectedCallback()
+    this.emailLinkListener = () => this.readEmailLink()
+    window.addEventListener('hashchange', this.emailLinkListener)
+    this.readEmailLink()
     this.restoreSession()
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    window.removeEventListener('hashchange', this.emailLinkListener)
+  }
+
+  readEmailLink() {
+    const params = new URLSearchParams(window.location.hash.slice(1))
+    const query = new URLSearchParams(window.location.search)
+    for (const purpose of ['verify-email', 'reset-recovery']) {
+      const token = params.get(purpose) || query.get(purpose)
+      if (token) {
+        this.emailLink = { purpose, token }
+        window.history.replaceState(null, '', window.location.pathname)
+        break
+      }
+    }
   }
 
   async restoreSession() {
@@ -241,6 +266,9 @@ class Inicio extends LitElement {
   }
 
   render() {
+    if (this.emailLink) return html`<main class="dashboard">
+      ${keyed(this.emailLink.token, html`<email-settings .purpose=${this.emailLink.purpose} .token=${this.emailLink.token}></email-settings>`)}
+    </main>`
     if (this.loading) {
       return html`<main class="loading-screen"><span class="spinner"></span><p>Cargando Salud Financiera…</p></main>`
     }
@@ -445,6 +473,7 @@ class Inicio extends LitElement {
           ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
           ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
           ${this.renderProfile()}
+          <email-settings .user=${this.user} @email-updated=${(event) => { this.user = event.detail }}></email-settings>
           <family-settings></family-settings>
         </main>
       ` : html`
@@ -462,11 +491,16 @@ class Inicio extends LitElement {
           ${this.renderPhotoFields()}
           <label>
             Nueva palabra clave de recuperación (opcional)
-            <input name="recoveryKey" type="password" minlength="4" maxlength="72" autocomplete="off" />
+            <input name="recoveryKey" type=${this.showProfileSecrets ? 'text' : 'password'} minlength="4" maxlength="72" autocomplete="off" />
           </label>
           <label>
             Contraseña actual (necesaria si cambias la palabra clave)
-            <input name="currentPassword" type="password" autocomplete="current-password" />
+            <div class="secret-field"><input name="currentPassword" type=${this.showProfileSecrets ? 'text' : 'password'} autocomplete="current-password" />
+              <button class="quiet-button" type="button" aria-label=${this.showProfileSecrets ? 'Ocultar valores escritos' : 'Mostrar valores escritos'}
+                title="Mostrar u ocultar los valores escritos" @click=${() => { this.showProfileSecrets = !this.showProfileSecrets }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />
+                </svg></button></div>
           </label>
           <small>Los usuarios existentes deben guardar una palabra clave aquí antes de poder recuperar su contraseña.</small>
           <button class="primary-button" type="submit"

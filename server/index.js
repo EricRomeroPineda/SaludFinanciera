@@ -18,6 +18,7 @@ import { handleFamilyRoute } from './family.js'
 import { serveStatic } from './static.js'
 import { handleEvidenceRoute } from './evidence.js'
 import { handleGoogleCalendarRoute } from './google-calendar.js'
+import { handleEmailRoute } from './email.js'
 
 const port = Number(process.env.API_PORT || 3001)
 const host = process.env.API_HOST || '127.0.0.1'
@@ -74,6 +75,7 @@ export const server = createServer(async (request, response) => {
   const route = `${request.method} ${url.pathname}`
 
   try {
+    if (await handleEmailRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (route === 'GET /api/health/db') {
       const connection = await pool.getConnection()
       try {

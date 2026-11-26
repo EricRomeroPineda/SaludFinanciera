@@ -13,6 +13,16 @@ Para desarrollo se conservan los dos comandos en terminales separadas: `npm run 
 
 El backend verifica la conexión al arrancar. También puedes comprobarla en `http://127.0.0.1:3001/api/health/db`. El endpoint no devuelve las credenciales de conexión.
 
+## Correo verificado y palabra clave de recuperación
+
+Ejecuta `server/migrations/010-user-email.sql` una sola vez. En **Mi perfil → Correo electrónico y recuperación**, registra un correo único y confirma tu contraseña actual. Se enviará un enlace para verificar la dirección; si ya está registrada en otra cuenta se mostrará el error. Hasta verificarla no se puede solicitar el enlace para cambiar la palabra clave. Cambiar la dirección desactiva su verificación anterior.
+
+Configura en el `.env` privado `APP_BASE_URL=https://lifekit.work`, `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`, `SMTP_USER`, `SMTP_PASSWORD` (contraseña de aplicación de Gmail con verificación en dos pasos) y `SMTP_FROM` (misma cuenta o alias autorizado). No compartas estas credenciales. Gmail y sus límites de envío aplican; revisa también spam. Cloudflare debe dirigir el dominio a esta aplicación y no almacenar en caché `/api/*`. No se requiere abrir MySQL a Internet.
+
+Los enlaces usan tokens aleatorios guardados solo como hash, caducan a los 30 minutos y se consumen una sola vez al confirmar la acción; reenviar invalida el enlace anterior del mismo tipo. La URL se construye con `APP_BASE_URL`, no con la cabecera Host. El token viaja en el fragmento del enlace y se retira de la barra de direcciones al abrir la pantalla. No se envían correos al arrancar: únicamente por una acción explícita. Los envíos y canjes están limitados a cinco intentos por 15 minutos (usuario o dirección de conexión, respectivamente; detrás del túnel algunas conexiones pueden compartir límite).
+
+**Enviar enlace para cambiar mi palabra clave** envía un enlace al correo verificado, no la clave actual. Al abrirlo puedes crear una nueva palabra clave sin iniciar sesión; después podrás usarla en «Olvidé mi contraseña» junto con tu usuario. No cambia la contraseña de acceso por sí solo. La contraseña y palabra clave existentes nunca se muestran ni se envían porque se guardan como hashes; el ojo solo revela los valores nuevos que escribes. Los fallos de SMTP se muestran y revierten los cambios pendientes. El servidor debe disponer de acceso saliente a Gmail SMTP.
+
 ## Color y modo día/noche
 
 Aplica `server/migrations/009-user-appearance.sql` antes de iniciar esta versión. El icono de paleta, junto a Día/Noche en el encabezado, abre un cuadro para seleccionar Verde, Azul, Violeta, Turquesa, Rosa, Naranja, Rojo, Dorado u Oscuro. El selector ya no aparece en el formulario del perfil. El color tiñe el fondo, paneles, bordes y controles; el modo nocturno conserva la misma paleta en tonos más oscuros. Los colores de ingresos, gastos y transferencias mantienen su significado. Los nuevos colores usan la columna `tema VARCHAR(20)` existente; no requieren una migración adicional.
