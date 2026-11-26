@@ -138,8 +138,8 @@ test('appearance changes persist only the authenticated user mode and preserve t
 test('profile photo updates preserve the recovery key when omitted', async (t) => {
   t.mock.method(pool, 'execute', async (sql, params) => {
     if (sql.startsWith('UPDATE')) {
-      assert.deepEqual(params, [photo, 'verde', null, null, 7])
-      assert.ok(sql.includes('recuperacion_expira = IF(? IS NULL, recuperacion_expira, NULL)'))
+      assert.deepEqual(params, [photo, 'verde', 7])
+      assert.doesNotMatch(sql, /recuperacion_/)
       return [{ affectedRows: 1 }]
     }
     return [[{ id: 7, name: 'Ana', photo, theme: 'verde' }]]
@@ -147,21 +147,10 @@ test('profile photo updates preserve the recovery key when omitted', async (t) =
   assert.equal((await updateProfile(7, { photo, theme: 'verde' })).photo, photo)
 })
 
-test('changing the recovery key requires the current password and hashes the new key', async (t) => {
-  let newHash
-  t.mock.method(pool, 'execute', async (sql, params) => {
-    if (sql.startsWith('SELECT password_hash')) return [[{ password_hash: passwordHash }]]
-    if (sql.startsWith('UPDATE')) {
-      assert.equal(params[2], params[3])
-      newHash = params[2]
-      return [{ affectedRows: 1 }]
-    }
-    return [[{ id: 7, photo, theme: 'verde' }]]
-  })
-  await assert.rejects(updateProfile(7, { photo, theme: 'verde', recoveryKey, currentPassword: 'wrong' }), { statusCode: 400 })
-  assert.equal(newHash, undefined)
-  await updateProfile(7, { photo, theme: 'verde', recoveryKey, currentPassword: password })
-  assert.equal(await bcrypt.compare(recoveryKey.toLowerCase(), newHash), true)
+test('profile cannot change the recovery key outside the email flow', async (t) => {
+  t.mock.method(pool, 'execute', () => assert.fail('Must not update directly'))
+  await assert.rejects(updateProfile(7, { photo, theme: 'verde', recoveryKey, currentPassword: password }),
+    { statusCode: 400, message: 'Solicita el enlace por correo para cambiar tu palabra clave.' })
 })
 
 test('recovery validates the secret, changes the password and invalidates earlier sessions', async (t) => {

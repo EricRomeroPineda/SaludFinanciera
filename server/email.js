@@ -36,8 +36,11 @@ export async function sendAccountEmail(to, purpose, token) {
   try {
     const result = await transport.sendMail({
       from, to,
-      subject: purpose === 'verify-email' ? 'Verifica tu correo · Salud Financiera' : 'Cambia tu palabra clave de recuperación · Salud Financiera',
-      text: `Abre este enlace para ${purpose === 'verify-email' ? 'verificar tu correo' : 'crear una nueva palabra clave de recuperación'}:\n\n${link.href}\n\nCaduca en 30 minutos y solo puede usarse una vez. Si no lo solicitaste, ignora este correo. Nunca compartas el enlace.`,
+      subject: purpose === 'recovery-key' ? 'Tu nueva palabra clave · Salud Financiera'
+        : purpose === 'verify-email' ? 'Verifica tu correo · Salud Financiera' : 'Cambia tu palabra clave de recuperación · Salud Financiera',
+      text: purpose === 'recovery-key'
+        ? `Tu nueva palabra clave de recuperación es:\n\n${token}\n\nReemplaza la anterior. Úsala junto con tu usuario en «Olvidé mi contraseña». No cambia tu contraseña de acceso. Para elegir otra palabra clave, solicita el enlace de cambio desde Mi perfil. No compartas esta clave. Si no lo solicitaste, revisa el acceso a tu cuenta.`
+        : `Abre este enlace para ${purpose === 'verify-email' ? 'verificar tu correo' : 'crear una nueva palabra clave de recuperación'}:\n\n${link.href}\n\nCaduca en 30 minutos y solo puede usarse una vez. Si no lo solicitaste, ignora este correo. Nunca compartas el enlace.`,
     })
     if (!result.accepted?.length || result.rejected?.length) throw new Error('El servidor de correo rechazó al destinatario.')
   } finally {
@@ -62,7 +65,7 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
       if (email.length > 254 || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) throw invalid('Escribe un correo electrónico válido.')
       if (typeof input.currentPassword !== 'string'
         || !await bcrypt.compare(input.currentPassword, user.password_hash)) throw invalid('La contraseña actual no es correcta.')
-    } else if (purpose !== 'reset-recovery' || !email || !Number(user.correo_verificado)) {
+    } else if (!['reset-recovery', 'recovery-key'].includes(purpose) || !email || !Number(user.correo_verificado)) {
       throw invalid('Primero registra y verifica tu correo electrónico.')
     }
     const [recent] = await connection.execute(
@@ -76,15 +79,27 @@ export async function requestEmailLink(userId, purpose, input, send = sendAccoun
       await connection.execute('DELETE FROM usuario_enlace_correo WHERE id_usuario = ?', [userId])
     }
     const token = randomBytes(32).toString('hex')
+    // Generated keys replace pending recovery links with an undisclosed token to retain the resend cooldown.
     await connection.execute(
       `INSERT INTO usuario_enlace_correo (id_usuario, proposito, token_hash, correo, expira)
        VALUES (?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
        ON DUPLICATE KEY UPDATE token_hash = VALUES(token_hash), correo = VALUES(correo), expira = VALUES(expira)`,
-      [userId, purpose, createHash('sha256').update(token).digest('hex'), email],
+      [userId, purpose === 'recovery-key' ? 'reset-recovery' : purpose, createHash('sha256').update(token).digest('hex'), email],
     )
-    await send(email, purpose, token)
+    if (purpose === 'recovery-key') {
+      const key = randomBytes(12).toString('hex')
+      const hash = await bcrypt.hash(normalizeRecoveryKey(key), 12)
+      await connection.execute(
+        'UPDATE usuario SET recuperacion_token_hash = ?, recuperacion_expira = NULL WHERE id = ?', [hash, userId],
+      )
+      await send(email, purpose, key)
+    } else {
+      await send(email, purpose, token)
+    }
     await connection.commit()
-    return { ok: true, retryAfterSeconds: 30, message: 'Correo enviado. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a enviarlo. El enlace caduca en 30 minutos.' }
+    return { ok: true, retryAfterSeconds: 30, message: purpose === 'recovery-key'
+      ? 'Nueva palabra clave enviada a tu correo. Reemplaza la anterior; tu contraseña de acceso no cambió. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a enviar.'
+      : 'Correo enviado. Revisa tu bandeja de entrada y spam. Espera 30 segundos para volver a enviarlo. El enlace caduca en 30 minutos.' }
   } catch (error) {
     await connection.rollback()
     if (error.code === 'ER_DUP_ENTRY') throw invalid('Ya hay una cuenta registrada con ese correo.', 409)
@@ -148,6 +163,7 @@ export async function handleEmailRoute(request, response, url, { getUserId, read
   const action = {
     '/api/auth/email/send-verification': ['send', 'verify-email'],
     '/api/auth/email/send-recovery': ['send', 'reset-recovery'],
+    '/api/auth/email/send-key': ['send', 'recovery-key'],
     '/api/auth/email/verify': ['consume', 'verify-email'],
     '/api/auth/email/reset-recovery': ['consume', 'reset-recovery'],
   }[url.pathname]

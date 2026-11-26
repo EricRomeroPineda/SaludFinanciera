@@ -28,7 +28,6 @@ class Inicio extends LitElement {
     showThemePicker: { state: true },
     styleError: { state: true },
     emailLink: { state: true },
-    showProfileSecrets: { state: true },
   }
 
   constructor() {
@@ -233,14 +232,10 @@ class Inicio extends LitElement {
         body: JSON.stringify({
           photo: String(formData.get('photoUrl') || '').trim(),
           theme: themes.some(({ id }) => id === this.user.theme) ? this.user.theme : 'verde',
-          recoveryKey: formData.get('recoveryKey'),
-          currentPassword: formData.get('currentPassword'),
         }),
       })
       this.user = user
       this.photoDraft = user.photo
-      form.querySelector('[name="recoveryKey"]').value = ''
-      form.querySelector('[name="currentPassword"]').value = ''
       this.notice = 'Perfil guardado.'
     } catch (error) {
       this.error = error.message
@@ -489,20 +484,6 @@ class Inicio extends LitElement {
         <div class="section-heading"><h2>Mi perfil</h2></div>
         <form class="auth-form" @submit=${this.handleProfileSubmit}>
           ${this.renderPhotoFields()}
-          <label>
-            Nueva palabra clave de recuperación (opcional)
-            <input name="recoveryKey" type=${this.showProfileSecrets ? 'text' : 'password'} minlength="4" maxlength="72" autocomplete="off" />
-          </label>
-          <label>
-            Contraseña actual (necesaria si cambias la palabra clave)
-            <div class="secret-field"><input name="currentPassword" type=${this.showProfileSecrets ? 'text' : 'password'} autocomplete="current-password" />
-              <button class="quiet-button" type="button" aria-label=${this.showProfileSecrets ? 'Ocultar valores escritos' : 'Mostrar valores escritos'}
-                title="Mostrar u ocultar los valores escritos" @click=${() => { this.showProfileSecrets = !this.showProfileSecrets }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                  <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />
-                </svg></button></div>
-          </label>
-          <small>Los usuarios existentes deben guardar una palabra clave aquí antes de poder recuperar su contraseña.</small>
           <button class="primary-button" type="submit"
             ?disabled=${this.submitting || this.savingTheme || !isValidPhoto(this.photoDraft)}>
             ${this.submitting ? 'Guardando…' : 'Guardar perfil'}

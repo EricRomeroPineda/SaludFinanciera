@@ -52,6 +52,21 @@ for (const mode of ['login', 'register', 'recover']) {
   })
 }
 
+test('profile saves only photo and theme without recovery key fields', async (t) => {
+  t.mock.method(globalThis, 'FormData', function () { return new Map([['photoUrl', photo]]) })
+  let payload
+  t.mock.method(globalThis, 'fetch', async (_, options) => {
+    payload = JSON.parse(options.body)
+    return new Response(JSON.stringify({ user: { id: 7, photo, theme: 'verde' } }))
+  })
+  const state = { user: { id: 7, theme: 'verde' } }
+  await handlers.handleProfileSubmit.call(state, { preventDefault() {}, currentTarget: {} })
+  assert.deepEqual(payload, { photo, theme: 'verde' })
+  assert.equal(state.notice, 'Perfil guardado.')
+  const markup = handlers.renderProfile.call({ renderPhotoFields: () => '', photoDraft: photo }).strings.join('')
+  assert.doesNotMatch(markup, /name="recoveryKey"|name="currentPassword"|showProfileSecrets/)
+})
+
 test('changing theme never resends the profile photo', async (t) => {
   let request
   t.mock.method(globalThis, 'fetch', async (path, options) => {

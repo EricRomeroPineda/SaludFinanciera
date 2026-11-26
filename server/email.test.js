@@ -23,6 +23,7 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
     SMTP_PASSWORD: 'dummy-app-password', SMTP_FROM: 'sender@example.com', SMTP_PORT: '465', SMTP_SECURE: 'true',
   })
   let closed = false
+  let generated = false
   t.mock.method(nodemailer, 'createTransport', (config) => {
     assert.equal(config.secure, true)
     assert.equal(config.port, 465)
@@ -30,8 +31,14 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
     return {
       sendMail: async (message) => {
         assert.equal(message.to, 'ana@example.com')
-        assert.match(message.text, /https:\/\/lifekit.work\/#verify-email=/)
-        assert.match(message.text, /30 minutos/)
+        if (generated) {
+          assert.match(message.subject, /Tu nueva palabra clave/)
+          assert.match(message.text, /\n\nnew-generated-key\n\n/)
+          assert.doesNotMatch(message.text, /#recovery-key=|Caduca en 30 minutos/)
+        } else {
+          assert.match(message.text, /https:\/\/lifekit.work\/#verify-email=/)
+          assert.match(message.text, /30 minutos/)
+        }
         assert.doesNotMatch(message.text, /dummy-app-password/)
         return { accepted: ['ana@example.com'], rejected: [] }
       },
@@ -40,6 +47,8 @@ test('Gmail transport builds an HTTPS single-use fragment link from configuratio
   })
   await sendAccountEmail('ana@example.com', 'verify-email', 'c'.repeat(64))
   assert.equal(closed, true)
+  generated = true
+  await sendAccountEmail('ana@example.com', 'recovery-key', 'new-generated-key')
   process.env.APP_BASE_URL = 'http://untrusted.example'
   await assert.rejects(sendAccountEmail('ana@example.com', 'verify-email', 'c'.repeat(64)), /HTTPS/)
 })
@@ -108,6 +117,50 @@ test('recovery requires verified email and SMTP failure rolls back the replaceme
   assert.equal(state.rolledBack, true)
 })
 
+test('generated recovery keys are emailed only to verified addresses and stored exclusively as hashes', async (t) => {
+  let verified = 0
+  let stored
+  let cooldown
+  const state = database(t, async (sql, params) => {
+    if (sql.startsWith('SELECT')) return [[{ correo: 'ana@example.com', correo_verificado: verified }]]
+    if (sql.startsWith('INSERT')) {
+      assert.equal(params[1], 'reset-recovery')
+      cooldown = params[2]
+    }
+    if (sql.startsWith('UPDATE')) {
+      assert.doesNotMatch(sql, /password_hash/)
+      assert.match(sql, /recuperacion_expira = NULL/)
+      stored = params[0]
+    }
+    return [{ affectedRows: 1 }]
+  })
+  await assert.rejects(requestEmailLink(120, 'recovery-key', {}, () => assert.fail('Not verified')), { statusCode: 400 })
+  verified = 1
+  let sent
+  const result = await requestEmailLink(120, 'recovery-key', {}, async (email, purpose, key) => {
+    assert.equal(email, 'ana@example.com')
+    assert.equal(purpose, 'recovery-key')
+    assert.match(key, /^[a-f0-9]{24}$/)
+    assert.equal(await bcrypt.compare(key, stored), true)
+    sent = key
+  })
+  assert.equal(state.committed, true)
+  assert.equal(result.retryAfterSeconds, 30)
+  assert.equal(JSON.stringify(result).includes(sent), false)
+  assert.equal(JSON.stringify(state.writes).includes(sent), false)
+  assert.notEqual(cooldown, createHash('sha256').update(sent).digest('hex'))
+})
+
+test('SMTP failure rolls back a generated recovery key instead of claiming it was sent', async (t) => {
+  const state = database(t, async (sql) => sql.startsWith('SELECT')
+    ? [[{ correo: 'ana@example.com', correo_verificado: 1 }]] : [{ affectedRows: 1 }])
+  t.mock.method(console, 'error', () => {})
+  await assert.rejects(requestEmailLink(121, 'recovery-key', {}, async () => { throw new Error('SMTP failed') }), { statusCode: 503 })
+  assert.equal(state.committed, false)
+  assert.equal(state.rolledBack, true)
+  assert.equal(state.released, true)
+})
+
 test('consuming a recovery token updates a bcrypt hash, deletes token and prevents expired or reused links', async (t) => {
   let valid = true
   let stored
@@ -167,5 +220,6 @@ test('resend cooldown is enforced under the user lock before any token replaceme
       },
     }))
     await assert.rejects(requestEmailLink(111, 'reset-recovery', {}, async () => { sent++ }), { statusCode: 429 })
+    await assert.rejects(requestEmailLink(111, 'recovery-key', {}, async () => { sent++ }), { statusCode: 429 })
     assert.equal(sent, 0)
   })

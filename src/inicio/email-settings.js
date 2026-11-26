@@ -119,9 +119,12 @@ class EmailSettings extends LitElement {
         </form>
         <p>Verifica la dirección para registrarla definitivamente. Cada nuevo envío invalida el enlace anterior.</p>`}
         ${this.resendSeconds > 0 ? html`<p role="status">Espera ${this.resendSeconds} segundos para volver a enviar un correo.</p>` : ''}
+        <button class="primary-button" type="button" ?disabled=${this.busy || this.resendSeconds > 0 || !this.user?.email || !Number(this.user?.emailVerified)}
+          @click=${() => this.perform('send-key', {})}>Generar y enviarme una palabra clave</button>
+        <p>Se enviará una nueva palabra clave a tu correo verificado y la anterior dejará de funcionar. Tu contraseña de acceso no cambia.</p>
         <button class="quiet-button" type="button" ?disabled=${this.busy || this.resendSeconds > 0 || !this.user?.email || !Number(this.user?.emailVerified)}
           @click=${() => this.perform('send-recovery', {})}>Enviar enlace para cambiar mi palabra clave</button>
-        <p>No podemos mostrar ni enviar tu contraseña ni tu palabra clave actuales: se almacenan como hashes.</p>
+        <p>Para elegir tu propia palabra clave, solicita el enlace de cambio. La clave actual y tu contraseña no se pueden consultar: se guardan como hashes.</p>
       `}
       ${this.purpose ? html`<p><a href="/">Volver a Salud Financiera</a></p>` : ''}
     </section>`

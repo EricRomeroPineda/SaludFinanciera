@@ -199,20 +199,14 @@ export async function findSessionUser(userId) {
   return users[0] || null
 }
 
-export async function updateProfile(userId, { photo, theme, recoveryKey, currentPassword }) {
+export async function updateProfile(userId, { photo, theme, recoveryKey }) {
   validateProfile(photo, theme)
-  let recoveryHash = null
   if (recoveryKey) {
-    const normalizedKey = normalizeRecoveryKey(recoveryKey)
-    const [users] = await pool.execute('SELECT password_hash FROM usuario WHERE id = ?', [userId])
-    if (typeof currentPassword !== 'string' || !users.length || !await bcrypt.compare(currentPassword, users[0].password_hash)) {
-      invalidInput('Escribe tu contraseña actual para guardar la palabra clave.')
-    }
-    recoveryHash = await bcrypt.hash(normalizedKey, 12)
+    invalidInput('Solicita el enlace por correo para cambiar tu palabra clave.')
   }
   await pool.execute(
-    'UPDATE usuario SET foto_perfil = ?, tema = ?, recuperacion_expira = IF(? IS NULL, recuperacion_expira, NULL), recuperacion_token_hash = COALESCE(?, recuperacion_token_hash) WHERE id = ?',
-    [photo, theme, recoveryHash, recoveryHash, userId],
+    'UPDATE usuario SET foto_perfil = ?, tema = ? WHERE id = ?',
+    [photo, theme, userId],
   )
   const user = await findSessionUser(userId)
   if (!user) {
