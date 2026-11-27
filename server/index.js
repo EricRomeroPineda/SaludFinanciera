@@ -22,6 +22,7 @@ import { handleEmailRoute } from './email.js'
 import { handleProfilePhotoRoute } from './profile-photo.js'
 import { handleCardCatalogRoute } from './card-catalog.js'
 import { handleUserRolesRoute } from './user-roles.js'
+import { handleAccountRemovalRoute, cleanPendingAccountFiles } from './account-removal.js'
 
 const port = Number(process.env.API_PORT || 3001)
 const host = process.env.API_HOST || '127.0.0.1'
@@ -156,6 +157,7 @@ export const server = createServer(async (request, response) => {
       return
     }
 
+    if (await handleAccountRemovalRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleUserRolesRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleCardCatalogRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleGoogleCalendarRoute(request, response, url, { getUserId, sendJson })) return
@@ -194,6 +196,10 @@ async function start() {
     connection.release()
   }
 
+  try {
+    const pending = await cleanPendingAccountFiles()
+    if (pending) console.error(`[BORRADO] Hay ${pending} archivos pendientes; revisa montaje y permisos.`)
+  } catch (error) { console.error('[BORRADO] No se pudo procesar la cola de limpieza:', error.code || error.message) }
   server.listen(port, host, () => {
     console.log(`[API] Escuchando en http://${host}:${port}`)
   })

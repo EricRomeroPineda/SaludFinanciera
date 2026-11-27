@@ -31,11 +31,11 @@ export async function getCalendarData(userId, month, scope = 'month') {
     `SELECT DATE_FORMAT(m.fecha, '%Y-%m-%d') AS day,
             COUNT(*) AS count,
             SUM(CASE
-              WHEN m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
+              WHEN m.archivo_familiar IS NULL AND m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
                 OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL))
               THEN m.monto ELSE 0 END) AS income,
             SUM(CASE
-              WHEN m.id_prestamo IS NULL AND (cat.tipo = 'gasto'
+              WHEN m.archivo_familiar IS NULL AND m.id_prestamo IS NULL AND (cat.tipo = 'gasto'
                 OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL))
               THEN m.monto ELSE 0 END) AS expenses
      FROM movimiento AS m

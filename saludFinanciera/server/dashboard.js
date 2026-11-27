@@ -33,7 +33,7 @@ export async function getDashboardData(userId) {
              FROM movimiento AS payment
              WHERE (payment.id_usuario = cuenta.id_usuario OR payment.id_usuario_destino = cuenta.id_usuario)
                AND payment.id_cuenta_destino = cuenta.id
-               AND payment.id_cuenta_origen IS NOT NULL
+               AND (payment.id_cuenta_origen IS NOT NULL OR payment.archivo_familiar = 'recibida')
                AND payment.id_categoria IS NULL AND payment.id_prestamo IS NULL
                AND payment.fecha > DATE_SUB(cuenta.fecha_limite_pago, INTERVAL 1 MONTH)
                AND payment.fecha < DATE_ADD(CURDATE(), INTERVAL 1 DAY)) AS paymentTransfers
@@ -85,10 +85,10 @@ export async function getDashboardData(userId) {
 
   const [activityByMonth] = await pool.execute(
     `SELECT DATE_FORMAT(m.fecha, '%Y-%m') AS month,
-            SUM(CASE WHEN m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
+            SUM(CASE WHEN m.archivo_familiar IS NULL AND m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
               OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL))
               THEN m.monto ELSE 0 END) AS income,
-            SUM(CASE WHEN m.id_prestamo IS NULL AND m.id_plan_futuro IS NULL AND (cat.tipo = 'gasto'
+            SUM(CASE WHEN m.archivo_familiar IS NULL AND m.id_prestamo IS NULL AND m.id_plan_futuro IS NULL AND (cat.tipo = 'gasto'
               OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL))
               THEN m.monto ELSE 0 END) AS expenses,
             SUM(CASE WHEN m.id_plan_futuro IS NOT NULL AND m.id_prestamo IS NULL

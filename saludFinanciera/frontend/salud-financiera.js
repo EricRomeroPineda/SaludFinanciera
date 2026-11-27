@@ -1679,13 +1679,13 @@ class SaludFinanciera extends LitElement {
   renderMovementList(items, actions = false) {
     return html`<ul class="movement-list">${items.map((item) => {
       const isTransfer = item.loanId || (item.originAccount && item.destinationAccount)
-      const isIncome = !item.loanId && (item.categoryType === 'ingreso' ||
+      const isIncome = !item.archivedFamily && !item.loanId && (item.categoryType === 'ingreso' ||
         (!item.originAccountId && Boolean(item.destinationAccountId)))
       return html`
         <li>
           <span class="movement-mark ${isIncome ? 'income' : isTransfer ? 'transfer' : 'expense'}">${isIncome ? '+' : isTransfer ? '↔' : '−'}</span>
           <span class="movement-description">
-            <strong>${item.loanId ? movementLabel(item) : item.category || item.planName || item.subscriptionName || 'Movimiento'}</strong>
+            <strong>${item.loanId || item.archivedFamily ? movementLabel(item) : item.category || item.planName || item.subscriptionName || 'Movimiento'}</strong>
             <small>${item.loanId ? `${movementOrigin(item)} → ${movementDestination(item)}` : item.originAccount && item.destinationAccount
               ? `${item.originAccount} → ${item.destinationAccount}`
               : item.originAccount || item.destinationAccount || item.planName || item.subscriptionName || 'Sin cuenta relacionada'}</small>

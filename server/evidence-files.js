@@ -78,12 +78,17 @@ export async function promoteMovementImages(connection, userId) {
 }
 
 export async function removeEvidenceFiles(names) {
+  const failed = []
   for (const name of names) {
     try {
       await unlink(fileUrl(name))
     } catch (error) {
       // The database mutation is already committed; report cleanup failures explicitly.
-      if (error.code !== 'ENOENT') console.error(`[EVIDENCIA] No se pudo borrar el archivo ${name}: ${error.code || error.message}`)
+      if (error.code !== 'ENOENT') {
+        console.error(`[EVIDENCIA] No se pudo borrar el archivo ${name}: ${error.code || error.message}`)
+        failed.push(name)
+      }
     }
   }
+  return failed
 }

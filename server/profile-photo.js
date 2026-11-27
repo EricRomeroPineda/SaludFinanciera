@@ -21,12 +21,16 @@ function location(photo) {
 
 export async function removeProfilePhoto(photo) {
   const stored = location(photo)
-  if (!stored) return
+  if (!stored) return true
   try {
     await unlink(stored.file)
   } catch (error) {
-    if (error.code !== 'ENOENT') console.error('[Perfil] No se pudo borrar la foto:', error.code || error.name)
+    if (error.code !== 'ENOENT') {
+      console.error('[Perfil] No se pudo borrar la foto:', error.code || error.name)
+      return false
+    }
   }
+  return true
 }
 
 async function writePhoto(userId, email, buffer) {

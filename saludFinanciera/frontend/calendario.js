@@ -261,13 +261,13 @@ class FinancialCalendar extends LitElement {
                   .filter((movement) => movement.date === this.selectedDay)
                   .map((movement) => {
                     const transfer = movement.loanId || (movement.originAccount && movement.destinationAccount)
-                    const income = !movement.loanId && (movement.categoryType === 'ingreso' ||
+                    const income = !movement.archivedFamily && !movement.loanId && (movement.categoryType === 'ingreso' ||
                       (!movement.originAccount && Boolean(movement.destinationAccount)))
                     return html`
                       <article class="day-movement">
                         <span class="movement-sign ${income ? 'income' : transfer ? '' : 'expense'}">${income ? '+' : transfer ? '↔' : '−'}</span>
                         <span class="movement-text">
-                          <strong>${movement.loanId ? movementLabel(movement) : movement.category || movement.planName || movement.subscriptionName || 'Movimiento'}</strong>
+                          <strong>${movement.loanId || movement.archivedFamily ? movementLabel(movement) : movement.category || movement.planName || movement.subscriptionName || 'Movimiento'}</strong>
                           <small>${transfer
                             ? `${movementOrigin(movement)} → ${movementDestination(movement)}`
                             : movement.originAccount || movement.destinationAccount || movement.planName || 'Sin cuenta relacionada'}</small>
