@@ -4,13 +4,16 @@ import { getCalendarData } from './calendar.js'
 import { getRelatedMovements } from './movements.js'
 import { getSubscriptions } from '../suscripciones/service.js'
 import { getLoans } from './loans.js'
+import { pool } from '../../server/db.js'
 
 function tagRows(rows, member) {
   return rows.map((row) => ({
-    ...row, ownerId: member.id, ownerName: member.name,
+    ...row, ownerId: row.movementOwnerId || member.id, ownerName: row.senderName || member.name,
+    ownerTheme: member.theme, ownerAppearance: member.appearance,
     ...(row.name ? { name: `${row.name} · ${member.name}` } : {}),
     ...Object.fromEntries(['originAccount', 'destinationAccount', 'planName', 'subscriptionName', 'loanName', 'accountName']
-      .filter((key) => row[key]).map((key) => [key, `${row[key]} · ${member.name}`])),
+      .filter((key) => row[key] && !(row.recipientUserId && ['originAccount', 'destinationAccount'].includes(key)))
+      .map((key) => [key, `${row[key]} · ${member.name}`])),
   }))
 }
 
@@ -29,6 +32,25 @@ function sumBy(rows, key, values) {
 }
 
 const newestFirst = (a, b) => b.date.localeCompare(a.date) || b.id - a.id
+const uniqueMovements = (rows) => [...new Map(rows.map((row) => [row.id, row])).values()]
+
+export async function getFamilyTransferAccounts(userId) {
+  const { family } = await getFamily(userId)
+  if (!family) throw Object.assign(new Error('Debes pertenecer a una familia para registrar este movimiento.'), { statusCode: 403 })
+  const ids = family.members.map((member) => member.id)
+  const [accounts] = await pool.execute(
+    `SELECT id, nombre AS name, tipo AS type, disponible AS available, id_usuario AS ownerId
+     FROM cuenta WHERE id_usuario IN (${ids.map(() => '?').join(', ')}) ORDER BY nombre, id`, ids,
+  )
+  const members = new Map(family.members.map((member) => [Number(member.id), member]))
+  return {
+    userId,
+    accounts: accounts.map((account) => {
+      const owner = members.get(Number(account.ownerId))
+      return { ...account, ownerName: owner.name, ownerTheme: owner.theme, ownerAppearance: owner.appearance }
+    }),
+  }
+}
 
 export async function getFamilyView(userId, resource, url) {
   const { family } = await getFamily(userId)
@@ -46,7 +68,7 @@ export async function getFamilyView(userId, resource, url) {
     const accounts = data.flatMap((item) => item.accounts)
     const plans = data.flatMap((item) => item.plans)
     const subscriptions = data.flatMap((item) => item.subscriptions)
-    const movements = data.flatMap((item) => item.movements).sort(newestFirst).slice(0, 250)
+    const movements = uniqueMovements(data.flatMap((item) => item.movements)).sort(newestFirst).slice(0, 250)
     return {
       family, accounts, plans, subscriptions, movements, loans: data.flatMap((item) => item.loans), categories: data[0].categories,
       activityByMonth: sumBy(data.flatMap((item) => item.activityByMonth), (row) => row.month, ['income', 'expenses', 'investment'])
@@ -71,12 +93,21 @@ export async function getFamilyView(userId, resource, url) {
         })),
       }
     }))
+    const movements = uniqueMovements(data.flatMap((item) => item.movements)).sort(newestFirst)
+    const days = sumBy(data.flatMap((item) => item.days), (row) => row.day, ['count', 'income', 'expenses'])
+    const seen = new Set()
+    for (const movement of data.flatMap((item) => item.movements)) {
+      if (seen.has(movement.id)) {
+        const day = days.find((item) => item.day === movement.date)
+        if (day) day.count--
+      }
+      seen.add(movement.id)
+    }
     return {
       month, scope,
       events: data.flatMap((item) => item.events),
-      movements: data.flatMap((item) => item.movements).sort(newestFirst),
-      days: sumBy(data.flatMap((item) => item.days), (row) => row.day, ['count', 'income', 'expenses'])
-        .sort((a, b) => a.day.localeCompare(b.day)),
+      movements,
+      days: days.sort((a, b) => a.day.localeCompare(b.day)),
       categories: sumBy(data.flatMap((item) => item.categories), (row) => JSON.stringify([row.name, row.type]), ['count', 'total'])
         .sort((a, b) => b.total - a.total),
     }
@@ -94,7 +125,7 @@ export async function getFamilyView(userId, resource, url) {
       const { movements } = await getRelatedMovements(member.id, url.searchParams.get('relation'), url.searchParams.get('id'))
       return tagRows(movements, member)
     }))
-    return { movements: rows.flat().sort(newestFirst) }
+    return { movements: uniqueMovements(rows.flat()).sort(newestFirst) }
   }
   throw Object.assign(new Error('Consulta familiar no válida.'), { statusCode: 404 })
 }

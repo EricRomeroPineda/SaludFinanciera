@@ -105,8 +105,9 @@ test('calendar API queries all monthly movements for the owner and returns edita
   assert.equal(data.categories[0].total, 50.25)
   assert.equal(data.events[0].kind, 'card')
   for (const { sql, params } of calls.slice(0, 3)) {
-    assert.match(sql, /m\.id_usuario = \? AND m\.fecha >= \? AND m\.fecha < \?/)
-    assert.deepEqual(params, [7, '2026-11-01', '2026-12-01'])
+    assert.match(sql, /m\.id_usuario(?:_destino)? = \?\)? AND m\.fecha >= \? AND m\.fecha < \?/)
+    assert.deepEqual(params, sql.includes('id_usuario_destino')
+      ? [7, 7, '2026-11-01', '2026-12-01'] : [7, '2026-11-01', '2026-12-01'])
     assert.doesNotMatch(sql, /LIMIT/)
   }
   assert.deepEqual(calls[3].params, [7])

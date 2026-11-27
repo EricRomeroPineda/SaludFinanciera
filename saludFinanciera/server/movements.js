@@ -3,6 +3,7 @@ import { lockSubscriptions, syncMonetized } from '../suscripciones/service.js'
 import { lockPlans, syncPlanSavings } from './modules.js'
 import { lockLoans, validateLoanMovement } from './loan-ledger.js'
 import { removeEvidenceFiles } from '../../server/evidence-files.js'
+import { movementSharingFields, describeSharedMovement } from './movement-sharing.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -28,7 +29,7 @@ export async function getRelatedMovements(userId, relation, value) {
     : relation === 'plan' ? 'm.id_plan_futuro = ?'
       : relation === 'loan' ? 'm.id_prestamo = ?' : 'm.id_suscripcion = ?'
   const [movements] = await pool.execute(
-    `SELECT m.id, m.monto AS amount,
+    `SELECT m.id, m.monto AS amount, ${movementSharingFields},
             EXISTS(SELECT 1 FROM movimiento_evidencia AS e WHERE e.id_movimiento = m.id) AS hasEvidence,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             cat.nombre AS category,
@@ -42,15 +43,16 @@ export async function getRelatedMovements(userId, relation, value) {
      LEFT JOIN cuenta AS origin
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
-       ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+       ON destination.id = m.id_cuenta_destino
+         AND destination.id_usuario = COALESCE(m.id_usuario_destino, m.id_usuario)
      LEFT JOIN suscripciones AS sub
        ON sub.id = m.id_suscripcion AND sub.id_usuario = m.id_usuario
      LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
-     WHERE m.id_usuario = ? AND ${condition}
+     WHERE (m.id_usuario = ? OR m.id_usuario_destino = ?) AND ${condition}
      ORDER BY m.fecha DESC, m.id DESC`,
-    relation === 'account' ? [userId, id, id] : [userId, id],
+    relation === 'account' ? [userId, userId, id, id] : [userId, userId, id],
   )
-  return { movements }
+  return { movements: movements.map((movement) => describeSharedMovement(movement, userId)) }
 }
 
 function normalizeAmount(value) {
@@ -111,17 +113,38 @@ async function lockAndValidateReferences(connection, userId, movement) {
 
   const accountIds = [...new Set([originId, destinationId].filter(Boolean))].sort((a, b) => a - b)
   const accountById = new Map()
+  if (movement.familyTransfer) {
+    if (operation !== 'transfer' || categoryId || planId || subscriptionId || movement.loanId || movement.loanKind) {
+      throw invalid('El movimiento familiar requiere una transferencia sin otras relaciones.')
+    }
+    const [members] = await connection.execute(
+      `SELECT recipient.id_usuario AS userId
+       FROM familia_integrante sender
+       INNER JOIN familia_integrante recipient ON recipient.id_familia = sender.id_familia
+       WHERE sender.id_usuario = ? ORDER BY recipient.id_usuario FOR UPDATE`, [userId],
+    )
+    movement.familyMemberIds = members.map((member) => Number(member.userId))
+  }
   if (accountIds.length) {
     const placeholders = accountIds.map(() => '?').join(', ')
     const [accounts] = await connection.execute(
-      `SELECT id, disponible FROM cuenta
-       WHERE id_usuario = ? AND id IN (${placeholders})
+      `SELECT id, disponible${movement.familyTransfer ? ', id_usuario' : ''} FROM cuenta
+       WHERE ${movement.familyTransfer ? '' : 'id_usuario = ? AND '}id IN (${placeholders})
        ORDER BY id FOR UPDATE`,
-      [userId, ...accountIds],
+      movement.familyTransfer ? accountIds : [userId, ...accountIds],
     )
     for (const account of accounts) accountById.set(Number(account.id), account)
     if (accountById.size !== accountIds.length) {
       throw invalid('Una de las cuentas no pertenece a tu usuario.', 404)
+    }
+    if (movement.familyTransfer) {
+      const originOwner = Number(accountById.get(originId).id_usuario)
+      const destinationOwner = Number(accountById.get(destinationId).id_usuario)
+      if (originOwner !== Number(userId) || destinationOwner === Number(userId)
+        || !movement.familyMemberIds.includes(destinationOwner)) {
+        throw invalid('El origen debe ser tuyo y el destino debe pertenecer a otro integrante de tu familia actual.', 403)
+      }
+      movement.destinationOwnerId = destinationOwner
     }
   }
 
@@ -180,7 +203,7 @@ async function reverseMovement(connection, userId, oldMovement) {
     await adjustBalance(connection, userId, oldMovement.id_cuenta_origen, amount, 'add')
   }
   if (oldMovement.id_cuenta_destino) {
-    await adjustBalance(connection, userId, oldMovement.id_cuenta_destino, amount, 'subtract')
+    await adjustBalance(connection, oldMovement.id_usuario_destino || userId, oldMovement.id_cuenta_destino, amount, 'subtract')
   }
 }
 
@@ -191,7 +214,7 @@ async function applyMovement(connection, userId, movement) {
     await adjustBalance(connection, userId, movement.originId, movement.amount, 'subtract')
   }
   if (movement.destinationId) {
-    await adjustBalance(connection, userId, movement.destinationId, movement.amount, 'add')
+    await adjustBalance(connection, movement.destinationOwnerId || userId, movement.destinationId, movement.amount, 'add')
   }
 }
 
@@ -207,6 +230,7 @@ function parseMovement(input) {
     subscriptionId: normalizeId(input.subscriptionId, 'La suscripción'),
     loanId: normalizeId(input.loanId, 'El préstamo'),
     loanKind: input.loanId ? String(input.loanKind || 'abono') : input.loanKind || null,
+    familyTransfer: input.familyTransfer === true,
   }
 }
 
@@ -217,7 +241,7 @@ export async function saveMovementInTransaction(connection, userId, input, movem
 
   if (movementId) {
     const [oldRows] = await connection.execute(
-      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
@@ -255,7 +279,7 @@ export async function saveMovementInTransaction(connection, userId, input, movem
       `UPDATE movimiento
          SET id_plan_futuro = ?, id_suscripcion = ?, id_categoria = ?,
              id_cuenta_origen = ?, id_cuenta_destino = ?, monto = ?,
-             fecha = COALESCE(?, CURRENT_TIMESTAMP), id_prestamo = ?, clase_prestamo = ?
+             fecha = COALESCE(?, CURRENT_TIMESTAMP), id_prestamo = ?, clase_prestamo = ?, id_usuario_destino = ?
          WHERE id = ? AND id_usuario = ?`,
       [
         movement.planId,
@@ -267,6 +291,7 @@ export async function saveMovementInTransaction(connection, userId, input, movem
         movement.date,
         movement.loanId,
         movement.loanKind,
+        movement.destinationOwnerId || null,
         movementId,
         userId,
       ],
@@ -276,9 +301,9 @@ export async function saveMovementInTransaction(connection, userId, input, movem
     const [result] = await connection.execute(
       `INSERT INTO movimiento
            (id_usuario, id_plan_futuro, id_suscripcion, id_categoria,
-            id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?)`,
-      [...values, movement.date, movement.loanId, movement.loanKind],
+            id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo, id_usuario_destino)
+         VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?)`,
+      [...values, movement.date, movement.loanId, movement.loanKind, movement.destinationOwnerId || null],
     )
     id = result.insertId
   }
@@ -310,7 +335,7 @@ export async function deleteMovement(userId, movementId) {
   try {
     await connection.beginTransaction()
     const [rows] = await connection.execute(
-      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!rows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)

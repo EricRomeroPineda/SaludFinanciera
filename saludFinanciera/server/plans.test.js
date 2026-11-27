@@ -12,10 +12,10 @@ test('related plan movements query the complete history for the authenticated us
   const rows = [{ id: 5, amount: '100.00', date: '2026-11-18' }]
   t.mock.method(pool, 'execute', async (sql, params) => {
     assert.match(sql, /EXISTS\(SELECT 1 FROM movimiento_evidencia AS e WHERE e\.id_movimiento = m\.id\) AS hasEvidence/)
-    assert.match(sql, /WHERE m\.id_usuario = \? AND m\.id_plan_futuro = \?/)
+    assert.match(sql, /WHERE \(m\.id_usuario = \? OR m\.id_usuario_destino = \?\) AND m\.id_plan_futuro = \?/)
     assert.match(sql, /ORDER BY m\.fecha DESC, m\.id DESC/)
     assert.doesNotMatch(sql, /LIMIT/)
-    assert.deepEqual(params, [7, 8])
+    assert.deepEqual(params, [7, 7, 8])
     return [rows]
   })
   assert.deepEqual(await getRelatedMovements(7, 'plan', 8), { movements: rows })
@@ -23,13 +23,13 @@ test('related plan movements query the complete history for the authenticated us
 
 test('related movements retain account/subscription filters and reject invalid relations or IDs', async (t) => {
   t.mock.method(pool, 'execute', async (sql, params) => {
-    assert.match(sql, /WHERE m\.id_usuario = \?/)
-    if (params.length === 3) {
+    assert.match(sql, /WHERE \(m\.id_usuario = \? OR m\.id_usuario_destino = \?\)/)
+    if (params.length === 4) {
       assert.match(sql, /\(m\.id_cuenta_origen = \? OR m\.id_cuenta_destino = \?\)/)
-      assert.deepEqual(params, [7, 8, 8])
+      assert.deepEqual(params, [7, 7, 8, 8])
     } else {
       assert.match(sql, /m\.id_suscripcion = \?/)
-      assert.deepEqual(params, [7, 8])
+      assert.deepEqual(params, [7, 7, 8])
     }
     return [[]]
   })

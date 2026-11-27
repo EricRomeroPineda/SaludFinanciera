@@ -1,4 +1,5 @@
 export function movementLabel(item) {
+  if (item.recipientUserId) return 'Transferencia familiar'
   if (item.loanId) return `${item.loanKind === 'desembolso' ? 'Préstamo inicial' : 'Abono a préstamo'} · ${item.loanName || 'Préstamo'}`
   return item.originAccountId && item.destinationAccountId ? 'Transferencia' : item.originAccountId ? 'Gasto' : 'Ingreso'
 }

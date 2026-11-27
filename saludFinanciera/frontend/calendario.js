@@ -153,7 +153,7 @@ class FinancialCalendar extends LitElement {
                       <td><movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
                         .readOnly=${this.familyView}></movement-evidence></td>
                       <td><div class="monthly-actions">
-                        ${!this.familyView && item.loanKind !== 'desembolso' ? html`
+                        ${!this.familyView && item.canEdit !== false && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" aria-label=${`Editar movimiento ${item.id}`} title="Editar movimiento" @click=${() => this.movementAction('edit-movement', item)}>${editIcon()}</button>
                           <button class="calendar-action danger" type="button" @click=${() => this.movementAction('delete-movement', item)}>Eliminar</button>
                         ` : item.loanKind === 'desembolso' ? 'Desembolso fijo' : 'Solo consulta'}

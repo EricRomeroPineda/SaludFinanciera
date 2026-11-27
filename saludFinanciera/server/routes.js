@@ -14,7 +14,7 @@ import {
 } from './modules.js'
 import { getCalendarData } from './calendar.js'
 import { createCategory } from './categories.js'
-import { getFamilyView } from './family-view.js'
+import { getFamilyTransferAccounts, getFamilyView } from './family-view.js'
 import { createLoan, deleteLoan, getLoans, updateLoan } from './loans.js'
 
 export async function handleFinanceRoute(request, response, url, { getUserId, readJson, sendJson }) {
@@ -36,6 +36,12 @@ export async function handleFinanceRoute(request, response, url, { getUserId, re
     return true
   }
   if (await handleSubscriptionRoute(request, response, url, { getUserId, readJson, sendJson })) return true
+  if (route === 'GET /api/family-transfer-accounts') {
+    const userId = await getUserId(request, response)
+    if (!userId) return true
+    sendJson(response, 200, await getFamilyTransferAccounts(userId))
+    return true
+  }
   if (url.pathname === '/api/loans' && ['GET', 'POST'].includes(request.method)) {
     const userId = await getUserId(request, response)
     if (!userId) return true

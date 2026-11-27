@@ -159,7 +159,7 @@ test('family reads check current membership while mutations require ownership, n
   const read = db.calls[0]
   assert.match(read.sql, /viewer.id_usuario = \? AND owner.id_usuario = m.id_usuario/)
   assert.match(read.sql, /owner.id_familia = viewer.id_familia/)
-  assert.deepEqual(read.params, [9, 8, 8])
+  assert.deepEqual(read.params, [9, 8, 8, 8])
   await assert.rejects(uploadEvidence(8, 9, await image(), 'foto.png'), { statusCode: 404 })
   await assert.rejects(deleteEvidence(8, 9, 1), { statusCode: 404 })
   assert.ok(!db.calls.some(({ sql }) => sql.startsWith('INSERT') || sql.startsWith('DELETE')))

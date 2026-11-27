@@ -35,7 +35,7 @@ export async function getFamily(userId) {
   if (!families.length) return { family: null }
   const family = families[0]
   const [members] = await pool.execute(
-    `SELECT u.id, u.nombre AS name
+    `SELECT u.id, u.nombre AS name, u.tema AS theme, u.apariencia AS appearance
      FROM familia_integrante i INNER JOIN usuario u ON u.id = i.id_usuario
      WHERE i.id_familia = ? ORDER BY u.nombre, u.id`, [family.id],
   )

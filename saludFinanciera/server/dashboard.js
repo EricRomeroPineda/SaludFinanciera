@@ -4,6 +4,7 @@ import { isCreditAccount } from '../account-types.js'
 import { getPlans } from './modules.js'
 import { getLoans } from './loans.js'
 import { depositDetails } from './validation.js'
+import { movementSharingFields, describeSharedMovement } from './movement-sharing.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -30,7 +31,7 @@ export async function getDashboardData(userId) {
             monto_pago_confirmado AS confirmedPaymentAmount,
             (SELECT COALESCE(SUM(payment.monto), 0)
              FROM movimiento AS payment
-             WHERE payment.id_usuario = cuenta.id_usuario
+             WHERE (payment.id_usuario = cuenta.id_usuario OR payment.id_usuario_destino = cuenta.id_usuario)
                AND payment.id_cuenta_destino = cuenta.id
                AND payment.id_cuenta_origen IS NOT NULL
                AND payment.id_categoria IS NULL AND payment.id_prestamo IS NULL
@@ -53,7 +54,7 @@ export async function getDashboardData(userId) {
   )
 
   const [movements] = await pool.execute(
-    `SELECT m.id, m.monto AS amount,
+    `SELECT m.id, m.monto AS amount, ${movementSharingFields},
             EXISTS(SELECT 1 FROM movimiento_evidencia AS e WHERE e.id_movimiento = m.id) AS hasEvidence,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             m.id_categoria AS categoryId, m.id_plan_futuro AS planId,
@@ -73,12 +74,13 @@ export async function getDashboardData(userId) {
      LEFT JOIN cuenta AS origin
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
-       ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+       ON destination.id = m.id_cuenta_destino
+         AND destination.id_usuario = COALESCE(m.id_usuario_destino, m.id_usuario)
      LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
-     WHERE m.id_usuario = ?
+     WHERE (m.id_usuario = ? OR m.id_usuario_destino = ?)
      ORDER BY m.fecha DESC, m.id DESC
      LIMIT 250`,
-    [userId],
+    [userId, userId],
   )
 
   const [activityByMonth] = await pool.execute(
@@ -116,7 +118,7 @@ export async function getDashboardData(userId) {
     subscriptions,
     plans,
     categories,
-    movements,
+    movements: movements.map((movement) => describeSharedMovement(movement, userId)),
     activityByMonth,
     loans: await getLoans(userId),
     summary: {
@@ -242,8 +244,8 @@ export async function deleteAccount(userId, id) {
 
     const [references] = await connection.execute(
       `SELECT COUNT(*) AS count FROM movimiento
-       WHERE id_usuario = ? AND (id_cuenta_origen = ? OR id_cuenta_destino = ?)`,
-      [userId, id, id],
+       WHERE (id_usuario = ? OR id_usuario_destino = ?) AND (id_cuenta_origen = ? OR id_cuenta_destino = ?)`,
+      [userId, userId, id, id],
     )
     if (Number(references[0].count) > 0) {
       throw invalid('No se puede eliminar una cuenta que tiene movimientos asociados.', 409)

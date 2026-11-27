@@ -3,6 +3,7 @@ import { getSubscriptions } from '../suscripciones/service.js'
 import { getPlans } from './modules.js'
 import { calendarEvents } from './calendar-events.js'
 import { getLoans } from './loans.js'
+import { movementSharingFields, describeSharedMovement } from './movement-sharing.js'
 
 function invalid(message) {
   const error = new Error(message)
@@ -24,8 +25,8 @@ export async function getCalendarData(userId, month, scope = 'month') {
   const endDate = new Date(Date.UTC(year, monthNumber, 1))
   const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-01`
   const movementCondition = scope === 'all' ? '' : ' AND m.fecha >= ? AND m.fecha < ?'
-  const movementParams = scope === 'all' ? [userId]
-    : scope === 'year' ? [userId, `${year}-01-01`, `${year + 1}-01-01`] : [userId, start, end]
+  const movementParams = scope === 'all' ? [userId, userId]
+    : scope === 'year' ? [userId, userId, `${year}-01-01`, `${year + 1}-01-01`] : [userId, userId, start, end]
   const [days] = await pool.execute(
     `SELECT DATE_FORMAT(m.fecha, '%Y-%m-%d') AS day,
             COUNT(*) AS count,
@@ -39,10 +40,10 @@ export async function getCalendarData(userId, month, scope = 'month') {
               THEN m.monto ELSE 0 END) AS expenses
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
-     WHERE m.id_usuario = ? AND m.fecha >= ? AND m.fecha < ?
+     WHERE (m.id_usuario = ? OR m.id_usuario_destino = ?) AND m.fecha >= ? AND m.fecha < ?
      GROUP BY DATE_FORMAT(m.fecha, '%Y-%m-%d')
      ORDER BY day`,
-    [userId, start, end],
+    [userId, userId, start, end],
   )
 
   const [categories] = await pool.execute(
@@ -57,7 +58,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
   )
 
   const [movements] = await pool.execute(
-    `SELECT m.id, m.monto AS amount,
+    `SELECT m.id, m.monto AS amount, ${movementSharingFields},
             EXISTS(SELECT 1 FROM movimiento_evidencia AS e WHERE e.id_movimiento = m.id) AS hasEvidence,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             m.id_categoria AS categoryId, m.id_plan_futuro AS planId,
@@ -76,9 +77,10 @@ export async function getCalendarData(userId, month, scope = 'month') {
      LEFT JOIN cuenta AS origin
        ON origin.id = m.id_cuenta_origen AND origin.id_usuario = m.id_usuario
      LEFT JOIN cuenta AS destination
-       ON destination.id = m.id_cuenta_destino AND destination.id_usuario = m.id_usuario
+       ON destination.id = m.id_cuenta_destino
+         AND destination.id_usuario = COALESCE(m.id_usuario_destino, m.id_usuario)
      LEFT JOIN prestamo AS loan ON loan.id = m.id_prestamo AND loan.id_usuario = m.id_usuario
-     WHERE m.id_usuario = ?${movementCondition}
+     WHERE (m.id_usuario = ? OR m.id_usuario_destino = ?)${movementCondition}
      ORDER BY m.fecha DESC, m.id DESC`,
     movementParams,
   )
@@ -110,7 +112,7 @@ export async function getCalendarData(userId, month, scope = 'month') {
       count: Number(item.count),
     })),
     movements: movements.map((item) => ({
-      ...item,
+      ...describeSharedMovement(item, userId),
       amount: Number(item.amount),
     })),
   }

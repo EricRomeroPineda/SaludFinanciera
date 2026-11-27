@@ -8,12 +8,12 @@ import {
 async function authorize(connection, userId, movementId, write = false) {
   const [rows] = await connection.execute(
     `SELECT m.id_usuario AS ownerId FROM movimiento m
-     WHERE m.id = ? AND (m.id_usuario = ?${write ? '' : ` OR EXISTS (
+     WHERE m.id = ? AND (m.id_usuario = ?${write ? '' : ` OR m.id_usuario_destino = ? OR EXISTS (
        SELECT 1 FROM familia_integrante viewer
        INNER JOIN familia_integrante owner ON owner.id_familia = viewer.id_familia
        WHERE viewer.id_usuario = ? AND owner.id_usuario = m.id_usuario
      )`})${write ? ' FOR UPDATE' : ''}`,
-    write ? [movementId, userId] : [movementId, userId, userId],
+    write ? [movementId, userId] : [movementId, userId, userId, userId],
   )
   if (!rows.length) throw invalid('No se encontró el movimiento o no tienes permiso para consultar su evidencia.', 404)
   return Number(rows[0].ownerId) === Number(userId)

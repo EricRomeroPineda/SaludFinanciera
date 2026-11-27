@@ -80,9 +80,9 @@ function ledger(t) {
         return [{ insertId: id }]
       }
       if (sql.startsWith('UPDATE movimiento')) {
-        const [id_plan_futuro, id_suscripcion, id_categoria, id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo, id, userId] = params
+        const [id_plan_futuro, id_suscripcion, id_categoria, id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo, id_usuario_destino, id, userId] = params
         Object.assign(state.movements.find((row) => row.id === id && row.id_usuario === userId),
-          { id_plan_futuro, id_suscripcion, id_categoria, id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo })
+          { id_plan_futuro, id_suscripcion, id_categoria, id_cuenta_origen, id_cuenta_destino, monto, fecha, id_prestamo, clase_prestamo, id_usuario_destino })
         return [{ affectedRows: 1 }]
       }
       if (sql.startsWith('DELETE FROM movimiento')) {
@@ -216,9 +216,9 @@ test('loan reads sum only repayments and all history queries retain owner filter
   assert.deepEqual(calls[0].params, [7, 7])
   await getRelatedMovements(7, 'loan', 5)
   assert.match(calls[1].sql, /SELECT m.id/)
-  assert.match(calls[1].sql, /WHERE m.id_usuario = \? AND m.id_prestamo = \?/)
+  assert.match(calls[1].sql, /WHERE \(m.id_usuario = \? OR m.id_usuario_destino = \?\) AND m.id_prestamo = \?/)
   assert.doesNotMatch(calls[1].sql, /LIMIT/)
-  assert.deepEqual(calls[1].params, [7, 5])
+  assert.deepEqual(calls[1].params, [7, 7, 5])
 })
 
 test('loan creation rejects missing/invalid dates, zero amounts, unknown types and ambiguous mode', async () => {
