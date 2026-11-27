@@ -22,6 +22,7 @@ function mockFamilyData(t, linked = true) {
       available: '10', total: '100', paymentDueDate: '2026-11-18', paymentToAvoidInterest: '90',
     }]]
     if (sql.includes('SELECT m.id')) {
+      assert.match(sql, /EXISTS\(SELECT 1 FROM movimiento_evidencia AS e WHERE e\.id_movimiento = m\.id\) AS hasEvidence/)
       return [[{ id: params[0], amount: '0.20', date: '2026-11-18', originAccount: 'Banco', originAccountId: params[0] * 10 }]]
     }
     if (sql.includes('FROM categorias')) return [[]]

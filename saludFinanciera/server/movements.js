@@ -29,6 +29,7 @@ export async function getRelatedMovements(userId, relation, value) {
       : relation === 'loan' ? 'm.id_prestamo = ?' : 'm.id_suscripcion = ?'
   const [movements] = await pool.execute(
     `SELECT m.id, m.monto AS amount,
+            EXISTS(SELECT 1 FROM movimiento_evidencia AS e WHERE e.id_movimiento = m.id) AS hasEvidence,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             cat.nombre AS category,
             origin.nombre AS originAccount, destination.nombre AS destinationAccount,

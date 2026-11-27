@@ -1425,7 +1425,8 @@ class SaludFinanciera extends LitElement {
               <button class="text-button delete-button" type="button" @click=${() => this.handleDeleteMovement(item.id)} aria-label="Eliminar movimiento">×</button>
             </span>
           ` : ''}
-          <movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence>
+          <movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
+            .readOnly=${this.familyView}></movement-evidence>
         </li>
       `
     })}</ul>`

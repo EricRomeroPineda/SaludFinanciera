@@ -54,6 +54,7 @@ export async function getDashboardData(userId) {
 
   const [movements] = await pool.execute(
     `SELECT m.id, m.monto AS amount,
+            EXISTS(SELECT 1 FROM movimiento_evidencia AS e WHERE e.id_movimiento = m.id) AS hasEvidence,
             DATE_FORMAT(m.fecha, '%Y-%m-%d') AS date,
             m.id_categoria AS categoryId, m.id_plan_futuro AS planId,
             m.id_suscripcion AS subscriptionId,

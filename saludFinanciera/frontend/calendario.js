@@ -150,7 +150,8 @@ class FinancialCalendar extends LitElement {
                       <td>${movementOrigin(item)}</td><td>${movementDestination(item)}</td>
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
-                      <td><movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence></td>
+                      <td><movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
+                        .readOnly=${this.familyView}></movement-evidence></td>
                       <td><div class="monthly-actions">
                         ${!this.familyView && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" aria-label=${`Editar movimiento ${item.id}`} title="Editar movimiento" @click=${() => this.movementAction('edit-movement', item)}>${editIcon()}</button>
@@ -272,7 +273,8 @@ class FinancialCalendar extends LitElement {
                             : movement.originAccount || movement.destinationAccount || movement.planName || 'Sin cuenta relacionada'}</small>
                         </span>
                         <span class="movement-value ${income ? 'income' : transfer ? '' : 'expense'}">${this.formatMoney(movement.amount)}</span>
-                        <movement-evidence .movementId=${movement.id} .readOnly=${this.familyView}></movement-evidence>
+                        <movement-evidence .movementId=${movement.id} .hasEvidence=${Boolean(movement.hasEvidence)}
+                          .readOnly=${this.familyView}></movement-evidence>
                       </article>
                     `
                   })}

@@ -8,6 +8,7 @@ export class MovementEvidence extends LitElement {
     loading: { state: true }, busy: { state: true }, canManage: { state: true },
     locked: { type: Boolean },
     hideToggle: { type: Boolean },
+    hasEvidence: { type: Boolean },
   }
   static styles = css`
     :host { display: inline-block; font-size: 12px; color: var(--ink); }
@@ -23,6 +24,7 @@ export class MovementEvidence extends LitElement {
     .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .dialog-heading h2 { margin: 0; font-size: 18px; }
     .eye-button { display: inline-flex; align-items: center; justify-content: center; }
+    .eye-button.has-evidence { color: var(--green); }
     .gallery { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
     figure { margin: 0; max-width: 140px; overflow-wrap: anywhere; }
     img { display: block; max-width: 140px; height: 95px; object-fit: contain; background: var(--soft); }
@@ -45,6 +47,7 @@ export class MovementEvidence extends LitElement {
     this.loading = false
     this.busy = false
     this.canManage = false
+    this.hasEvidence = false
     this.requestVersion = 0
   }
 
@@ -69,6 +72,7 @@ export class MovementEvidence extends LitElement {
       const data = await apiRequest(this.endpoint())
       if (version === this.requestVersion) {
         this.images = data.images
+        this.hasEvidence = data.images.length > 0
         this.canManage = data.canManage
       }
     } catch (error) {
@@ -104,6 +108,7 @@ export class MovementEvidence extends LitElement {
           headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
         })
         this.images = [...this.images, image]
+        this.hasEvidence = true
         this.pending = this.pending.slice(1)
       }
     } catch (error) {
@@ -125,6 +130,7 @@ export class MovementEvidence extends LitElement {
     try {
       await apiRequest(`${this.endpoint()}/${image.id}`, { method: 'DELETE' })
       this.images = this.images.filter((item) => item.id !== image.id)
+      this.hasEvidence = this.images.length > 0
     } catch (error) {
       this.error = error.message
     } finally {
@@ -191,7 +197,9 @@ export class MovementEvidence extends LitElement {
 
   render() {
     return this.hideToggle ? this.renderPanel() : html`
-      <button class="eye-button" type="button" aria-label="Ver evidencia" title="Ver evidencia"
+      <button class="eye-button ${this.hasEvidence ? 'has-evidence' : ''}" type="button"
+        aria-label=${this.hasEvidence ? 'Ver evidencia adjunta' : 'Ver evidencia'}
+        title=${this.hasEvidence ? 'Ver evidencia adjunta' : 'Ver evidencia'}
         @click=${this.open}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

@@ -45,6 +45,24 @@ test('evidence input is optional and available in movement forms, the general re
   assert.match(history, /<movement-evidence .movementId=8/)
 })
 
+test('eye is green only for movements with saved evidence, including family histories', () => {
+  const withEvidence = { id: 8, date: '2026-11-19', amount: '10', hasEvidence: 1 }
+  const withoutEvidence = { id: 9, date: '2026-11-19', amount: '10', hasEvidence: 0 }
+  const register = text(calendar.renderMonthlyTable.call({
+    data: { movements: [withEvidence, withoutEvidence] }, scope: 'all',
+    familyView: true, formatMoney: () => '$10',
+  }, 'Noviembre'))
+  assert.match(register, /\.movementId=8 \.hasEvidence=true/)
+  assert.match(register, /\.movementId=9 \.hasEvidence=false/)
+  const history = text(related.render.call({ items: [withEvidence], familyView: true }))
+  assert.match(history, /\.movementId=8 \.hasEvidence=true/)
+  const present = text(evidence.render.call({ ...methods(evidence), hasEvidence: true }))
+  const absent = text(evidence.render.call({ ...methods(evidence), hasEvidence: false }))
+  assert.match(present, /class="eye-button has-evidence"[^>]*aria-label=Ver evidencia adjunta/)
+  assert.match(absent, /class="eye-button " /)
+  assert.doesNotMatch(absent, /has-evidence/)
+})
+
 test('one eye icon opens the evidence modal in every history without adding table rows', () => {
   const state = {
     data: { movements: [{ id: 8, date: '2026-11-19', amount: '10' }] },
@@ -55,7 +73,7 @@ test('one eye icon opens the evidence modal in every history without adding tabl
   assert.match(register, /<td><div class="monthly-actions">/)
   assert.doesNotMatch(register, /evidence-detail-row|aria-expanded=/)
   const collapsed = text(evidence.render.call({ ...methods(evidence), expanded: false, pending: [], images: [] }))
-  assert.match(collapsed, /<button class="eye-button"[^>]*aria-label="Ver evidencia"/)
+  assert.match(collapsed, /<button class="eye-button "[^>]*aria-label=Ver evidencia/)
   assert.match(collapsed, /<svg[^>]*aria-hidden="true"/)
   assert.match(collapsed, /<dialog aria-label="Evidencia del movimiento"/)
   assert.doesNotMatch(collapsed, /Imágenes de evidencia|Eliminar imagen/)
@@ -111,6 +129,7 @@ test('uploads use raw binary with the correct MIME and remove only successfully 
   await assert.rejects(state.uploadPending(8), /Sin espacio/)
   assert.deepEqual(state.pending, [second])
   assert.equal(state.images.length, 1)
+  assert.equal(state.hasEvidence, true)
   assert.equal(state.busy, false)
   assert.equal(state.error, 'Sin espacio')
   fail = false
@@ -118,6 +137,29 @@ test('uploads use raw binary with the correct MIME and remove only successfully 
   assert.deepEqual(uploaded, ['uno.png', 'dos.png', 'dos.png'])
   assert.equal(state.pending.length, 0)
   assert.equal(state.images.length, 2)
+  assert.equal(state.hasEvidence, true)
+})
+
+test('removing the last image clears the eye indicator', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 204 }))
+  globalThis.window = { confirm: () => true }
+  t.after(() => { delete globalThis.window })
+  const state = { ...methods(evidence), movementId: 8, images: [{ id: 1, name: 'recibo.webp' }],
+    hasEvidence: true }
+  await state.remove(state.images[0])
+  assert.deepEqual(state.images, [])
+  assert.equal(state.hasEvidence, false)
+})
+
+test('refreshing evidence updates the eye indicator from the saved images', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    images: [{ id: 2, name: 'nuevo.webp' }], canManage: true,
+  })))
+  const state = { ...methods(evidence), movementId: 8, images: [], hasEvidence: false, requestVersion: 0 }
+  await state.load()
+  assert.equal(state.hasEvidence, true)
+  assert.equal(state.images.length, 1)
+  assert.equal(state.loading, false)
 })
 
 test('after saving a movement, failed evidence upload retains its form and retries with PUT rather than duplicate POST', async (t) => {

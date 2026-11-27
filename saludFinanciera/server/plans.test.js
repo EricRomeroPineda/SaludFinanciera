@@ -11,6 +11,7 @@ const input = {
 test('related plan movements query the complete history for the authenticated user and selected plan', async (t) => {
   const rows = [{ id: 5, amount: '100.00', date: '2026-11-18' }]
   t.mock.method(pool, 'execute', async (sql, params) => {
+    assert.match(sql, /EXISTS\(SELECT 1 FROM movimiento_evidencia AS e WHERE e\.id_movimiento = m\.id\) AS hasEvidence/)
     assert.match(sql, /WHERE m\.id_usuario = \? AND m\.id_plan_futuro = \?/)
     assert.match(sql, /ORDER BY m\.fecha DESC, m\.id DESC/)
     assert.doesNotMatch(sql, /LIMIT/)

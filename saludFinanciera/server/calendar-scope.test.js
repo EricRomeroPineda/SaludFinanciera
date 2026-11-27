@@ -9,6 +9,7 @@ for (const scope of ['all', 'year', 'month']) {
     t.mock.method(pool, 'execute', async (sql, params) => {
       if (sql.includes('SELECT m.id')) {
         queriedMovements = true
+        assert.match(sql, /EXISTS\(SELECT 1 FROM movimiento_evidencia AS e WHERE e\.id_movimiento = m\.id\) AS hasEvidence/)
         assert.match(sql, /LEFT JOIN categorias/)
         assert.doesNotMatch(sql, /LIMIT|cat\.nombre =|cat\.tipo =/)
         if (scope === 'all') {

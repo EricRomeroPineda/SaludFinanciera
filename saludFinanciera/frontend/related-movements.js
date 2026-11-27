@@ -71,7 +71,8 @@ class RelatedMovements extends LitElement {
                     <td>${item.category || 'Sin categoría'}</td>
                     <td>${item.subscriptionName || '—'}</td>
                     <td class="amount">${money.format(item.amount)}</td>
-                    <td><movement-evidence .movementId=${item.id} .readOnly=${this.familyView}></movement-evidence></td>
+                    <td><movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
+                      .readOnly=${this.familyView}></movement-evidence></td>
                   </tr>
                 `)}</tbody>
               </table>
