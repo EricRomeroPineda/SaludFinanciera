@@ -152,7 +152,7 @@ a { color: inherit; text-decoration: none; }
 .admin-menu h2 { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
 .section-menu-card > .section-status:is(.active, .pending) { position: absolute; top: 14px; right: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 99px; font-size: 10px; font-weight: 700; line-height: 1.5; color: var(--muted); background: var(--soft); }
 .section-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
-.section-menu-card > .section-status.active { color: var(--green); }
+.section-menu-card > .section-status.active { color: #166534; background: #DCFCE7; border-color: #86EFAC; }
 .section-coming-soon { color: var(--muted); font-size: 12px; }
 @media (max-width: 900px) { .menu-layout.with-admin { grid-template-columns: minmax(0, 1fr); } }
 .section-menu-card { position: relative; display: grid; justify-items: start; gap: 16px; padding: 48px 28px 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); text-align: left; font: inherit; }
