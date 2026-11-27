@@ -10,12 +10,19 @@ export class MovementEvidence extends LitElement {
     hideToggle: { type: Boolean },
   }
   static styles = css`
-    :host { display: block; font-size: 12px; color: var(--ink); }
+    :host { display: inline-block; font-size: 12px; color: var(--ink); }
     button, input { font: inherit; }
     button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px;
       color: var(--ink); background: var(--surface); cursor: pointer; }
     button:disabled { opacity: .6; cursor: default; }
     .panel { min-width: 180px; padding: 10px 0; }
+    dialog { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 40px);
+      overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 14px;
+      background: var(--surface); color: var(--ink); }
+    dialog::backdrop { background: #0009; }
+    .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .dialog-heading h2 { margin: 0; font-size: 18px; }
+    .eye-button { display: inline-flex; align-items: center; justify-content: center; }
     .gallery { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
     figure { margin: 0; max-width: 140px; overflow-wrap: anywhere; }
     img { display: block; max-width: 140px; height: 95px; object-fit: contain; background: var(--soft); }
@@ -125,17 +132,29 @@ export class MovementEvidence extends LitElement {
     }
   }
 
-  render() {
+  open() {
+    this.renderRoot.querySelector('dialog').showModal()
+    this.expanded = true
+  }
+
+  close() {
+    this.renderRoot.querySelector('dialog').close()
+  }
+
+  handleClose() {
+    this.expanded = false
+    this.requestVersion++
+    this.loading = false
+  }
+
+  renderPanel() {
     const manage = !this.readOnly && (!this.movementId || this.canManage)
     return html`
-      ${!this.hideToggle ? html`<button type="button" aria-expanded=${this.expanded} @click=${() => { this.expanded = !this.expanded }}>
-        ${this.expanded ? 'Ocultar evidencia' : 'Evidencia (opcional)'}
-      </button>` : ''}
-      ${this.expanded ? html`
         <div class="panel">
           ${this.loading ? html`<p role="status">Cargando evidencia…</p>` : ''}
-          ${this.error ? html`<p class="error" role="alert">${this.error}</p>
-            ${this.movementId ? html`<button type="button" ?disabled=${this.busy} @click=${this.load}>Actualizar evidencia</button>` : ''}` : ''}
+          ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
+          ${this.movementId ? html`<button type="button" ?disabled=${this.busy || this.loading}
+            @click=${this.load}>Actualizar evidencia</button>` : ''}
           <div class="gallery">${this.images.map((image) => html`
             <figure>
               <a href=${`${this.endpoint()}/${image.id}`} target="_blank" rel="noopener noreferrer">
@@ -167,7 +186,27 @@ export class MovementEvidence extends LitElement {
             ` : ''}
           ` : ''}
         </div>
-      ` : ''}
+    `
+  }
+
+  render() {
+    return this.hideToggle ? this.renderPanel() : html`
+      <button class="eye-button" type="button" aria-label="Ver evidencia" title="Ver evidencia"
+        @click=${this.open}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </button>
+      <dialog aria-label="Evidencia del movimiento" @close=${this.handleClose}
+        @cancel=${(event) => { if (this.busy) event.preventDefault() }}>
+        <div class="dialog-heading">
+          <h2>Evidencia</h2>
+          <button type="button" ?disabled=${this.busy} @click=${this.close}>Cerrar</button>
+        </div>
+        ${this.expanded ? this.renderPanel() : ''}
+      </dialog>
     `
   }
 }

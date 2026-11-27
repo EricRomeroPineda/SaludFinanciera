@@ -1390,7 +1390,8 @@ class SaludFinanciera extends LitElement {
           </label>
         ` : ''}
         <movement-evidence id="movement-evidence" class="form-hint"
-          .movementId=${this.pendingEvidenceMovementId || movement.id || null} .expanded=${true} .locked=${this.submitting}></movement-evidence>
+          .movementId=${this.pendingEvidenceMovementId || movement.id || null} .expanded=${true}
+          .hideToggle=${true} .locked=${this.submitting}></movement-evidence>
         <div class="form-actions">
           <button class="primary-button compact-button" ?disabled=${this.submitting}>
             ${this.submitting ? 'Guardando…' : this.editingMovement ? 'Guardar cambios' : 'Registrar movimiento'}

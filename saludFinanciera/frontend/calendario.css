@@ -71,7 +71,7 @@
 .day-total { margin: 5px 0 16px; color: var(--muted); font-size: 11px; }
 .day-list { display: grid; gap: 8px; max-height: 340px; overflow: auto; }
 .day-movement { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; }
-.day-movement movement-evidence { flex: 0 0 100%; min-width: 0; }
+.day-movement movement-evidence { flex: none; }
 .movement-sign { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--muted); font-weight: 700; }
 .movement-sign.income { background: var(--positive-bg); color: var(--positive); }
 .movement-sign.expense { background: var(--negative-bg); color: var(--negative); }
@@ -113,8 +113,6 @@
 .monthly-register th, .monthly-register td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; font-size: 11px; color: var(--ink); }
 .monthly-register th { color: var(--muted); }
 .monthly-actions { display: flex; align-items: center; gap: 12px; }
-.monthly-register .evidence-detail-row td { padding: 0; white-space: normal; background: var(--soft); }
-.evidence-detail-row movement-evidence { width: 0; min-width: 100%; box-sizing: border-box; padding: 12px 20px; }
 .calendar-period-controls { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .calendar-period-controls label, .register-scope { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
 .calendar-period-controls input, .register-scope select { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
