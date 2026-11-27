@@ -34,6 +34,7 @@ function mockFamilyData(t, linked = true) {
 test('family dashboard combines only current members and tags financial owners', async (t) => {
   const calls = mockFamilyData(t)
   const data = await getFamilyView(7, 'dashboard', new URL('http://localhost/api/dashboard?view=family&userId=99'))
+  assert.equal(data.viewerId, 7)
   assert.deepEqual(data.accounts.map((account) => account.name), ['Banco · Ana', 'Banco · Luis'])
   assert.deepEqual(data.accounts.map((account) => account.ownerId), [7, 8])
   assert.equal(data.summary.accountsCount, 2)

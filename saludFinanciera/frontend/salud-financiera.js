@@ -227,7 +227,7 @@ class SaludFinanciera extends LitElement {
         }}>← Menú principal</button>
         ${this.familyAvailable || this.familyView ? html`<button class="quiet-button scope-toggle" type="button"
           aria-label=${this.familyView ? 'Vista familiar. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
-          title=${this.familyView ? 'Vista familiar · Solo consulta. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
+          title=${this.familyView ? 'Vista familiar · Consulta y movimientos especiales. Cambiar a individual' : 'Vista individual. Cambiar a familiar'}
           aria-pressed=${String(Boolean(this.familyView))} ?disabled=${this.submitting}
           @click=${() => this.changeView({ currentTarget: { value: this.familyView ? 'individual' : 'family' } })}>
           <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -240,8 +240,9 @@ class SaludFinanciera extends LitElement {
           <button class="text-button" type="button" @click=${this.loadFamilyAvailability}>Reintentar consulta familiar</button>
         </div>` : ''}
         ${this.familyView ? html`<p class="family-view-notice" role="status">
-          <strong>Vista familiar: esta sección es de solo consulta.</strong>
-          Para registrar, editar o eliminar, cambia a Individual con el icono superior.
+          <strong>Vista familiar: consulta y movimientos especiales.</strong>
+          En las tarjetas de otros integrantes puedes registrar un pago o transferencia desde tus cuentas con «Registrar movimiento especial».
+          Para otros registros, editar o eliminar, cambia a Individual con el icono superior.
           Administra los integrantes y las invitaciones en Mi perfil → Mi familia.
         </p>` : ''}
         <div class="dashboard-heading">
@@ -450,6 +451,11 @@ class SaludFinanciera extends LitElement {
 
     const formData = new FormData(event.currentTarget)
     const mode = this.movementMode || 'normal'
+    if (this.familyView && mode !== 'family') {
+      this.error = 'Desde la vista familiar solo puedes registrar movimientos especiales desde tus cuentas.'
+      this.submitting = false
+      return
+    }
     const loan = (this.dashboard?.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId))
     if (mode === 'loan' && !loan) {
       this.error = 'Selecciona un préstamo disponible antes de registrar el abono.'
@@ -1052,6 +1058,13 @@ class SaludFinanciera extends LitElement {
                     </div>
                   </dl>` : ''}
                   ${card.depositDetails ? renderDeposit(card.depositDetails) : ''}
+                  ${this.familyView && card.ownerId != null && this.dashboard?.viewerId != null
+                    && Number(card.ownerId) !== Number(this.dashboard.viewerId) ? html`
+                    <div class="card-actions">
+                      <button class="text-button" type="button" ?disabled=${this.submitting}
+                        @click=${() => this.startFamilyMovement(card)}>Registrar movimiento especial</button>
+                    </div>
+                  ` : ''}
                   <div class="card-actions" ?hidden=${this.familyView}>
                     ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
                     ${isCreditAccount(card.type) && cardPaymentStatus(card, this.today) ? html`
@@ -1374,9 +1387,17 @@ class SaludFinanciera extends LitElement {
     `
   }
 
-  startFamilyMovement() {
-    if (this.familyView || !this.familyAvailable || this.submitting) return
-    this.openCalendarMovement({ date: localDateInput() })
+  startFamilyMovement(card = null) {
+    if ((!this.familyView && !this.familyAvailable) || this.submitting) return
+    const destination = card?.id ? card : null
+    if (destination && Number(destination.ownerId) === Number(this.dashboard?.viewerId)) return
+    this.openCalendarMovement({
+      date: localDateInput(),
+      event: destination ? {
+        kind: 'card', destinationAccountId: destination.id, label: destination.name,
+        amount: isCreditAccount(destination.type) ? destination.paymentToAvoidInterest : null,
+      } : null,
+    })
     this.selectMovementMode({ currentTarget: { value: 'family', checked: true } })
   }
 
@@ -1409,7 +1430,8 @@ class SaludFinanciera extends LitElement {
   selectMovementMode(event) {
     const mode = event.currentTarget.value
     if (!['normal', 'loan', 'subscription', 'investment', 'family'].includes(mode)) return
-    if (mode === 'family' && (this.familyView || (!this.familyAvailable && !this.editingMovement?.recipientUserId))) return
+    if (this.familyView && mode !== 'family') return
+    if (mode === 'family' && !this.familyView && !this.familyAvailable && !this.editingMovement?.recipientUserId) return
     if (!event.currentTarget.checked) {
       event.currentTarget.checked = true
       return
@@ -1471,8 +1493,8 @@ class SaludFinanciera extends LitElement {
             ['loan', 'Abono a préstamo (opcional)'],
             ['subscription', 'Suscripción relacionada (opcional)'],
             ['investment', 'Aportación a plan (opcional) · Inversión'],
-            ...(this.familyAvailable || movement.recipientUserId ? [['family', 'Movimiento familiar · Pago o transferencia']] : []),
-          ].map(([value, label]) => html`<label><input type="checkbox" name="movementMode"
+            ...(this.familyView || this.familyAvailable || movement.recipientUserId ? [['family', 'Movimiento familiar · Pago o transferencia']] : []),
+          ].filter(([value]) => !this.familyView || value === 'family').map(([value, label]) => html`<label><input type="checkbox" name="movementMode"
             value=${value} .checked=${mode === value} @change=${this.selectMovementMode} />${label}</label>`)}
         </fieldset>
         ${mode === 'normal' ? html`<label>Operación

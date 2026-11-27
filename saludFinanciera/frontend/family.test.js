@@ -115,7 +115,7 @@ test('a late family response cannot replace the subsequently selected individual
   assert.equal(state.dashboard.accounts[0].name, 'Solo yo')
 })
 
-test('top scope icon replaces the select and family mode announces read-only access', () => {
+test('top scope icon replaces the select and announces the special family movement exception', () => {
   const state = {
     loading: true, renderPlanDeleteDialog: () => '', renderMovementDialog: () => '',
     dashboard: null, activeTab: 'overview',
@@ -128,7 +128,8 @@ test('top scope icon replaces the select and family mode announces read-only acc
   const combined = text(finance.render.call({ ...state, familyView: true }))
   assert.match(combined, /Vista familiar\. Cambiar a individual/)
   assert.match(combined, /class="family-view-notice" role="status"/)
-  assert.match(combined, /esta sección es de solo consulta/)
+  assert.match(combined, /consulta y movimientos especiales/)
+  assert.match(combined, /Registrar movimiento especial/)
   assert.match(combined, /<circle cx="12"/)
   assert.match(combined, /M5 4a3/)
 })

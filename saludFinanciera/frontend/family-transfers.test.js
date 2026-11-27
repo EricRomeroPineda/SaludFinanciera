@@ -111,13 +111,52 @@ test('leaving family mode invalidates a late account lookup and its error', asyn
   assert.equal(ctx.error, '')
 })
 
-test('received movements cannot open an edit form and family consultation cannot enable the special mode', () => {
+test('received movements cannot open an edit form', () => {
   const recipient = state()
   recipient.startMovementEdit({ id: 1, recipientUserId: 8, canEdit: false })
   assert.match(recipient.error, /Solo quien envió/)
   assert.notEqual(recipient.showMovementForm, true)
-  const family = state({ familyView: true, movementMode: 'normal' })
-  family.startFamilyMovement()
-  family.selectMovementMode({ currentTarget: { checked: true, value: 'family' } })
-  assert.equal(family.movementMode, 'normal')
+})
+
+test('family cards expose special registration only on other owners and preload the destination', () => {
+  const ctx = state({
+    familyView: true, dashboard: { viewerId: 7 }, loadFamilyTransferAccounts() {},
+  })
+  const card = { ...accounts[1], type: 'Tarjeta de crédito', paymentToAvoidInterest: '25.50' }
+  assert.match(text(ctx.renderBankCard(card)), /Registrar movimiento especial/)
+  assert.doesNotMatch(text(ctx.renderBankCard(accounts[0])), /Registrar movimiento especial/)
+  assert.doesNotMatch(text(state().renderBankCard(card)), /Registrar movimiento especial/)
+  ctx.startFamilyMovement(card)
+  assert.equal(ctx.familyView, true)
+  assert.equal(ctx.movementMode, 'family')
+  assert.equal(ctx.movementOperation, 'transfer')
+  assert.equal(ctx.newMovementDefaults.destinationAccountId, 20)
+  assert.equal(ctx.newMovementDefaults.amount, '25.50')
+  assert.equal(ctx.showMovementForm, true)
+})
+
+test('family registration restricts the form to the special mode and saves without changing views', async (t) => {
+  const ctx = state({ familyView: true })
+  const markup = text(ctx.renderMovementForm())
+  assert.match(markup, /Movimiento familiar · Pago o transferencia/)
+  assert.doesNotMatch(markup, /Registro normal|Abono a préstamo \(opcional\)|Suscripción relacionada \(opcional\)/)
+  ctx.selectMovementMode({ currentTarget: { checked: true, value: 'normal' } })
+  assert.equal(ctx.movementMode, 'family')
+  t.mock.method(globalThis, 'FormData', function () {
+    return new Map([['originAccountId', '10'], ['destinationAccountId', '20'], ['amount', '25'], ['date', '2026-11-27']])
+  })
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, options })
+    return new Response(JSON.stringify({ id: 1 }))
+  })
+  ctx.refreshDashboard = async () => {}
+  await ctx.handleSaveMovement({ preventDefault() {}, currentTarget: {} })
+  assert.equal(calls[0].url, '/api/movements')
+  assert.equal(JSON.parse(calls[0].options.body).familyTransfer, true)
+  assert.equal(ctx.familyView, true)
+  ctx.movementMode = 'normal'
+  await ctx.handleSaveMovement({ preventDefault() {}, currentTarget: {} })
+  assert.equal(calls.length, 1)
+  assert.match(ctx.error, /solo puedes registrar movimientos especiales/)
 })
