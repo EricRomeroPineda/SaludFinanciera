@@ -594,8 +594,8 @@ class Inicio extends LitElement {
   handleAccountRemoved(event) {
     const { id, deleted, warning } = event.detail
     if (Number(id) !== Number(this.user?.id)) return
-    this.notice = `${deleted ? 'Tu cuenta se eliminó definitivamente.' : 'Tu información financiera se borró y te desvinculaste de la familia.'}${warning ? ` ${warning}` : ''}`
-    this.error = ''
+    this.notice = deleted ? 'Tu cuenta se eliminó definitivamente.' : 'Tu información financiera se borró y te desvinculaste de la familia.'
+    this.error = warning || ''
     this.activeSection = 'menu'
     this.activeTab = 'overview'
     if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)

@@ -151,7 +151,7 @@ class FinancialCalendar extends LitElement {
                       <td>${item.category || 'Sin categoría'}</td><td>${item.planName || '—'}</td>
                       <td>${item.subscriptionName || '—'}</td><td>${this.formatMoney(item.amount)}</td>
                       <td><movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
-                        .readOnly=${this.familyView}></movement-evidence></td>
+                        .readOnly=${this.familyView || item.canEdit === false}></movement-evidence></td>
                       <td><div class="monthly-actions">
                         ${!this.familyView && item.canEdit !== false && item.loanKind !== 'desembolso' ? html`
                           <button class="calendar-action" type="button" aria-label=${`Editar movimiento ${item.id}`} title="Editar movimiento" @click=${() => this.movementAction('edit-movement', item)}>${editIcon()}</button>
@@ -274,7 +274,7 @@ class FinancialCalendar extends LitElement {
                         </span>
                         <span class="movement-value ${income ? 'income' : transfer ? '' : 'expense'}">${this.formatMoney(movement.amount)}</span>
                         <movement-evidence .movementId=${movement.id} .hasEvidence=${Boolean(movement.hasEvidence)}
-                          .readOnly=${this.familyView}></movement-evidence>
+                          .readOnly=${this.familyView || movement.canEdit === false}></movement-evidence>
                       </article>
                     `
                   })}

@@ -1701,7 +1701,7 @@ class SaludFinanciera extends LitElement {
             </span>
           ` : ''}
           <movement-evidence .movementId=${item.id} .hasEvidence=${Boolean(item.hasEvidence)}
-            .readOnly=${this.familyView}></movement-evidence>
+            .readOnly=${this.familyView || item.canEdit === false}></movement-evidence>
         </li>
       `
     })}</ul>`

@@ -9,11 +9,18 @@ import { removeProfilePhoto } from './profile-photo.js'
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 
 export async function cleanPendingAccountFiles() {
-  const [files] = await pool.execute('SELECT id, tipo, referencia FROM archivo_borrado_pendiente ORDER BY id LIMIT 100')
-  for (const file of files) {
-    const removed = file.tipo === 'perfil' ? await removeProfilePhoto(file.referencia)
-      : (await removeEvidenceFiles([file.referencia])).length === 0
-    if (removed) await pool.execute('DELETE FROM archivo_borrado_pendiente WHERE id = ?', [file.id])
+  let lastId = 0
+  for (;;) {
+    const [files] = await pool.execute(
+      'SELECT id, tipo, referencia FROM archivo_borrado_pendiente WHERE id > ? ORDER BY id LIMIT 100', [lastId],
+    )
+    for (const file of files) {
+      const removed = file.tipo === 'perfil' ? await removeProfilePhoto(file.referencia)
+        : (await removeEvidenceFiles([file.referencia])).length === 0
+      if (removed) await pool.execute('DELETE FROM archivo_borrado_pendiente WHERE id = ?', [file.id])
+      lastId = file.id
+    }
+    if (files.length < 100) break
   }
   const [pending] = await pool.execute('SELECT COUNT(*) AS count FROM archivo_borrado_pendiente')
   return Number(pending[0].count)
@@ -74,6 +81,10 @@ export async function removeAccountInformation(actorId, targetId, input, deleteA
     await connection.commit()
   } catch (error) {
     await connection.rollback()
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      console.error('[BORRADO] Relación pendiente al borrar usuario:', error.sqlMessage || error.code)
+      throw invalid('No se borró nada: existen datos relacionados que impiden completar la operación. El administrador debe revisar las relaciones de la base de datos.', 409)
+    }
     throw error
   } finally { connection.release() }
   let warning = ''

@@ -83,7 +83,8 @@ class UserManagement extends LitElement {
         <account-removal .userId=${user.id} .userName=${user.name} admin
           @account-removed=${(event) => {
             this.users = this.users.filter((entry) => entry.id !== event.detail.id)
-            this.notice = `Usuario eliminado definitivamente.${event.detail.warning ? ` ${event.detail.warning}` : ''}`
+            this.notice = 'Usuario eliminado definitivamente.'
+            this.error = event.detail.warning || ''
           }}></account-removal>
         ${user.id === protectedAdminId ? html`<small>Administrador protegido: este rol no se puede quitar.</small>` : ''}
       </li>`)}</ul>

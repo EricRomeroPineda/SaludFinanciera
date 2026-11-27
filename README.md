@@ -231,6 +231,31 @@ Después de completar la migración 015, respalda la base y ejecuta **una sola v
 
 La 016 convierte los roles anteriores `usuario` a **Free**, conserva administradores y establece **Admin** para el usuario ID **2**. Los registros nuevos son siempre Free; no aceptan un rol enviado por el cliente. Cada usuario tiene un único rol **Admin / Free / VIP**, visible en la cabecera incluso en móvil. Free y VIP conservan las funciones financieras existentes; este cambio no introduce límites ni cobros.
 
+### Borrar información o eliminar usuarios
+
+**Antes de desplegar esta función**, con las migraciones anteriores aplicadas, respalda la base y los archivos y ejecuta **una sola vez** el archivo completo `server/migrations/017-account-removal.sql` en MySQL Workbench, o:
+
+```sh
+mysql -u USUARIO_MYSQL -p salud_financiera < server/migrations/017-account-removal.sql
+npm run build
+sudo systemctl restart apps
+```
+
+La 017 añade un indicador opcional a `movimiento`, la cola de limpieza de archivos `archivo_borrado_pendiente` y un trigger que impide eliminar al usuario ID **2**, incluso con SQL directo. No borra registros existentes ni altera saldos. Se necesita permiso `TRIGGER` al aplicarla; ejecuta el archivo completo, no solo el `ALTER TABLE`.
+
+En **Mi perfil → Borrar información y cuenta** hay dos acciones:
+
+| Acción | Confirmación y consecuencias |
+|---|---|
+| **Borrar información** | Un emergente y contraseña actual. Borra cuentas financieras, movimientos propios, evidencias, préstamos, servicios, suscripciones y planes. Desvincula de la familia; si el usuario la creó, disuelve esa familia y sus invitaciones, sin borrar datos financieros ajenos. Conserva usuario, contraseña, correo, foto, tema y rol para empezar de nuevo. Invalida los enlaces de correo pendientes. |
+| **Eliminar cuenta definitivamente** | Dos emergentes consecutivos y contraseña actual en el segundo. Hace lo anterior y además elimina perfil, foto administrada, correo, rol y acceso. Las sesiones dejan de funcionar al desaparecer el usuario. No está permitido para el ID 2. |
+
+En **Gestión de cuentas**, solo un administrador puede usar **Eliminar usuario**, con las mismas dos confirmaciones y **su propia contraseña de administrador**, no la del usuario que elimina. La API vuelve a comprobar permisos y contraseña dentro de la transacción. No basta con esconder botones ni con enviar un ID distinto.
+
+Los pagos/transferencias familiares ya realizados **no se revierten**: el otro participante conserva monto, fecha y su lado del movimiento como **Transferencia familiar · Historial conservado**, de solo lectura y sin identificar la cuenta desvinculada. No se modifica su saldo, no se transforma la transferencia en ingreso/gasto y los pagos a crédito siguen contando para el pago del ciclo. Se eliminan las evidencias del usuario que borra su información; las del otro participante permanecen en su historial. Este historial compartido es la excepción explícita al borrado total, para no destruir los registros del otro usuario.
+
+El borrado relacional es transaccional: ante un fallo se revierte sin borrar archivos. Después del commit se eliminan únicamente los archivos administrados referenciados, nunca carpetas completas ni imágenes del catálogo compartido. Si el disco falta o no hay permisos, se informa que los archivos siguen pendientes; la cola persistente permite reintentar al arrancar `apps` o en otra operación de borrado. Revisa `sudo journalctl -u apps --no-pager` y corrige montaje/permisos. Fotos externas no se eliminan del proveedor; los respaldos previos del servidor no se alteran. Ninguna acción cancela pagos ni suscripciones reales con bancos/proveedores.
+
 Solo Admin ve **Gestión de cuentas** en el menú principal. Allí puede buscar usuarios por nombre o ID y cambiar su rol. La API verifica el rol actual del administrador en MySQL antes de listar o modificar usuarios; nunca entrega hashes, datos bancarios o saldos. Si un administrador cambia su propio rol a Free/VIP pierde inmediatamente la gestión en esa pantalla. El usuario ID **2** no se puede degradar: está bloqueado en la interfaz, la API y un trigger de MySQL que también impide quitarle Admin mediante un `UPDATE` directo. El trigger requiere permiso `TRIGGER` al aplicar la migración. No se modifican movimientos ni saldos.
 
 El menú principal muestra **Agregar info de tarjetas nuevas**, junto a **Entrar**, únicamente a administradores. La pantalla permite buscar nombres registrados, agruparlos por tipo, distinguir imágenes asignadas y pendientes, cargar o reutilizar imágenes, previsualizar coincidencias y crear, editar o eliminar reglas. El inventario compartido contiene exclusivamente nombres y tipos de cuentas, suscripciones, servicios y planes: nunca saldos, números de cuenta, usuarios ni titulares. Los nombres de personas de Deudores no se incorporan al catálogo; sus tarjetas pueden mostrar la imagen de la cuenta sugerida, si existe.
