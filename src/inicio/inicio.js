@@ -17,6 +17,9 @@ import { invalidateCardImages } from '../../saludFinanciera/frontend/card-catalo
 import { userRoleLabel } from '../../shared/user-roles.js'
 import './user-management.js'
 import './account-removal.js'
+import { upcomingSections } from '../sections/sections.js'
+import { sectionIcon } from '../sections/icons.js'
+import '../sections/section-preview.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -328,6 +331,11 @@ class Inicio extends LitElement {
     }
 
     if (!this.user) return this.renderAuth()
+    const previewSection = upcomingSections.find((section) => section.id === this.activeSection)
+    if (previewSection) return html`${this.renderHeader()}<main class="dashboard">
+      <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
+      <section-preview .section=${previewSection}></section-preview>
+    </main>`
     if (this.activeSection === 'user-management') {
       return html`${this.renderHeader()}<main class="dashboard">
         <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
@@ -429,13 +437,6 @@ class Inicio extends LitElement {
   }
 
   renderMenu() {
-    const upcomingSections = [
-      ['Caja del tiempo', 'Consulta tu árbol genealógico y descubre la historia de tu familia.'],
-      ['Almacenamiento', 'Guarda archivos y fotos para capturar tus momentos.'],
-      ['Spoty de Temu', 'Carga tu música y organiza tu colección personal.'],
-      ['Botánica', 'Un espacio para tus plantas y su cuidado.'],
-      ['Gestionar tu negocio', 'Administra y organiza tu propio negocio.'],
-    ]
     return html`
       ${this.renderHeader()}
       <main class="dashboard">
@@ -451,7 +452,7 @@ class Inicio extends LitElement {
         <div class=${`menu-layout${this.user.role === 'admin' ? ' with-admin' : ''}`}>
         <nav class="section-menu" aria-label="Menú principal">
           <article class="section-menu-card">
-            <span class="brand-icon" aria-hidden="true">$</span>
+            <span class="section-menu-icon">${sectionIcon('finance')}</span>
             <span class="section-status active">Activo</span>
             <strong>Salud financiera</strong>
             <span>Consulta tu panorama, tarjetas, cuentas y movimientos.</span>
@@ -462,16 +463,19 @@ class Inicio extends LitElement {
                 @click=${() => { this.activeSection = 'card-catalog' }}>Agregar info de tarjetas nuevas</button>` : ''}
             </div>
           </article>
-          ${upcomingSections.map(([name, description]) => html`<article class="section-menu-card upcoming-section">
+          ${upcomingSections.map((section) => html`<article class="section-menu-card upcoming-section">
+            <span class="section-menu-icon">${sectionIcon(section.icon)}</span>
             <span class="section-status pending">En proceso</span>
-            <strong>${name}</strong>
-            <span>${description}</span>
-            <small class="section-coming-soon">Próximamente disponible</small>
+            <strong>${section.name}</strong>
+            <span>${section.description}</span>
+            <button class="section-menu-link section-menu-enter" type="button" aria-label=${`Ver vista previa de ${section.name}`}
+              @click=${() => { this.activeSection = section.id }}>Ver vista previa →</button>
           </article>`)}
         </nav>
           ${this.user.role === 'admin' ? html`<aside class="admin-menu" aria-label="Administración">
             <h2>Administración</h2>
             <article class="section-menu-card">
+            <span class="section-menu-icon">${sectionIcon('admin')}</span>
             <span class="section-status active">Activo · Solo Admin</span>
             <strong>Gestión de cuentas</strong>
             <span>Consulta usuarios y asigna los roles Admin, Free o VIP.</span>

@@ -272,14 +272,40 @@ test('all roles see upcoming modules while account management stays in the admin
       assert.ok(sections.includes(name))
     }
     assert.equal((sections.match(/En proceso/g) || []).length, 5)
-    assert.equal((sections.match(/Próximamente disponible/g) || []).length, 5)
+    assert.equal((sections.match(/Ver vista previa →/g) || []).length, 5)
     assert.match(sections, /section-status active">Activo/)
     assert.doesNotMatch(sections, /Gestión de cuentas/)
     assert.equal(markup.includes('<aside class="admin-menu"'), role === 'admin')
     assert.equal(markup.includes('Gestionar cuentas →'), role === 'admin')
     assert.equal(markup.includes('Agregar info de tarjetas nuevas'), role === 'admin')
     for (const card of sections.split('<article class="section-menu-card upcoming-section">').slice(1)) {
-      assert.doesNotMatch(card.slice(0, card.indexOf('</article>')), /<button|@click|tabindex=/)
+      assert.match(card.slice(0, card.indexOf('</article>')), /section-menu-icon/)
+      assert.match(card.slice(0, card.indexOf('</article>')), /<button/)
     }
+  }
+})
+
+test('each upcoming card opens its module preview and can return to the menu without writes', async (t) => {
+  const { upcomingSections } = await import('../../src/sections/sections.js')
+  const preview = components.get('section-preview').prototype
+  t.mock.method(globalThis, 'fetch', () => assert.fail('Preview must not access the backend'))
+  for (const role of ['admin', 'vip', 'free']) {
+    const state = { user: { role }, renderHeader: () => '', activeSection: 'menu' }
+    const menu = inicio.renderMenu.call(state)
+    const cards = menu.values.find((value) => Array.isArray(value) && value.length === 5)
+    assert.equal(cards.length, upcomingSections.length)
+    cards.forEach((card, index) => {
+      card.values.find((value) => typeof value === 'function')()
+      assert.equal(state.activeSection, upcomingSections[index].id)
+      const screen = inicio.render.call(state)
+      assert.match(text(screen), /<section-preview/)
+      const body = text(preview.render.call({ section: upcomingSections[index] }))
+      assert.ok(body.includes(upcomingSections[index].name))
+      assert.match(body, /Vista previa/)
+      assert.equal((body.match(/Función prevista/g) || []).length, 3)
+      assert.doesNotMatch(body, /<input|<form|<button/)
+      screen.values.find((value) => typeof value === 'function')()
+      assert.equal(state.activeSection, 'menu')
+    })
   }
 })
