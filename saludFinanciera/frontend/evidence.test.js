@@ -46,6 +46,8 @@ test('evidence input is optional and available in movement forms, the general re
 })
 
 test('eye is green only for movements with saved evidence, including family histories', () => {
+  assert.match(components.get('movement-evidence').styles.cssText,
+    /\.eye-button\.has-evidence \{ color: var\(--positive\); \}/)
   const withEvidence = { id: 8, date: '2026-11-19', amount: '10', hasEvidence: 1 }
   const withoutEvidence = { id: 9, date: '2026-11-19', amount: '10', hasEvidence: 0 }
   const register = text(calendar.renderMonthlyTable.call({

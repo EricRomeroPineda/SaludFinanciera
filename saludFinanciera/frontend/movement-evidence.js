@@ -24,7 +24,7 @@ export class MovementEvidence extends LitElement {
     .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .dialog-heading h2 { margin: 0; font-size: 18px; }
     .eye-button { display: inline-flex; align-items: center; justify-content: center; }
-    .eye-button.has-evidence { color: var(--green); }
+    .eye-button.has-evidence { color: var(--positive); }
     .gallery { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
     figure { margin: 0; max-width: 140px; overflow-wrap: anywhere; }
     img { display: block; max-width: 140px; height: 95px; object-fit: contain; background: var(--soft); }

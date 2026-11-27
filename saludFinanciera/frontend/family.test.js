@@ -34,13 +34,20 @@ test('main menu keeps the finance section, shows the package version and uses th
     activeSection: 'menu', user: { name: 'Ana' }, renderAppearanceToggle: () => '',
     renderThemeToggle: () => '', renderThemePicker: () => '',
   }))
-  assert.match(header, /aria-label="lifekit.work"/)
-  assert.doesNotMatch(header, /Salud Financiera/)
+  assert.match(header, /aria-label=lifekit.work/)
+  assert.doesNotMatch(header, /Salud <span>Financiera/)
+  const financeHeader = text(inicio.renderHeader.call({
+    activeSection: 'finance', activeTab: 'overview', user: { name: 'Ana' },
+    renderAppearanceToggle: () => '', renderThemeToggle: () => '', renderThemePicker: () => '',
+  }))
+  assert.match(financeHeader, /aria-label=Salud Financiera/)
+  assert.match(financeHeader, /Salud <span>Financiera<\/span>/)
+  assert.doesNotMatch(financeHeader, /lifekit<span>/)
   const auth = text(inicio.renderAuth.call({
     authMode: 'login', renderAppearanceToggle: () => '',
   }))
-  assert.match(auth, /lifekit<span>\.work<\/span>/)
-  assert.doesNotMatch(auth, /Salud Financiera|BIENESTAR FINANCIERO/)
+  assert.match(auth, /Salud <span>Financiera<\/span>/)
+  assert.match(auth, /BIENESTAR FINANCIERO/)
 })
 
 test('profile includes an independent family card with explicit acceptance and no automatic joining', () => {
