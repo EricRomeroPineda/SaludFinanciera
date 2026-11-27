@@ -227,6 +227,8 @@ Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `se
 
 ### Roles y gestión de cuentas
 
+El menú muestra a **Free, VIP y Admin** Salud financiera con indicador **Activo**, y cinco módulos informativos con indicador **En proceso**: **Caja del tiempo** (árbol genealógico), **Almacenamiento** (archivos y fotos), **Spoty de Temu** (música propia), **Botánica** y **Gestionar tu negocio**. Son avances visuales, todavía sin navegación ni cargas de archivos. Solo Admin ve el panel **Administración → Gestión de cuentas**, a la derecha en escritorio y debajo de las secciones en pantallas pequeñas; el catálogo de imágenes continúa siendo exclusivo de Admin.
+
 Después de completar la migración 015, respalda la base y ejecuta **una sola vez** `server/migrations/016-user-account-roles.sql` completo en MySQL Workbench (incluye `DELIMITER` para crear el trigger), o con `mysql -u USUARIO_MYSQL -p salud_financiera < server/migrations/016-user-account-roles.sql`. Reinicia `apps` tras compilar el frontend con `npm run build`.
 
 La 016 convierte los roles anteriores `usuario` a **Free**, conserva administradores y establece **Admin** para el usuario ID **2**. Los registros nuevos son siempre Free; no aceptan un rol enviado por el cliente. Cada usuario tiene un único rol **Admin / Free / VIP**, visible en la cabecera incluso en móvil. Free y VIP conservan las funciones financieras existentes; este cambio no introduce límites ni cobros.

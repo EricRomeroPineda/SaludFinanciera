@@ -429,6 +429,13 @@ class Inicio extends LitElement {
   }
 
   renderMenu() {
+    const upcomingSections = [
+      ['Caja del tiempo', 'Consulta tu árbol genealógico y descubre la historia de tu familia.'],
+      ['Almacenamiento', 'Guarda archivos y fotos para capturar tus momentos.'],
+      ['Spoty de Temu', 'Carga tu música y organiza tu colección personal.'],
+      ['Botánica', 'Un espacio para tus plantas y su cuidado.'],
+      ['Gestionar tu negocio', 'Administra y organiza tu propio negocio.'],
+    ]
     return html`
       ${this.renderHeader()}
       <main class="dashboard">
@@ -441,9 +448,11 @@ class Inicio extends LitElement {
         </div>
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
         ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
+        <div class=${`menu-layout${this.user.role === 'admin' ? ' with-admin' : ''}`}>
         <nav class="section-menu" aria-label="Menú principal">
           <article class="section-menu-card">
             <span class="brand-icon" aria-hidden="true">$</span>
+            <span class="section-status active">Activo</span>
             <strong>Salud financiera</strong>
             <span>Consulta tu panorama, tarjetas, cuentas y movimientos.</span>
             <div class="section-menu-actions">
@@ -453,12 +462,22 @@ class Inicio extends LitElement {
                 @click=${() => { this.activeSection = 'card-catalog' }}>Agregar info de tarjetas nuevas</button>` : ''}
             </div>
           </article>
-          ${this.user.role === 'admin' ? html`<article class="section-menu-card">
+          ${upcomingSections.map(([name, description]) => html`<article class="section-menu-card upcoming-section">
+            <span class="section-status pending">En proceso</span>
+            <strong>${name}</strong>
+            <span>${description}</span>
+            <small class="section-coming-soon">Próximamente disponible</small>
+          </article>`)}
+        </nav>
+          ${this.user.role === 'admin' ? html`<aside class="admin-menu" aria-label="Administración">
+            <h2>Administración</h2>
+            <article class="section-menu-card">
+            <span class="section-status active">Activo · Solo Admin</span>
             <strong>Gestión de cuentas</strong>
             <span>Consulta usuarios y asigna los roles Admin, Free o VIP.</span>
             <button class="section-menu-link" type="button" @click=${() => { this.activeSection = 'user-management' }}>Gestionar cuentas →</button>
-          </article>` : ''}
-        </nav>
+          </article></aside>` : ''}
+        </div>
         <p class="menu-version">Versión ${packageInfo.version}</p>
       </main>
     `

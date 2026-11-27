@@ -263,3 +263,23 @@ test('management lists roles, protects ID 2 and reports save failures without su
   assert.equal(state.users[0].role, 'free')
   assert.ok(originalFormData)
 })
+
+test('all roles see upcoming modules while account management stays in the admin sidebar', () => {
+  for (const role of ['admin', 'vip', 'free']) {
+    const markup = text(inicio.renderMenu.call({ user: { role }, renderHeader: () => '' }))
+    const sections = markup.slice(markup.indexOf('<nav'), markup.indexOf('</nav>'))
+    for (const name of ['Caja del tiempo', 'Almacenamiento', 'Spoty de Temu', 'Botánica', 'Gestionar tu negocio']) {
+      assert.ok(sections.includes(name))
+    }
+    assert.equal((sections.match(/En proceso/g) || []).length, 5)
+    assert.equal((sections.match(/Próximamente disponible/g) || []).length, 5)
+    assert.match(sections, /section-status active">Activo/)
+    assert.doesNotMatch(sections, /Gestión de cuentas/)
+    assert.equal(markup.includes('<aside class="admin-menu"'), role === 'admin')
+    assert.equal(markup.includes('Gestionar cuentas →'), role === 'admin')
+    assert.equal(markup.includes('Agregar info de tarjetas nuevas'), role === 'admin')
+    for (const card of sections.split('<article class="section-menu-card upcoming-section">').slice(1)) {
+      assert.doesNotMatch(card.slice(0, card.indexOf('</article>')), /<button|@click|tabindex=/)
+    }
+  }
+})
