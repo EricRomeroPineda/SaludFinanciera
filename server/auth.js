@@ -163,12 +163,12 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     const passwordHash = await bcrypt.hash(normalizedPassword, 12)
     const recoveryHash = await bcrypt.hash(normalizedKey, 12)
     const [result] = await connection.execute(
-      'INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira, apariencia, correo, correo_verificado) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0)',
+      "INSERT INTO usuario (nombre, password_hash, foto_perfil, tema, recuperacion_token_hash, recuperacion_expira, apariencia, correo, correo_verificado, rol) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 'free')",
       [normalizedName, passwordHash, photo, theme, recoveryHash, theme === 'oscuro' ? 'night' : 'day', normalizedEmail],
     )
 
     return { id: result.insertId, name: normalizedName, photo, theme, appearance: theme === 'oscuro' ? 'night' : 'day',
-      email: normalizedEmail, emailVerified: 0, role: 'usuario', sessionVersion: passwordVersion(passwordHash) }
+      email: normalizedEmail, emailVerified: 0, role: 'free', sessionVersion: passwordVersion(passwordHash) }
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') throw Object.assign(new Error('Ya hay una cuenta registrada con ese correo o usuario.'), { statusCode: 409 })
     throw error
@@ -201,7 +201,7 @@ export async function authenticateUser(name, password) {
   }
 
   const { id, nombre, foto_perfil: photo, tema: theme, appearance, email, emailVerified, password_hash: passwordHash } = users[0]
-  return { id, name: nombre, photo, theme, appearance, email, emailVerified, role: users[0].role || 'usuario', sessionVersion: passwordVersion(passwordHash) }
+  return { id, name: nombre, photo, theme, appearance, email, emailVerified, role: users[0].role, sessionVersion: passwordVersion(passwordHash) }
 }
 
 export async function findSessionUser(userId) {

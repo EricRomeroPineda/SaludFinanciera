@@ -31,6 +31,9 @@ class CardCatalogAdmin extends LitElement {
     img { width: 80px; height: 80px; object-fit: contain; border-radius: 8px; }
     .rule { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .rule img { width: 40px; height: 40px; }
+    details { margin-top: 14px; }
+    summary { cursor: pointer; font-weight: 700; overflow-wrap: anywhere; }
+    summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
     @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
   `
   constructor() {
@@ -167,8 +170,25 @@ class CardCatalogAdmin extends LitElement {
     } catch (error) { this.error = error.message }
     finally { this.busy = false }
   }
+  renderNameGroups(entries, assigned = false) {
+    return catalogScopes.filter(([scope]) => scope !== 'banco').map(([scope, label]) => {
+      const rows = entries.filter((entry) => entry.scope === scope)
+      return rows.length ? html`<details open><summary>${label} (${rows.length})</summary>
+        <ul>${rows.map((entry) => {
+          const rule = assigned ? this.data.rules.find((item) => item.id === entry.ruleId) : null
+          return html`<li><strong>${entry.name}</strong><small>${entry.type} · ${assigned ? 'Con imagen asignada' : 'Pendiente de imagen'}</small>
+            ${assigned ? html`<button type="button" ?disabled=${this.busy || !rule}
+              @click=${() => this.edit(rule)}>Modificar imagen / regla</button>`
+              : html`<button type="button" ?disabled=${this.busy} @click=${() => this.chooseName(entry)}>Usar nombre</button>`}
+          </li>`
+        })}</ul>
+      </details>` : ''
+    })
+  }
   render() {
     const entries = (this.data?.names || []).filter((entry) => entry.name.toLocaleLowerCase().includes(this.search.toLocaleLowerCase()))
+    const pending = entries.filter((entry) => !entry.ruleId)
+    const assigned = entries.filter((entry) => entry.ruleId)
     return html`
       <h1>Imágenes de tarjetas y cuentas</h1>
       <p>Solo nombres y tipos registrados. No se muestran saldos, cuentas ni titulares. Las reglas son compartidas por todos los usuarios.</p>
@@ -179,14 +199,14 @@ class CardCatalogAdmin extends LitElement {
         <div class="layout">
           <section><h2>Nombres registrados</h2>
             <label>Buscar nombre<input type="search" .value=${this.search} @input=${(event) => { this.search = event.target.value }} /></label>
-            ${catalogScopes.filter(([scope]) => scope !== 'banco').map(([scope, label]) => {
-              const rows = entries.filter((entry) => entry.scope === scope)
-              return rows.length ? html`<h3>${label}</h3><ul>${rows.map((entry) => html`
-                <li><strong>${entry.name}</strong><small>${entry.type} · ${entry.ruleId ? 'Con imagen asignada' : 'Pendiente de imagen'}</small>
-                  <button type="button" ?disabled=${this.busy} @click=${() => this.chooseName(entry)}>Usar nombre</button>
-                </li>`)}</ul>` : ''
-            })}
-            ${this.data && !entries.length ? html`<p>No hay nombres coincidentes.</p>` : ''}
+            <h3>Pendientes de imagen (${pending.length})</h3>
+            ${this.renderNameGroups(pending)}
+            ${this.data && !pending.length ? html`<p>${this.search ? 'No hay pendientes que coincidan con la búsqueda.' : 'No hay nombres pendientes de imagen.'}</p>` : ''}
+            <details class="assigned-names"><summary>Con imagen registrada (${assigned.length})</summary>
+              <p>Abre este apartado para consultar o modificar las imágenes ya asignadas. Modificar una regla afecta a todos sus nombres coincidentes.</p>
+              ${this.renderNameGroups(assigned, true)}
+              ${this.data && !assigned.length ? html`<p>No hay nombres con imagen que coincidan.</p>` : ''}
+            </details>
           </section>
           <section><h2>${this.draft.id ? 'Editar regla' : 'Nueva regla'}</h2>
             <form class="form" @submit=${this.save}>
@@ -227,7 +247,7 @@ class CardCatalogAdmin extends LitElement {
             ` : ''}
           </section>
         </div>
-        <section><h2>Reglas del catálogo</h2>
+        <section><details class="saved-rules"><summary>Reglas del catálogo (${this.data?.rules.length || 0})</summary>
           <ul>${(this.data?.rules || []).map((rule) => html`<li class="rule">
             <img src=${rule.imageUrl} alt="" @error=${(event) => { event.target.hidden = true }} />
             <span><strong>${rule.keyword}</strong><small>${rule.scope} · ${rule.kind} · Alias: ${rule.aliases.join(', ') || 'Ninguno'}</small></span>
@@ -238,7 +258,7 @@ class CardCatalogAdmin extends LitElement {
           <h3>Posibles alias en nombres registrados</h3>
           ${(this.data?.suggestions || []).map((suggestion) => html`<p>«${suggestion.alias}» podría ser «${suggestion.keyword}» · ${suggestion.name} (${suggestion.type})
             <button type="button" ?disabled=${this.busy} @click=${() => this.asAlias(this.data.rules.find((rule) => rule.id === suggestion.ruleId), suggestion.alias)}>Revisar como alias</button></p>`)}
-        </section>
+        </details></section>
       `}
     `
   }

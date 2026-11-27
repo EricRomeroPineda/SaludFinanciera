@@ -225,11 +225,23 @@ Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `se
 
 ## Catálogo de imágenes de tarjetas
 
+### Roles y gestión de cuentas
+
+Después de completar la migración 015, respalda la base y ejecuta **una sola vez** `server/migrations/016-user-account-roles.sql` completo en MySQL Workbench (incluye `DELIMITER` para crear el trigger), o con `mysql -u USUARIO_MYSQL -p salud_financiera < server/migrations/016-user-account-roles.sql`. Reinicia `apps` tras compilar el frontend con `npm run build`.
+
+La 016 convierte los roles anteriores `usuario` a **Free**, conserva administradores y establece **Admin** para el usuario ID **2**. Los registros nuevos son siempre Free; no aceptan un rol enviado por el cliente. Cada usuario tiene un único rol **Admin / Free / VIP**, visible en la cabecera incluso en móvil. Free y VIP conservan las funciones financieras existentes; este cambio no introduce límites ni cobros.
+
+Solo Admin ve **Gestión de cuentas** en el menú principal. Allí puede buscar usuarios por nombre o ID y cambiar su rol. La API verifica el rol actual del administrador en MySQL antes de listar o modificar usuarios; nunca entrega hashes, datos bancarios o saldos. Si un administrador cambia su propio rol a Free/VIP pierde inmediatamente la gestión en esa pantalla. El usuario ID **2** no se puede degradar: está bloqueado en la interfaz, la API y un trigger de MySQL que también impide quitarle Admin mediante un `UPDATE` directo. El trigger requiere permiso `TRIGGER` al aplicar la migración. No se modifican movimientos ni saldos.
+
 El menú principal muestra **Agregar info de tarjetas nuevas**, junto a **Entrar**, únicamente a administradores. La pantalla permite buscar nombres registrados, agruparlos por tipo, distinguir imágenes asignadas y pendientes, cargar o reutilizar imágenes, previsualizar coincidencias y crear, editar o eliminar reglas. El inventario compartido contiene exclusivamente nombres y tipos de cuentas, suscripciones, servicios y planes: nunca saldos, números de cuenta, usuarios ni titulares. Los nombres de personas de Deudores no se incorporan al catálogo; sus tarjetas pueden mostrar la imagen de la cuenta sugerida, si existe.
 
 Las imágenes opcionales de 40 × 40 px se muestran después del nombre y antes del importe en tarjetas bancarias, nómina, débito, efectivo, servicios, suscripciones, planes, selectores de cuenta y resúmenes de Panorama, también en Familiar. Conservan proporción y esquinas redondeadas. Sin coincidencia, durante la carga o si el archivo falta, el elemento no ocupa espacio y el resto de la tarjeta funciona normalmente.
 
 ### Reglas, alias y permisos
+
+Toda la superficie de la tarjeta **Salud financiera** del menú abre el módulo, también mediante teclado con su botón Entrar. **Agregar info de tarjetas nuevas** es un botón independiente, visible solo para Admin, y abre exclusivamente el catálogo sin activar la entrada a finanzas.
+
+En **Nombres registrados**, los pendientes de imagen aparecen desplegados por tipo. Los nombres que ya tienen imagen se retiran de pendientes y quedan en **Con imagen registrada**, plegado inicialmente, desde donde puedes modificar su regla. **Reglas del catálogo** también se puede desplegar para editar o eliminar reglas guardadas. La búsqueda filtra ambos grupos; eliminar una regla devuelve a pendientes los nombres que ya no coincidan con ninguna otra.
 
 Se comparan palabras/frases completas, sin distinguir acentos, mayúsculas, espacios repetidos ni separadores (`BBVA-Nómina` equivale a `bbva nómina`). Una regla **Banco** con palabra **BBVA** cubre sus cuentas de nómina, débito y crédito. Para imágenes diferentes de crédito, crea **Crédito → Producto específico** con **BBVA Vive** y **BBVA Azul**. La regla de producto gana a la general; sin producto coincidente, se usa la imagen del banco. Entre reglas de la misma prioridad gana la frase más larga.
 
@@ -256,7 +268,7 @@ Requiere el esquema previo de la aplicación y **MySQL 8.0.16 o posterior**, par
    UPDATE usuario SET rol = 'admin' WHERE id = ID_ELEGIDO;
    ```
 
-   Para revocarlo: `UPDATE usuario SET rol = 'usuario' WHERE id = ID_ELEGIDO;`. Recarga la aplicación para actualizar el menú; el backend aplica la revocación en la siguiente petición.
+   Con la migración 016 aplicada, para revocar a un administrador distinto del ID 2: `UPDATE usuario SET rol = 'free' WHERE id = ID_ELEGIDO;`. El ID 2 está protegido y no admite revocación. Recarga la aplicación para actualizar el menú; el backend aplica la revocación en la siguiente petición.
 
 2. Comprueba que el disco esté realmente montado **antes** de crear carpetas o dar permisos. Averigua el usuario real del proceso; `apps` es el nombre del servicio, no necesariamente su usuario.
 

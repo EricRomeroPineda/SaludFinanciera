@@ -56,6 +56,24 @@ test('optional image uses 40px square contain styling and is invisible until suc
   assert.match(text(template), /alt=""/)
 })
 
+test('finance card uses a full-card entry button and an independent admin action', () => {
+  let entered = 0
+  const state = { user: { role: 'admin' }, renderHeader: () => '', openFinancialSection: () => { entered++ } }
+  const template = inicio.renderMenu.call(state)
+  const markup = text(template)
+  assert.match(markup, /section-menu-enter" type="button" aria-label="Entrar a Salud financiera"/)
+  assert.match(markup, /class="section-menu-admin-button"/)
+  template.values.find((value) => typeof value === 'function')()
+  assert.equal(entered, 1)
+  const adminAction = template.values.find((value) => value?.strings && text(value).includes('Agregar info de tarjetas nuevas'))
+  adminAction.values.find((value) => typeof value === 'function')()
+  assert.equal(state.activeSection, 'card-catalog')
+  assert.equal(entered, 1)
+  for (const role of ['free', 'vip']) {
+    assert.doesNotMatch(text(inicio.renderMenu.call({ ...state, user: { role } })), /Agregar info de tarjetas nuevas/)
+  }
+})
+
 test('resolver requests are shared, unmatched names preserve layout, and lookup failures are retryable', async (t) => {
   invalidateCardImages()
   let calls = 0
@@ -144,4 +162,100 @@ test('save without preview is blocked and preserves the draft', async (t) => {
   await admin.save.call(state, { preventDefault: () => {} })
   assert.match(state.error, /Revisa las coincidencias/)
   assert.equal(state.draft.keyword, 'BBVA')
+})
+
+function catalogState() {
+  return {
+    allowed: true, search: '', files: [], draft: { keyword: '', scope: 'banco', aliases: [] },
+    data: {
+      names: [
+        { name: 'Pendiente BBVA', type: 'Débito', scope: 'debito', ruleId: null },
+        { name: 'Pendiente Renta', type: 'Servicio', scope: 'servicio', ruleId: null },
+        { name: 'Asignada BBVA', type: 'Crédito', scope: 'credito', ruleId: 7 },
+      ],
+      rules: [{ id: 7, keyword: 'BBVA', aliases: [], imageUrl: '/bank.webp' }], suggestions: [],
+    },
+    renderNameGroups: admin.renderNameGroups,
+  }
+}
+
+test('catalog separates expanded pending types from collapsed assigned names and saved rules', () => {
+  const state = catalogState()
+  const markup = text(admin.render.call(state))
+  const pending = markup.slice(markup.indexOf('<h3>Pendientes'), markup.indexOf('<details class="assigned-names">'))
+  const assigned = markup.slice(markup.indexOf('<details class="assigned-names">'), markup.indexOf('<h2>Nueva regla'))
+  assert.match(pending, /Pendientes de imagen \(2\)/)
+  assert.match(pending, /<details open><summary>Cuenta de débito \(1\)/)
+  assert.match(pending, /<details open><summary>Servicio \(1\)/)
+  assert.match(pending, /Pendiente BBVA/)
+  assert.match(pending, /Pendiente Renta/)
+  assert.doesNotMatch(pending, /Asignada BBVA|Con imagen asignada/)
+  assert.match(assigned, /Con imagen registrada \(1\)/)
+  assert.match(assigned, /Asignada BBVA/)
+  assert.match(assigned, /Modificar imagen \/ regla/)
+  assert.doesNotMatch(assigned, /Usar nombre/)
+  assert.match(markup, /<details class="saved-rules"><summary>Reglas del catálogo \(1\)/)
+  let edited
+  state.edit = (rule) => { edited = rule }
+  const groups = admin.renderNameGroups.call(state, [state.data.names[2]], true)
+  const group = groups.find((value) => value?.strings)
+  const row = group.values.find(Array.isArray)[0]
+  const button = row.values.find((value) => value?.strings)
+  button.values.find((value) => typeof value === 'function')()
+  assert.equal(edited, state.data.rules[0])
+})
+
+test('catalog search filters both groups and assignment changes move names between them', () => {
+  const state = catalogState()
+  state.search = 'Renta'
+  let markup = text(admin.render.call(state))
+  assert.match(markup, /Pendientes de imagen \(1\)/)
+  assert.match(markup, /Con imagen registrada \(0\)/)
+  assert.doesNotMatch(markup, /<strong>Asignada BBVA<\/strong>/)
+  state.search = ''
+  state.data.names[0].ruleId = 7
+  markup = text(admin.render.call(state))
+  assert.match(markup, /Pendientes de imagen \(1\)/)
+  assert.match(markup, /Con imagen registrada \(2\)/)
+  state.data.names.forEach((entry) => { entry.ruleId = null })
+  markup = text(admin.render.call(state))
+  assert.match(markup, /Pendientes de imagen \(3\)/)
+  assert.match(markup, /Con imagen registrada \(0\)/)
+  state.data.names.forEach((entry) => { entry.ruleId = 7 })
+  assert.match(text(admin.render.call(state)), /No hay nombres pendientes de imagen/)
+})
+
+test('header shows account role independently of the greeting and management is admin only', () => {
+  for (const [role, label] of [['free', 'Free'], ['vip', 'VIP'], ['admin', 'Admin']]) {
+    const state = {
+      user: { id: 7, name: 'Ana', role }, activeSection: 'menu',
+      renderHeader: () => '', renderAppearanceToggle: () => '', renderThemeToggle: () => '', renderThemePicker: () => '',
+    }
+    const header = text(inicio.renderHeader.call(state))
+    assert.ok(header.includes(`aria-label=Tipo de cuenta: ${label}`))
+    assert.match(header, /class="user-role-badge"/)
+    const menu = text(inicio.renderMenu.call(state))
+    assert.equal(menu.includes('Gestión de cuentas'), role === 'admin')
+    const management = text(inicio.render.call({ ...state, activeSection: 'user-management' }))
+    assert.equal(management.includes('<user-management'), role === 'admin')
+  }
+})
+
+test('management lists roles, protects ID 2 and reports save failures without success', async (t) => {
+  const management = components.get('user-management').prototype
+  const markup = text(management.render.call({
+    users: [{ id: 2, name: 'Principal', role: 'admin' }, { id: 7, name: 'Ana', role: 'free' }],
+    search: '', busy: false,
+  }))
+  assert.match(markup, /Administrador protegido/)
+  assert.match(markup, /value=vip/)
+  const originalFormData = globalThis.FormData
+  t.mock.method(globalThis, 'FormData', function () { return { get: () => 'vip' } })
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: 'Sin permiso' }), { status: 403 }))
+  const state = { users: [{ id: 7, role: 'free' }], dispatchEvent: () => assert.fail('No success event on failure') }
+  await management.save.call(state, { preventDefault: () => {}, currentTarget: {} }, { id: 7, name: 'Ana' })
+  assert.equal(state.error, 'Sin permiso')
+  assert.equal(state.notice, '')
+  assert.equal(state.users[0].role, 'free')
+  assert.ok(originalFormData)
 })

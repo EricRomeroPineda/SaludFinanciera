@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { pool } from './db.js'
 import { catalogScopes, cardScope, normalizeCardName, resolveCardRule, similarCardNames, aliasSuggestions } from '../shared/card-catalog.js'
 import { readImage } from './evidence.js'
+import { requireAdministrator } from './user-roles.js'
 import {
   catalogFilePattern, catalogImageBuffer, listCatalogFiles, readCatalogImage,
   readCatalogSource, writeCatalogImage,
@@ -10,10 +11,7 @@ import {
 const invalid = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode })
 export const catalogImageUrl = (rule) => `/api/card-images/${rule.id}/${rule.version}.webp`
 
-export async function requireCatalogAdmin(userId) {
-  const [users] = await pool.execute('SELECT rol FROM usuario WHERE id = ?', [userId])
-  if (users[0]?.rol !== 'admin') throw invalid('Solo un administrador puede configurar el catálogo de imágenes.', 403)
-}
+export const requireCatalogAdmin = requireAdministrator
 
 export async function getCatalogRules(connection = pool) {
   const [rows] = await connection.execute(

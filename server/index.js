@@ -21,6 +21,7 @@ import { handleGoogleCalendarRoute } from './google-calendar.js'
 import { handleEmailRoute } from './email.js'
 import { handleProfilePhotoRoute } from './profile-photo.js'
 import { handleCardCatalogRoute } from './card-catalog.js'
+import { handleUserRolesRoute } from './user-roles.js'
 
 const port = Number(process.env.API_PORT || 3001)
 const host = process.env.API_HOST || '127.0.0.1'
@@ -155,6 +156,7 @@ export const server = createServer(async (request, response) => {
       return
     }
 
+    if (await handleUserRolesRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleCardCatalogRoute(request, response, url, { getUserId, readJson, sendJson })) return
     if (await handleGoogleCalendarRoute(request, response, url, { getUserId, sendJson })) return
     if (await handleEvidenceRoute(request, response, url, { getUserId, sendJson })) return

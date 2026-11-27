@@ -14,6 +14,8 @@ import './photo-editor.js'
 import './access-recovery.js'
 import '../../saludFinanciera/frontend/card-catalog-admin.js'
 import { invalidateCardImages } from '../../saludFinanciera/frontend/card-catalog-image.js'
+import { userRoleLabel } from '../../shared/user-roles.js'
+import './user-management.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -325,6 +327,14 @@ class Inicio extends LitElement {
     }
 
     if (!this.user) return this.renderAuth()
+    if (this.activeSection === 'user-management') {
+      return html`${this.renderHeader()}<main class="dashboard">
+        <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
+        ${this.user.role === 'admin' ? html`<user-management @user-role-updated=${(event) => {
+          if (Number(event.detail.id) === Number(this.user.id)) this.user = { ...this.user, role: event.detail.role }
+        }}></user-management>` : html`<p class="error-message" role="alert">Solo un administrador puede gestionar cuentas.</p>`}
+      </main>`
+    }
     if (this.activeSection === 'card-catalog') {
       return html`${this.renderHeader()}<main class="dashboard">
         <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
@@ -365,6 +375,7 @@ class Inicio extends LitElement {
               }} />
             <span class="user-greeting">Hola, <strong>${this.user.name}</strong></span>
           </button>
+          <span class="user-role-badge" data-role=${this.user.role} aria-label=${`Tipo de cuenta: ${userRoleLabel(this.user.role)}`}>${userRoleLabel(this.user.role)}</span>
           <button class="quiet-button" type="button" @click=${this.handleLogout}>Cerrar sesión</button>
         </div>
       </header>
@@ -434,11 +445,17 @@ class Inicio extends LitElement {
             <strong>Salud financiera</strong>
             <span>Consulta tu panorama, tarjetas, cuentas y movimientos.</span>
             <div class="section-menu-actions">
-              <button class="section-menu-link" type="button" @click=${() => this.openFinancialSection()}>Entrar →</button>
-              ${this.user.role === 'admin' ? html`<button class="section-menu-link" type="button"
+              <button class="section-menu-link section-menu-enter" type="button" aria-label="Entrar a Salud financiera"
+                @click=${() => this.openFinancialSection()}>Entrar →</button>
+              ${this.user.role === 'admin' ? html`<button class="section-menu-admin-button" type="button"
                 @click=${() => { this.activeSection = 'card-catalog' }}>Agregar info de tarjetas nuevas</button>` : ''}
             </div>
           </article>
+          ${this.user.role === 'admin' ? html`<article class="section-menu-card">
+            <strong>Gestión de cuentas</strong>
+            <span>Consulta usuarios y asigna los roles Admin, Free o VIP.</span>
+            <button class="section-menu-link" type="button" @click=${() => { this.activeSection = 'user-management' }}>Gestionar cuentas →</button>
+          </article>` : ''}
         </nav>
         <p class="menu-version">Versión ${packageInfo.version}</p>
       </main>

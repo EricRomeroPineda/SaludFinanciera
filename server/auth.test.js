@@ -51,7 +51,7 @@ test('registration stores photo, theme and a hashed recovery key', async (t) => 
     release: () => { released = true },
   }))
   const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul', ' Ana@Example.com ')
-  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', email: 'ana@example.com', emailVerified: 0, role: 'usuario', sessionVersion: versionFor(inserted[1]) })
+  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', email: 'ana@example.com', emailVerified: 0, role: 'free', sessionVersion: versionFor(inserted[1]) })
   assert.equal(inserted[6], 'ana@example.com')
   assert.equal(inserted[5], 'day')
   assert.equal(inserted[2], photo)
@@ -77,7 +77,7 @@ test('registration accepts an omitted photo and stores email as unverified witho
       if (sql.includes('GET_LOCK')) return [[{ acquired: 1 }]]
       if (sql.includes('RELEASE_LOCK')) return [[{}]]
       if (sql.startsWith('SELECT id')) return [[]]
-      assert.match(sql, /correo_verificado\) VALUES.*0\)/)
+      assert.match(sql, /correo_verificado, rol\) VALUES.*0, 'free'\)/)
       inserted = params
       return [{ insertId: 40 }]
     },
