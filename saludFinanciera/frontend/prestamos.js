@@ -8,6 +8,7 @@ import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import './related-movements.js'
 import { depositStyles, renderDeposit } from './copy-deposit.js'
+import { renderCardImage } from './card-catalog-image.js'
 
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 function todayInput() {
@@ -184,6 +185,7 @@ class Loans extends LitElement {
             ${items.some((item) => item.type === group.type) ? html`
           <div class=${this.listView ? 'record-list' : 'card-grid'}>${items.filter((item) => item.type === group.type).map((item) => {
             const completed = Number(item.remaining) <= 0
+            const account = this.accounts?.find((entry) => Number(entry.id) === Number(item.accountId))
             const days = Math.round((Date.parse(`${item.commitmentDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
             return html`
               <article class=${`plan-card ${this.selectedId === item.id ? 'selected' : ''}`} tabindex="0"
@@ -197,6 +199,7 @@ class Loans extends LitElement {
                 }}>
                 <div class="credit-card-heading"><span>${item.type === 'me_deben' ? 'Me deben' : 'Yo debo'}</span><span>${completed ? 'Liquidado' : 'Pendiente'}</span></div>
                 <h3>${item.name}</h3>
+                ${account ? renderCardImage(account.catalogName || account.name, account.type) : ''}
                 <div class="card-balances">
                   <div class="card-main-balance"><span>${item.type === 'me_deben' ? 'Por cobrar' : 'Por pagar'}</span><strong>${money.format(item.remaining)}</strong></div>
                 </div>

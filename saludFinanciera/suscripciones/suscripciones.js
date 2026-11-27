@@ -2,6 +2,7 @@ import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import '../frontend/related-movements.js'
 import { depositStyles, renderDeposit } from '../frontend/copy-deposit.js'
+import { renderCardImage } from '../frontend/card-catalog-image.js'
 import { apiRequest } from '../../src/api.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import financeStyles from '../frontend/styles.css?inline'
@@ -306,6 +307,7 @@ class Subscriptions extends LitElement {
                     <span class="status-tag ${item.status.toLowerCase() === 'activa' ? '' : 'inactive'}">${item.status}</span>
                   </div>
                   <h3>${item.name}</h3>
+                  ${renderCardImage(item.catalogName || item.name, item.type)}
                   <p class="subscription-price">${money.format(item.cost)} <small>· ${item.frequency}</small></p>
                   ${this.renderBillingIndicator(item)}
                   <dl>

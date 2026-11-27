@@ -7,6 +7,7 @@ import { movementLabel, movementOrigin, movementDestination } from '../movement-
 import { calculatePlanProjection } from '../plan-calculations.js'
 import { addIcon, editIcon, sortByDue, viewToggle } from './record-view.js'
 import { accountThemeStyle } from './account-theme.js'
+import { renderCardImage } from './card-catalog-image.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
@@ -734,6 +735,7 @@ class SaludFinanciera extends LitElement {
         ${payments.length ? html`<ul class="payment-list">
           ${payments.map(({ account, status }) => html`<li>
             <div class="payment-description"><strong>${account.name}</strong>
+              ${renderCardImage(account.catalogName || account.name, account.type)}
               <span>Límite: ${this.formatDate(account.paymentDueDate)} · Importe: ${this.formatMoney(status.required)}</span>
               <span>Abonos detectados: ${this.formatMoney(status.paid)} · Pendiente: ${this.formatMoney(status.remaining)}</span>
               ${this.renderCardPaymentCountdown(account)}
@@ -756,7 +758,7 @@ class SaludFinanciera extends LitElement {
           </div>
           ${accounts.length
             ? html`<ul class="compact-list">${accounts.slice(0, 4).map((account) => html`
-                <li><span><strong>${account.name}</strong><small>${account.type}</small></span><b>${this.formatMoney(account.available)}</b></li>
+                <li><span><strong>${account.name}</strong>${renderCardImage(account.catalogName || account.name, account.type)}<small>${account.type}</small></span><b>${this.formatMoney(account.available)}</b></li>
               `)}</ul>`
             : this.emptyMessage('Aún no tienes cuentas. Puedes registrar una desde la pestaña Cuentas.')}
         </section>
@@ -787,6 +789,7 @@ class SaludFinanciera extends LitElement {
                       this.activeTab = 'plans'
                       this.selectedPlan = plan
                     }}>${plan.name}</button>
+                    ${renderCardImage(plan.catalogName || plan.name, 'plan')}
                     <span>${this.formatMoney(plan.saved)} / ${this.formatMoney(plan.goal)}</span>
                   </div>
                   <div class="overview-plan-progress">
@@ -1038,6 +1041,7 @@ class SaludFinanciera extends LitElement {
                     <span>${card.type}</span>
                   </div>
                   <h3>${card.name}</h3>
+                  ${renderCardImage(card.catalogName || card.name, card.type)}
                   <div class="card-balances">
                     <div class="card-main-balance"><span>Saldo disponible</span><strong>${this.formatMoney(card.available)}</strong></div>
                     ${isCreditAccount(card.type) ? html`
@@ -1173,6 +1177,7 @@ class SaludFinanciera extends LitElement {
           <span class="status-tag ${projection.completed ? '' : 'pending'}">${projection.completed ? 'Meta completada' : 'En progreso'}</span>
         </div>
         <h3>${plan.name}</h3>
+        ${renderCardImage(plan.catalogName || plan.name, 'plan')}
         ${this.renderPlanCountdown(projection)}
         <div class="card-balances">
           <div class="card-main-balance"><span>Monetizado</span><strong>${this.formatMoney(plan.saved)}</strong></div>
@@ -1487,6 +1492,7 @@ class SaludFinanciera extends LitElement {
           @change=${this.selectMovementAccount}
           .checked=${Number(selectedId) === Number(account.id)} required />
         <span><strong>${account.name}</strong><small>${account.ownerName ? `${account.ownerName} · ` : ''}${account.type}</small>
+          ${renderCardImage(account.catalogName || account.name, account.type)}
           <small>Disponible: ${this.formatMoney(field === 'originAccountId' ? this.movementAvailable(account) : account.available)}</small>
           ${isCreditAccount(account.type) ? html`
             <small>Saldo utilizado: ${this.familyUsedBalance(account) == null ? 'Sin configurar' : this.formatMoney(this.familyUsedBalance(account))}</small>

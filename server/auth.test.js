@@ -51,7 +51,7 @@ test('registration stores photo, theme and a hashed recovery key', async (t) => 
     release: () => { released = true },
   }))
   const user = await registerUser(' Ana ', password, photo, recoveryKey, 'azul', ' Ana@Example.com ')
-  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', email: 'ana@example.com', emailVerified: 0, sessionVersion: versionFor(inserted[1]) })
+  assert.deepEqual(user, { id: 7, name: 'Ana', photo, theme: 'azul', appearance: 'day', email: 'ana@example.com', emailVerified: 0, role: 'usuario', sessionVersion: versionFor(inserted[1]) })
   assert.equal(inserted[6], 'ana@example.com')
   assert.equal(inserted[5], 'day')
   assert.equal(inserted[2], photo)
@@ -106,14 +106,15 @@ test('registration reports duplicate emails without creating an account', async 
 test('login and restored sessions return saved profile fields without exposing hashes', async (t) => {
   t.mock.method(pool, 'execute', async (sql) => {
     if (sql.includes('WHERE nombre')) return [[{
-      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1,
+      id: 7, nombre: 'Ana', password_hash: passwordHash, foto_perfil: photo, tema: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1, role: 'admin',
     }]]
-    return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 }]]
+    assert.match(sql, /rol AS role/)
+    return [[{ id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1, role: 'admin' }]]
   })
   assert.deepEqual(await authenticateUser('Ana', password), {
-    id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1, sessionVersion: versionFor(passwordHash),
+    id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', email: 'ana@example.com', emailVerified: 1, role: 'admin', sessionVersion: versionFor(passwordHash),
   })
-  assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1 })
+  assert.deepEqual(await findSessionUser(7), { id: 7, name: 'Ana', photo, theme: 'violeta', appearance: 'night', hasRecoveryKey: 1, role: 'admin' })
   await assert.rejects(authenticateUser('Ana', 'wrong'), { statusCode: 401 })
 })
 

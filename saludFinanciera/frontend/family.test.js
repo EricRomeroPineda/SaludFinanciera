@@ -25,7 +25,7 @@ function text(value) {
 test('main menu keeps the finance section, shows the package version and uses the site brand', () => {
   const inicio = components.get('inicio-app').prototype
   const menu = text(inicio.renderMenu.call({
-    renderHeader: () => '', openFinancialSection: () => {},
+    user: { role: 'usuario' }, renderHeader: () => '', openFinancialSection: () => {},
   }))
   assert.match(menu, /<nav class="section-menu" aria-label="Menú principal">/)
   assert.match(menu, /<strong>Salud financiera<\/strong>/)

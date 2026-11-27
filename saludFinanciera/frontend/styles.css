@@ -73,6 +73,7 @@
 .record-list > article { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 6px 14px; min-height: 0; padding: 10px 12px; border-radius: 8px; box-shadow: none; }
 .record-list > article > * { min-width: 0; margin: 0; }
 .record-list > article > h3 { grid-column: 1; grid-row: 1; align-self: center; margin: 0; font-size: 14px; }
+.record-list > article > card-catalog-image[loaded] { grid-column: 1; grid-row: 2; margin-bottom: 4px; }
 .record-list > article > :is(.credit-card-heading, .subscription-heading) { grid-column: 2 / -1; align-self: center; }
 .record-list > article > :is(.card-dates, dl) { grid-column: span 2; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px 12px; }
 .record-list > article > :is(.card-actions, .subscription-actions) { grid-column: 1 / -1; flex-wrap: wrap; justify-content: flex-start; gap: 8px 14px; padding-top: 6px; }
@@ -95,6 +96,7 @@
   .record-list > article { grid-template-columns: minmax(140px, 1fr) minmax(145px, 1fr) minmax(160px, 1.1fr) minmax(300px, 2.2fr) minmax(130px, .9fr); }
   .record-list > article > h3 { grid-column: 1; grid-row: 1; }
   .record-list > article > :is(.credit-card-heading, .subscription-heading) { grid-column: 1; grid-row: 2; }
+  .record-list > article:has(> card-catalog-image[loaded]) > :is(.credit-card-heading, .subscription-heading) { grid-row: 3; }
   .record-list > article > .card-balances { grid-column: 2; grid-row: 1 / span 3; }
   .record-list > article > :is(.credit-progress, .plan-progress) { grid-column: 3; grid-row: 1; }
   .record-list > article > :is(.card-payment-countdown, .plan-countdown) { grid-column: 3; grid-row: 2 / span 2; }

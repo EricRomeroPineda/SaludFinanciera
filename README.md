@@ -223,6 +223,100 @@ Las tarjetas se separan en dos mitades: **Nómina / Débito** a la izquierda y *
 
 Al desplegar esta reorganización, copia también `saludFinanciera/` junto a `server/` y `src/`, y reinicia el backend: las consultas financieras ya no están en los archivos antiguos de `server/`.
 
+## Catálogo de imágenes de tarjetas
+
+El menú principal muestra **Agregar info de tarjetas nuevas**, junto a **Entrar**, únicamente a administradores. La pantalla permite buscar nombres registrados, agruparlos por tipo, distinguir imágenes asignadas y pendientes, cargar o reutilizar imágenes, previsualizar coincidencias y crear, editar o eliminar reglas. El inventario compartido contiene exclusivamente nombres y tipos de cuentas, suscripciones, servicios y planes: nunca saldos, números de cuenta, usuarios ni titulares. Los nombres de personas de Deudores no se incorporan al catálogo; sus tarjetas pueden mostrar la imagen de la cuenta sugerida, si existe.
+
+Las imágenes opcionales de 40 × 40 px se muestran después del nombre y antes del importe en tarjetas bancarias, nómina, débito, efectivo, servicios, suscripciones, planes, selectores de cuenta y resúmenes de Panorama, también en Familiar. Conservan proporción y esquinas redondeadas. Sin coincidencia, durante la carga o si el archivo falta, el elemento no ocupa espacio y el resto de la tarjeta funciona normalmente.
+
+### Reglas, alias y permisos
+
+Se comparan palabras/frases completas, sin distinguir acentos, mayúsculas, espacios repetidos ni separadores (`BBVA-Nómina` equivale a `bbva nómina`). Una regla **Banco** con palabra **BBVA** cubre sus cuentas de nómina, débito y crédito. Para imágenes diferentes de crédito, crea **Crédito → Producto específico** con **BBVA Vive** y **BBVA Azul**. La regla de producto gana a la general; sin producto coincidente, se usa la imagen del banco. Entre reglas de la misma prioridad gana la frase más larga.
+
+Antes de guardar se revisan coincidencias y reglas parecidas. Las variantes como **Bbbv** o **BBVA Vivee** no se vinculan automáticamente: el administrador puede elegir **Asociar como alias** o confirmar un alias sugerido a partir de nombres reales, revisar de nuevo y guardar. Un alias pertenece a una única regla en su ámbito; puede repetirse en otro ámbito. La palabra principal también se registra como alias dentro de una transacción. Los índices únicos de MySQL bloquean duplicados, incluso si dos administradores guardan al mismo tiempo.
+
+Todos los usuarios autenticados pueden resolver y ver imágenes del catálogo. La lista global de nombres, reglas, archivos, vistas previas y todas las escrituras exigen el rol **admin**, consultado en MySQL usando el usuario de la sesión en cada operación; ser creador de una familia no otorga ese permiso. El registro público siempre crea usuarios normales. El catálogo no cambia cuentas, movimientos ni saldos.
+
+### Aplicar en Ubuntu con `apps`
+
+Requiere el esquema previo de la aplicación y **MySQL 8.0.16 o posterior**, para que se apliquen también las restricciones `CHECK`. Estos comandos son ejemplos desde la carpeta del proyecto; sustituye `USUARIO_MYSQL`, `ID_ELEGIDO` y `USUARIO_SERVICIO` por los reales. No publiques contraseñas ni uses `chmod 777`.
+
+1. Detén `apps`, respalda la base y aplica **una sola vez** la migración 015. Usa el nombre de base configurado en tu `.env` si no es `salud_financiera`. No vuelvas a ejecutar migraciones anteriores ya aplicadas.
+
+   ```sh
+   sudo systemctl stop apps
+   mysqldump -u USUARIO_MYSQL -p --single-transaction salud_financiera > respaldo-antes-catalogo.sql
+   mysql -u USUARIO_MYSQL -p salud_financiera < server/migrations/015-card-image-catalog.sql
+   ```
+
+   La migración solo añade `usuario.rol` (todos quedan como `usuario`) y las tablas `catalogo_tarjeta_imagen` y `catalogo_tarjeta_alias`. En tu cliente MySQL, consulta el usuario correcto y promueve **solo su ID**:
+
+   ```sql
+   SELECT id, nombre, rol FROM usuario ORDER BY id;
+   UPDATE usuario SET rol = 'admin' WHERE id = ID_ELEGIDO;
+   ```
+
+   Para revocarlo: `UPDATE usuario SET rol = 'usuario' WHERE id = ID_ELEGIDO;`. Recarga la aplicación para actualizar el menú; el backend aplica la revocación en la siguiente petición.
+
+2. Comprueba que el disco esté realmente montado **antes** de crear carpetas o dar permisos. Averigua el usuario real del proceso; `apps` es el nombre del servicio, no necesariamente su usuario.
+
+   ```sh
+   findmnt --mountpoint /run/media/lenovoserver/discoDuro
+   systemctl show apps -p User -p Group -p WorkingDirectory
+   systemctl cat apps
+   ```
+
+   Si `findmnt` no muestra el montaje, detente y monta el disco. Después, solo si hace falta, crea la carpeta exacta:
+
+   ```sh
+   sudo mkdir -p "/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"
+   ```
+
+   Con ACL disponibles, concede acceso **solo a esta carpeta** al usuario de servicio real:
+
+   ```sh
+   sudo setfacl -m u:USUARIO_SERVICIO:rwx,d:u:USUARIO_SERVICIO:rwx "/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"
+   sudo -u USUARIO_SERVICIO test -r "/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"
+   sudo -u USUARIO_SERVICIO test -w "/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"
+   namei -l "/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"
+   ```
+
+   Los directorios padre también necesitan permiso de paso (`x`); concédelo únicamente en los padres que lo requieran. Los archivos existentes deben ser legibles por el usuario del servicio. Si el disco usa un sistema sin ACL/permisos POSIX, configura su montaje para el usuario/grupo correspondiente; no cambies el propietario de todo el disco. Comprueba también restricciones como `ReadWritePaths` del servicio.
+
+3. Añade al `.env` privado del proyecto, conservando el resto de variables:
+
+   ```dotenv
+   CARD_IMAGE_DIR=/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida
+   ```
+
+   El servidor carga `.env` desde su directorio de trabajo. Si defines la variable en una unidad de systemd en lugar de `.env`, usa `Environment="CARD_IMAGE_DIR=/run/media/lenovoserver/discoDuro/Servidor/Admin/seguro de vida"`. Los espacios pertenecen al nombre de carpeta; no los escapes dentro de `.env`. La aplicación no crea automáticamente esta carpeta ni usa una ubicación alternativa: un montaje ausente o permisos insuficientes se notifican al administrador. En Linux se comprueba además el montaje del disco de la ruta predeterminada.
+
+   Para impedir también que `apps` arranque sin ese disco, puedes añadir mediante `sudo systemctl edit apps`:
+
+   ```ini
+   [Unit]
+   RequiresMountsFor=/run/media/lenovoserver/discoDuro
+   ConditionPathIsMountPoint=/run/media/lenovoserver/discoDuro
+   ```
+
+4. Despliega los archivos de esta versión, compila y arranca el servicio:
+
+   ```sh
+   npm ci
+   npm run build
+   # Necesario si modificaste la unidad/drop-in de systemd:
+   sudo systemctl daemon-reload
+   sudo systemctl restart apps
+   sudo systemctl status apps --no-pager
+   sudo journalctl -u apps -n 50 --no-pager
+   ```
+
+   Recarga el navegador e inicia sesión con el administrador. Crea **BBVA / Banco** y **BBVA Vive / Crédito / Producto específico** con imágenes diferentes; revisa que **BBVA Nómina** tome la primera y **BBVA Vive** la segunda. Con un usuario normal confirma que se ven las imágenes, no aparece la configuración y `/api/admin/card-catalog` responde 403; sin sesión responde 401. Revisa una tarjeta sin coincidencia y otra cuyo archivo se haya retirado: deben conservar sus importes y acciones sin hueco de imagen.
+
+Las cargas y selecciones de archivos existentes admiten JPEG, PNG y WebP de hasta 5 MB, rechazan animaciones, contenido inválido y enlaces simbólicos, se reorientan/reducen a un máximo de 512 px y se guardan como WebP con UUID seguro. Seleccionar un archivo existente crea una copia administrada; nunca sobrescribe el original. MySQL guarda solo su referencia relativa, reglas y alias. Las imágenes se sirven con sesión desde `/api/card-images/:id/:version.webp`, únicamente si están asociadas a una regla vigente; la carpeta no se publica como contenido estático. Eliminar una regla conserva sus archivos para reutilizarlos. Las cargas previas a un guardado fallido también quedan disponibles en el selector. Respalda esta carpeta junto con MySQL; fotos de perfil y evidencias mantienen sus rutas independientes.
+
+Archivos de esta función: `server/migrations/015-card-image-catalog.sql`, `server/card-catalog.js`, `server/card-catalog-files.js`, `shared/card-catalog.js`, `saludFinanciera/frontend/card-catalog-admin.js`, `saludFinanciera/frontend/card-catalog-image.js`; integración en `server/auth.js`, `server/index.js`, `src/inicio/inicio.js`, `src/inicio/styles.css`, `saludFinanciera/frontend/salud-financiera.js`, `saludFinanciera/frontend/prestamos.js`, `saludFinanciera/frontend/styles.css`, `saludFinanciera/suscripciones/suscripciones.js`, `saludFinanciera/server/family-view.js` y `.env.example`. Pruebas en `shared/card-catalog.test.js`, `server/card-catalog.test.js`, `saludFinanciera/frontend/card-catalog.test.js`, `server/auth.test.js` y `saludFinanciera/frontend/family.test.js`.
+
 ## Movimiento y calendario
 
 Movimiento está junto a Panorama. El calendario navega por mes y permite seleccionar un día para consultar cuántos movimientos se registraron, sus ingresos/gastos y su detalle. **Registrar movimiento en este día** abre un modal con esa fecha; **Nuevo movimiento** usa hoy. El modal permite gasto, ingreso y transferencia, con sus cuentas, categoría y relaciones existentes. Los accesos desde tarjetas y planes también abren este modal. Guardar o eliminar actualiza el calendario, el resumen diario y el registro mensual sin perder el mes seleccionado.

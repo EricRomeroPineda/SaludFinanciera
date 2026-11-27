@@ -168,7 +168,7 @@ export async function registerUser(name, password, photo, recoveryKey, theme = '
     )
 
     return { id: result.insertId, name: normalizedName, photo, theme, appearance: theme === 'oscuro' ? 'night' : 'day',
-      email: normalizedEmail, emailVerified: 0, sessionVersion: passwordVersion(passwordHash) }
+      email: normalizedEmail, emailVerified: 0, role: 'usuario', sessionVersion: passwordVersion(passwordHash) }
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') throw Object.assign(new Error('Ya hay una cuenta registrada con ese correo o usuario.'), { statusCode: 409 })
     throw error
@@ -191,7 +191,7 @@ export async function authenticateUser(name, password) {
   }
 
   const [users] = await pool.execute(
-    'SELECT id, nombre, password_hash, foto_perfil, tema, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified FROM usuario WHERE nombre = ? OR (correo = ? AND correo_verificado = 1) LIMIT 2',
+    'SELECT id, nombre, password_hash, foto_perfil, tema, rol AS role, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified FROM usuario WHERE nombre = ? OR (correo = ? AND correo_verificado = 1) LIMIT 2',
     [normalizedName, normalizedName.toLowerCase()],
   )
   if (users.length !== 1 || !await bcrypt.compare(normalizedPassword, users[0].password_hash)) {
@@ -201,12 +201,12 @@ export async function authenticateUser(name, password) {
   }
 
   const { id, nombre, foto_perfil: photo, tema: theme, appearance, email, emailVerified, password_hash: passwordHash } = users[0]
-  return { id, name: nombre, photo, theme, appearance, email, emailVerified, sessionVersion: passwordVersion(passwordHash) }
+  return { id, name: nombre, photo, theme, appearance, email, emailVerified, role: users[0].role || 'usuario', sessionVersion: passwordVersion(passwordHash) }
 }
 
 export async function findSessionUser(userId) {
   const [users] = await pool.execute(
-    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
+    'SELECT id, nombre AS name, foto_perfil AS photo, tema AS theme, rol AS role, apariencia AS appearance, correo AS email, correo_verificado AS emailVerified, recuperacion_token_hash IS NOT NULL AS hasRecoveryKey FROM usuario WHERE id = ?',
     [userId],
   )
   return users[0] || null

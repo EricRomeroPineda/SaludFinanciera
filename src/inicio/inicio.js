@@ -12,6 +12,8 @@ import './familia.js'
 import './email-settings.js'
 import './photo-editor.js'
 import './access-recovery.js'
+import '../../saludFinanciera/frontend/card-catalog-admin.js'
+import { invalidateCardImages } from '../../saludFinanciera/frontend/card-catalog-image.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -89,6 +91,7 @@ class Inicio extends LitElement {
       this.setAttribute('data-appearance', this.effectiveAppearance)
     }
     if (changed.has('user')) {
+      if (changed.get('user')?.id !== this.user?.id) invalidateCardImages()
       const theme = themes.some(({ id }) => id === this.user?.theme) ? this.user.theme : 'verde'
       this.setAttribute('data-theme', theme)
       if (changed.get('user')?.photo !== this.user?.photo) this.brokenPhoto = false
@@ -322,6 +325,13 @@ class Inicio extends LitElement {
     }
 
     if (!this.user) return this.renderAuth()
+    if (this.activeSection === 'card-catalog') {
+      return html`${this.renderHeader()}<main class="dashboard">
+        <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
+        ${this.user.role === 'admin' ? html`<card-catalog-admin></card-catalog-admin>`
+          : html`<p class="error-message" role="alert">Solo un administrador puede configurar este catálogo.</p>`}
+      </main>`
+    }
     return this.activeSection === 'menu' ? this.renderMenu() : this.renderDashboard()
   }
 
@@ -419,12 +429,16 @@ class Inicio extends LitElement {
         </div>
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
         <nav class="section-menu" aria-label="Menú principal">
-          <button class="section-menu-card" type="button" @click=${() => this.openFinancialSection()}>
+          <article class="section-menu-card">
             <span class="brand-icon" aria-hidden="true">$</span>
             <strong>Salud financiera</strong>
             <span>Consulta tu panorama, tarjetas, cuentas y movimientos.</span>
-            <span class="section-menu-link">Entrar →</span>
-          </button>
+            <div class="section-menu-actions">
+              <button class="section-menu-link" type="button" @click=${() => this.openFinancialSection()}>Entrar →</button>
+              ${this.user.role === 'admin' ? html`<button class="section-menu-link" type="button"
+                @click=${() => { this.activeSection = 'card-catalog' }}>Agregar info de tarjetas nuevas</button>` : ''}
+            </div>
+          </article>
         </nav>
         <p class="menu-version">Versión ${packageInfo.version}</p>
       </main>

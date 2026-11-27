@@ -10,7 +10,7 @@ function tagRows(rows, member) {
   return rows.map((row) => ({
     ...row, ownerId: row.movementOwnerId || member.id, ownerName: row.senderName || member.name,
     ownerTheme: member.theme, ownerAppearance: member.appearance,
-    ...(row.name ? { name: `${row.name} · ${member.name}` } : {}),
+    ...(row.name ? { catalogName: row.name, name: `${row.name} · ${member.name}` } : {}),
     ...Object.fromEntries(['originAccount', 'destinationAccount', 'planName', 'subscriptionName', 'loanName', 'accountName']
       .filter((key) => row[key] && !(row.recipientUserId && ['originAccount', 'destinationAccount'].includes(key)))
       .map((key) => [key, `${row[key]} · ${member.name}`])),
