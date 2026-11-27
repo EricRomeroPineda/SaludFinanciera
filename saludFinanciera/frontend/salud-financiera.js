@@ -1,7 +1,7 @@
 import { LitElement, html, svg, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
-import { isCreditAccount, isDebitAccount, isCashAccount } from '../account-types.js'
+import { isCreditAccount, isDebitAccount, isCashAccount, isMoneyAccount } from '../account-types.js'
 import { calculateAccountSummary, calculatePeriodActivity, cardPaymentStatus } from '../account-summary.js'
 import { movementLabel, movementOrigin, movementDestination } from '../movement-labels.js'
 import { calculatePlanProjection } from '../plan-calculations.js'
@@ -1493,6 +1493,7 @@ class SaludFinanciera extends LitElement {
       return category.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
     })
     const accounts = this.dashboard.accounts
+    const originAccounts = mode === 'subscription' ? accounts : accounts.filter((account) => isMoneyAccount(account.type))
     const loan = mode === 'loan'
       ? (this.dashboard.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId)) : null
 
@@ -1540,9 +1541,9 @@ class SaludFinanciera extends LitElement {
             : !this.familyTransferData ? html`<button class="quiet-button" type="button" @click=${this.loadFamilyTransferAccounts}>Reintentar cargar cuentas</button>` : html`
               <fieldset class="family-account-picker"><legend>Cuenta de origen · Tus cuentas</legend>
                 ${this.renderFamilyAccountOptions(this.familyTransferData.accounts.filter((account) =>
-                  Number(account.ownerId) === Number(this.familyTransferData.userId)), 'originAccountId', originAccountId)}
-                ${!this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId))
-                  ? html`<p class="form-hint">Agrega una cuenta propia antes de enviar dinero.</p>` : ''}
+                  Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type)), 'originAccountId', originAccountId)}
+                ${!this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type))
+                  ? html`<p class="form-hint">Agrega una cuenta propia de débito o efectivo antes de enviar dinero.</p>` : ''}
               </fieldset>
               <fieldset class="family-account-picker"><legend>Cuenta de destino · Tu familia</legend>
                 ${this.renderFamilyAccountOptions(this.familyTransferData.accounts.filter((account) =>
@@ -1580,7 +1581,7 @@ class SaludFinanciera extends LitElement {
           <label>Cuenta de origen
             <select name="originAccountId" required .value=${String(originAccountId || '')}>
               <option value="" ?selected=${!originAccountId}>Selecciona una cuenta</option>
-              ${accounts.map((account) => html`<option value=${account.id} ?selected=${Number(originAccountId) === Number(account.id)}>${account.name} · ${this.formatMoney(account.available)}</option>`)}
+              ${originAccounts.map((account) => html`<option value=${account.id} ?selected=${Number(originAccountId) === Number(account.id)}>${account.name} · ${this.formatMoney(account.available)}</option>`)}
             </select>
           </label>
         ` : ''}
@@ -1606,7 +1607,7 @@ class SaludFinanciera extends LitElement {
         <div class="form-actions">
           <button class="primary-button compact-button" ?disabled=${this.submitting || (mode === 'family' &&
             (this.familyTransferLoading || !this.familyTransferData
-              || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId))
+              || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type))
               || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) !== Number(this.familyTransferData.userId))))}>
             ${this.submitting ? 'Guardando…' : this.editingMovement ? 'Guardar cambios' : 'Registrar movimiento'}
           </button>

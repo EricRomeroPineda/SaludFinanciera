@@ -17,8 +17,8 @@ const methods = Object.fromEntries(Object.entries(Object.getOwnPropertyDescripto
   .filter(([, descriptor]) => typeof descriptor.value === 'function')
   .map(([name, descriptor]) => [name, descriptor.value]))
 const accounts = [
-  { id: 10, name: 'Mi débito', ownerId: 7, ownerName: 'Eric', ownerTheme: 'azul', available: '100' },
-  { id: 20, name: 'Su tarjeta', ownerId: 8, ownerName: 'Liliam', ownerTheme: 'rosa', available: '50' },
+  { id: 10, name: 'Mi débito', type: 'Tarjeta de débito', ownerId: 7, ownerName: 'Eric', ownerTheme: 'azul', available: '100' },
+  { id: 20, name: 'Su tarjeta', type: 'Tarjeta de crédito', ownerId: 8, ownerName: 'Liliam', ownerTheme: 'rosa', available: '50' },
 ]
 const state = (changes = {}) => ({
   ...methods, familyAvailable: true, familyView: false, movementMode: 'family', movementOperation: 'transfer',
@@ -190,4 +190,25 @@ test('selecting another family destination replaces the amount with its payment 
   event.currentTarget.value = '10'
   ctx.selectFamilyDestination(event)
   assert.equal(input.value, '')
+})
+
+test('only subscriptions offer credit as an origin while family transfers retain credit destinations', () => {
+  const cash = { id: 11, name: 'Efectivo propio', type: 'Efectivo', ownerId: 7, available: '200' }
+  const credit = { id: 12, name: 'Crédito propio', type: 'Tarjeta de crédito', ownerId: 7, available: '500' }
+  const all = [accounts[0], cash, credit, accounts[1]]
+  for (const mode of ['normal', 'investment', 'loan', 'subscription']) {
+    const ctx = state({ movementMode: mode, movementOperation: 'expense',
+      dashboard: { accounts: all.slice(0, 3), categories: [], plans: [], loans: [], subscriptions: [] } })
+    const markup = text(ctx.renderMovementForm())
+    const origin = markup.slice(markup.indexOf('<select name="originAccountId"'), markup.indexOf('</select>', markup.indexOf('<select name="originAccountId"')))
+    assert.match(origin, /Efectivo propio/)
+    assert.match(origin, /Mi débito/)
+    if (mode === 'subscription') assert.match(origin, /Crédito propio/)
+    else assert.doesNotMatch(origin, /Crédito propio/)
+  }
+  const markup = text(state({ familyTransferData: { userId: 7, accounts: all } }).renderMovementForm())
+  const origin = markup.slice(markup.indexOf('Cuenta de origen · Tus cuentas'), markup.indexOf('Cuenta de destino · Tu familia'))
+  assert.match(origin, /Efectivo propio/)
+  assert.doesNotMatch(origin, /Crédito propio/)
+  assert.match(markup.slice(markup.indexOf('Cuenta de destino · Tu familia')), /Su tarjeta/)
 })

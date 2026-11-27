@@ -152,7 +152,7 @@ function mockMovementConnection(t, { oldPlanId = null, failSync = false } = {}) 
         return [params.slice(1).map((id) => ({ id }))]
       }
       if (sql.includes('SELECT id FROM plan_futuro')) return [[{ id: params[0] }]]
-      if (sql.includes('SELECT id, disponible FROM cuenta')) return [[{ id: 2, disponible: '1000.00' }]]
+      if (sql.includes('SELECT id, disponible, tipo FROM cuenta')) return [[{ id: 2, disponible: '1000.00', tipo: 'Tarjeta de débito' }]]
       if (failSync && sql.includes('SET monetizado =')) throw new Error('sync failed')
       return [{ affectedRows: 1, insertId: 15 }]
     },

@@ -13,3 +13,7 @@ export function isDebitAccount(type) {
 export function isCashAccount(type) {
   return normalizedType(type).trim() === 'efectivo'
 }
+
+export function isMoneyAccount(type) {
+  return isDebitAccount(type) || isCashAccount(type)
+}

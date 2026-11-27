@@ -14,8 +14,8 @@ const transfer = { operation: 'transfer', familyTransfer: true, amount: '40.25',
 function ledger(t) {
   const state = {
     members: [7, 8],
-    accounts: [{ id: 10, id_usuario: 7, disponible: 100 }, { id: 20, id_usuario: 8, disponible: 50 },
-      { id: 30, id_usuario: 9, disponible: 100 }],
+    accounts: [{ id: 10, id_usuario: 7, disponible: 100, tipo: 'Tarjeta de débito' }, { id: 20, id_usuario: 8, disponible: 50, tipo: 'Tarjeta de crédito' },
+      { id: 30, id_usuario: 9, disponible: 100, tipo: 'Efectivo' }],
     movements: [],
   }
   const calls = []
@@ -32,7 +32,7 @@ function ledger(t) {
         return [state.members.includes(params[0]) ? state.members.map((userId) => ({ userId })) : []]
       }
       if (sql.includes('FROM cuenta') && sql.startsWith('SELECT')) {
-        const family = sql.includes('disponible, id_usuario')
+        const family = sql.includes('tipo, id_usuario')
         assert.match(sql, /ORDER BY id FOR UPDATE/)
         return [state.accounts.filter((account) => family
           ? params.includes(account.id)
@@ -222,4 +222,31 @@ test('family account lookup requires authentication and active membership', asyn
       readJson: () => assert.fail('Must not read'),
       sendJson: () => assert.fail('Must not return accounts'),
     }), true)
+})
+
+test('family transfers cannot use credit as origin, even with an explicit request', async (t) => {
+  const { state } = ledger(t)
+  state.accounts[0].tipo = 'Tarjeta de crédito'
+  const before = structuredClone(state)
+  await assert.rejects(saveMovement(7, transfer), { statusCode: 400 })
+  assert.deepEqual(state, before)
+})
+
+test('only subscription payments can use credit as origin', async (t) => {
+  const calls = []
+  t.mock.method(pool, 'getConnection', async () => ({
+    beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {},
+    async execute(sql, params) {
+      calls.push({ sql, params })
+      if (sql.includes('FROM cuenta')) return [[{ id: 10, disponible: '100', tipo: 'Tarjeta de crédito' }]]
+      if (sql.startsWith('SELECT id FROM suscripciones')) return [[{ id: 5 }]]
+      if (sql.startsWith('INSERT')) return [{ insertId: 1 }]
+      if (sql.startsWith('UPDATE')) return [{ affectedRows: 1 }]
+      assert.fail(sql)
+    },
+  }))
+  const payment = { operation: 'expense', originAccountId: 10, amount: '20', date: transfer.date }
+  await assert.rejects(saveMovement(7, payment), { statusCode: 400 })
+  assert.equal((await saveMovement(7, { ...payment, subscriptionId: 5 })).id, 1)
+  assert.equal(calls.filter(({ sql }) => sql.startsWith('UPDATE cuenta')).length, 1)
 })

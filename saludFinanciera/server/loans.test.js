@@ -50,9 +50,9 @@ function ledger(t) {
       if (sql.includes('SELECT id FROM cuenta WHERE')) {
         return [state.accounts.filter((account) => account.id === params[0] && account.userId === params[1])]
       }
-      if (sql.includes('SELECT id, disponible FROM cuenta')) {
+      if (sql.includes('SELECT id, disponible, tipo FROM cuenta')) {
         return [state.accounts.filter((account) => account.userId === params[0] && params.slice(1).includes(account.id))
-          .map((account) => ({ id: account.id, disponible: account.available }))]
+          .map((account) => ({ id: account.id, disponible: account.available, tipo: 'Tarjeta de débito' }))]
       }
       if (sql.startsWith('UPDATE cuenta SET disponible')) {
         const [amount, id, userId] = params

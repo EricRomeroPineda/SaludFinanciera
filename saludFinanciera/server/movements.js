@@ -4,6 +4,7 @@ import { lockPlans, syncPlanSavings } from './modules.js'
 import { lockLoans, validateLoanMovement } from './loan-ledger.js'
 import { removeEvidenceFiles } from '../../server/evidence-files.js'
 import { movementSharingFields, describeSharedMovement } from './movement-sharing.js'
+import { isMoneyAccount } from '../account-types.js'
 
 function invalid(message, statusCode = 400) {
   const error = new Error(message)
@@ -128,7 +129,7 @@ async function lockAndValidateReferences(connection, userId, movement) {
   if (accountIds.length) {
     const placeholders = accountIds.map(() => '?').join(', ')
     const [accounts] = await connection.execute(
-      `SELECT id, disponible${movement.familyTransfer ? ', id_usuario' : ''} FROM cuenta
+      `SELECT id, disponible, tipo${movement.familyTransfer ? ', id_usuario' : ''} FROM cuenta
        WHERE ${movement.familyTransfer ? '' : 'id_usuario = ? AND '}id IN (${placeholders})
        ORDER BY id FOR UPDATE`,
       movement.familyTransfer ? accountIds : [userId, ...accountIds],
@@ -145,6 +146,9 @@ async function lockAndValidateReferences(connection, userId, movement) {
         throw invalid('El origen debe ser tuyo y el destino debe pertenecer a otro integrante de tu familia actual.', 403)
       }
       movement.destinationOwnerId = destinationOwner
+    }
+    if (originId && !subscriptionId && !isMoneyAccount(accountById.get(originId).tipo)) {
+      throw invalid('Selecciona una cuenta de débito o efectivo como origen. Solo las suscripciones pueden pagarse con tarjeta de crédito.')
     }
   }
 

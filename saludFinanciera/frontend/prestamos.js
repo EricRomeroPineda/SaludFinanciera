@@ -1,6 +1,7 @@
 import { LitElement, html, unsafeCSS } from 'lit'
 import { keyed } from 'lit/directives/keyed.js'
 import { apiRequest } from '../../src/api.js'
+import { isMoneyAccount } from '../account-types.js'
 import { addIcon, editIcon, sortByDue, viewToggle } from './record-view.js'
 import sharedStyles from '../../src/inicio/styles.css?inline'
 import styles from './styles.css?inline'
@@ -133,7 +134,7 @@ class Loans extends LitElement {
           : this.loanType === 'me_deben' ? 'Tarjeta / efectivo de donde sale el préstamo' : 'Tarjeta / efectivo donde recibes el préstamo'}
           <select name="accountId" ?required=${!item && this.mode === 'new'}>
             <option value="">Selecciona una cuenta</option>
-            ${this.accounts.map((account) => html`<option value=${account.id} ?selected=${Number(item?.accountId) === Number(account.id)}>
+            ${this.accounts.filter((account) => isMoneyAccount(account.type)).map((account) => html`<option value=${account.id} ?selected=${Number(item?.accountId) === Number(account.id)}>
               ${account.name} · ${money.format(account.available)}
             </option>`)}
           </select>
