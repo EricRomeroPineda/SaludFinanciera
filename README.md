@@ -262,6 +262,8 @@ El menú principal muestra **Agregar info de tarjetas nuevas**, junto a **Entrar
 
 Las imágenes opcionales de 80 × 80 px se muestran después del nombre y antes del importe en tarjetas bancarias, nómina, débito, efectivo, servicios, suscripciones, planes, selectores de cuenta y resúmenes de Panorama, también en Familiar. Conservan proporción y esquinas redondeadas. Sin coincidencia, durante la carga o si el archivo falta, el elemento no ocupa espacio y el resto de la tarjeta funciona normalmente.
 
+Las imágenes tienen un marco fino y espaciado interior acorde al tema. En **Panorama → Planes futuros**, la imagen se alinea a la izquierda, con nombre e importes a su derecha y el progreso debajo, sin separar el nombre del monto ni dejar huecos cuando no hay imagen.
+
 ### Reglas, alias y permisos
 
 Toda la superficie de la tarjeta **Salud financiera** del menú abre el módulo, también mediante teclado con su botón Entrar. **Agregar info de tarjetas nuevas** es un botón independiente, visible solo para Admin, y abre exclusivamente el catálogo sin activar la entrada a finanzas.

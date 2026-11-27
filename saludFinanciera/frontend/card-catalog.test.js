@@ -44,6 +44,9 @@ test('optional image uses 80px square contain styling and is invisible until suc
   assert.match(styles, /width: 80px; height: 80px/)
   assert.match(styles, /object-fit: contain/)
   assert.match(styles, /border-radius: 8px/)
+  assert.match(styles, /border: 1px solid var\(--line\)/)
+  assert.match(styles, /box-sizing: border-box/)
+  assert.match(styles, /padding: 5px/)
   assert.equal(image.render.call({ source: '' }), '')
   let visible = false
   const state = { source: '/api/card-images/1/version.webp', setAttribute: () => { visible = true }, removeAttribute: () => { visible = false } }

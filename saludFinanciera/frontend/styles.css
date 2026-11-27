@@ -154,6 +154,10 @@
 .overview-plan-heading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
 .overview-plan-heading button { white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .overview-plan-heading span { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.overview-plan-heading:has(card-catalog-image[loaded]) { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; gap: 6px 12px; }
+.overview-plan-heading:has(card-catalog-image[loaded]) > button { grid-column: 2; grid-row: 1; align-self: end; justify-self: start; min-width: 0; }
+.overview-plan-heading > card-catalog-image[loaded] { grid-column: 1; grid-row: 1 / span 2; margin: 0; }
+.overview-plan-heading:has(card-catalog-image[loaded]) > span { grid-column: 2; grid-row: 2; align-self: start; min-width: 0; }
 .overview-plan-progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .overview-plan-progress progress { flex: 1; min-width: 0; height: 7px; accent-color: var(--green); }
 .overview-plan-progress small { color: var(--muted); font-size: 10px; }

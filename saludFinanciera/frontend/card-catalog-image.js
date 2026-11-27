@@ -12,7 +12,9 @@ class CardCatalogImage extends LitElement {
   static styles = css`
     :host { display: none; }
     :host([loaded]) { display: block; width: 80px; height: 80px; margin: 0 0 10px; flex: none; }
-    img { display: block; width: 80px; height: 80px; border-radius: 8px; object-fit: contain; object-position: center; }
+    img { display: block; box-sizing: border-box; width: 80px; height: 80px; padding: 5px;
+      border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+      object-fit: contain; object-position: center; }
   `
   constructor() {
     super()
