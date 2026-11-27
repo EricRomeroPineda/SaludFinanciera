@@ -1,5 +1,34 @@
 import { LitElement, html, css } from 'lit'
 
+export const depositStyles = css`
+  .card-deposit.card-deposit {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0;
+    grid-column: 1 / -1; margin: 0 0 18px; padding: 12px; border-radius: 8px;
+    background: var(--soft); color: var(--ink); text-align: left;
+  }
+  .card-deposit > dl, .card-deposit > .deposit-content {
+    display: block; flex: 1 1 160px; min-width: 0; margin: 0;
+  }
+  .card-deposit > dl > dt, .card-deposit .deposit-label {
+    display: block; margin: 0 0 5px; color: var(--ink); font-size: 10px; font-weight: 400;
+  }
+  .card-deposit > dl > dd, .card-deposit input {
+    margin: 0; color: var(--muted); font-size: 12px; font-weight: 400;
+    line-height: 1.5; overflow-wrap: anywhere;
+  }
+  .card-deposit > copy-deposit {
+    flex: 0 1 auto; max-width: 100%; margin-inline-start: auto; font-size: 12px; font-weight: 400;
+  }
+  .record-list .card-deposit.card-deposit { margin: 0; padding: 5px 7px; }
+`
+
+export function renderDeposit(value) {
+  return html`<div class="card-payment card-deposit deposit-details">
+    <dl><dt>Depósito</dt><dd>${value}</dd></dl>
+    <copy-deposit .value=${value}></copy-deposit>
+  </div>`
+}
+
 class CopyDeposit extends LitElement {
   static properties = {
     value: { attribute: false }, field: { type: Boolean }, busy: { state: true },

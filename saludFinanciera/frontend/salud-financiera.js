@@ -13,7 +13,7 @@ import './calendario.js'
 import './related-movements.js'
 import './prestamos.js'
 import './movement-evidence.js'
-import './copy-deposit.js'
+import { depositStyles, renderDeposit } from './copy-deposit.js'
 import '../suscripciones/suscripciones.js'
 
 const moneyFormatter = new Intl.NumberFormat('es-MX', {
@@ -42,7 +42,7 @@ function isCardAccount(account) {
 }
 
 class SaludFinanciera extends LitElement {
-  static styles = [unsafeCSS(sharedStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
+  static styles = [unsafeCSS(sharedStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles), depositStyles]
   static properties = {
     dashboard: { state: true },
     familyView: { state: true },
@@ -887,9 +887,9 @@ class SaludFinanciera extends LitElement {
         <label>Nombre de ${isCashAccount(this.newAccountType) ? 'la cuenta' : 'la tarjeta'}
           <input name="name" maxlength="100" placeholder="Cuenta principal" .value=${account.name || ''} required />
         </label>
-        <label>${isCashAccount(this.newAccountType) ? 'Datos de depósito (opcional)' : 'Número de cuenta o CLABE (opcional)'}
+        <label class="card-deposit"><span class="deposit-content"><span class="deposit-label">${isCashAccount(this.newAccountType) ? 'Datos de depósito (opcional)' : 'Número de cuenta o CLABE (opcional)'}</span>
           <input name="depositDetails" maxlength="500"
-            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${account.depositDetails || ''} /><copy-deposit field></copy-deposit>
+            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${account.depositDetails || ''} /></span><copy-deposit field></copy-deposit>
         </label>
         ${credit ? html`
           <label>Crédito total (límite máximo)
@@ -1031,7 +1031,7 @@ class SaludFinanciera extends LitElement {
                         : this.formatMoney(card.paymentToAvoidInterest)}</dd>
                     </div>
                   </dl>` : ''}
-                  ${card.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${card.depositDetails}<copy-deposit .value=${card.depositDetails}></copy-deposit></p>` : ''}
+                  ${card.depositDetails ? renderDeposit(card.depositDetails) : ''}
                   <div class="card-actions" ?hidden=${this.familyView}>
                     ${isCreditAccount(card.type) ? html`<button class="text-button" type="button" @click=${() => this.startCardPayment(card)}>Registrar pago</button>` : ''}
                     ${isCreditAccount(card.type) && cardPaymentStatus(card, this.today) ? html`
@@ -1098,8 +1098,8 @@ class SaludFinanciera extends LitElement {
               <label>Día del mes de aportación<input name="contributionDay" type="number" min="1" max="31" step="1"
                 .value=${this.editingPlan?.periodUnit === 'mes' ? this.editingPlan.contributionDay ?? '' : ''} required /></label>
             `}
-            <label>Datos de depósito (opcional)<input name="depositDetails" maxlength="500"
-              placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${this.editingPlan?.depositDetails || ''} /><copy-deposit field></copy-deposit></label>
+            <label class="card-deposit"><span class="deposit-content"><span class="deposit-label">Datos de depósito (opcional)</span><input name="depositDetails" maxlength="500"
+              placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${this.editingPlan?.depositDetails || ''} /></span><copy-deposit field></copy-deposit></label>
             <label class="checkbox-label"><input name="visible" type="checkbox" ?checked=${this.editingPlan ? Boolean(Number(this.editingPlan.visible)) : true} /> Mostrar en el panorama</label>
             <p class="form-hint">Monetizado suma los movimientos vinculados al plan. Los periodos faltantes son el faltante dividido entre la aportación, redondeado hacia arriba. La fecha se estima con los próximos días de aportación y se recorre si quedan aportaciones pendientes; la meta no cambia. En meses cortos se usa su último día.</p>
             <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.submitting ? 'Guardando…' : 'Guardar plan'}</button></div>
@@ -1160,7 +1160,7 @@ class SaludFinanciera extends LitElement {
           </dl>
         ` : html`<p class="plan-note">Edita el plan para configurar la frecuencia semanal o mensual, el día y la aportación esperada.</p>`}
         ${!Number(plan.visible) ? html`<p class="plan-note">Oculto en el panorama</p>` : ''}
-        ${plan.depositDetails ? html`<p class="plan-note deposit-details">Depósito: ${plan.depositDetails}<copy-deposit .value=${plan.depositDetails}></copy-deposit></p>` : ''}
+        ${plan.depositDetails ? renderDeposit(plan.depositDetails) : ''}
         <div class="card-actions" ?hidden=${this.familyView}>
           <button class="text-button" type="button" ?disabled=${this.submitting}
             @click=${() => this.startPlanMovement(plan)}>Registrar movimiento</button>

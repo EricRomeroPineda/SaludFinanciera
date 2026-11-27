@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit'
 import { apiRequest } from '../../src/api.js'
-import './copy-deposit.js'
+import { depositStyles, renderDeposit } from './copy-deposit.js'
 import { loadGoogleIdentity, prepareGoogleReminders, requestGoogleAccess, syncGoogleReminder } from './google-calendar-client.js'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
@@ -14,7 +14,7 @@ class GoogleCalendarSync extends LitElement {
     events: { state: true }, selected: { state: true }, results: { state: true },
     ready: { state: true }, consent: { state: true },
   }
-  static styles = css`
+  static styles = [css`
     :host { display: block; margin: 0 0 16px; }
     * { box-sizing: border-box; }
     button, input { font: inherit; }
@@ -39,7 +39,7 @@ class GoogleCalendarSync extends LitElement {
     .notice { color: var(--positive); }
     .consent { margin: 16px 0; }
     code { overflow-wrap: anywhere; }
-  `
+  `, depositStyles]
 
   constructor() {
     super()
@@ -195,15 +195,15 @@ class GoogleCalendarSync extends LitElement {
               <li><label><input type="checkbox" .checked=${this.selected.has(event.key)}
                 ?disabled=${this.busy || event.reference}
                 @change=${(change) => this.select(event, change.currentTarget.checked)} />
-                <span class="details"><strong>${event.label}</strong>
+                <div class="details"><strong>${event.label}</strong>
                   <small>${event.date} · ${event.typeLabel} · ${event.amount == null ? 'Monto por definir' : currency.format(Number(event.amount))}</small>
                   ${event.depositDetails && !(event.kind === 'loan' && event.loanType === 'me_deben')
-                    ? html`<small>Datos de depósito: ${event.depositDetails}<copy-deposit .value=${event.depositDetails}></copy-deposit></small>` : ''}
+                    ? renderDeposit(event.depositDetails) : ''}
                   ${event.reference ? html`<small>Solo referencia: configura el inicio de la suscripción para enviarla.</small>` : ''}
                   ${this.results[event.key] ? html`<small class=${this.results[event.key].status === 'error' ? 'error' : 'notice'}>
                     ${this.results[event.key].status === 'created' ? 'Creado' : this.results[event.key].status === 'updated' ? 'Actualizado' : this.results[event.key].message}
                   </small>` : ''}
-                </span></label></li>
+                </div></label></li>
             `)}</ul>
           ` : html`<p>No hay marcadores previstos para este mes.</p>`}
           <p>Volver a enviar actualiza los eventos de esta aplicación, sin duplicarlos.

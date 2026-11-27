@@ -27,6 +27,47 @@ function text(value) {
   return value == null || typeof value === 'function' ? '' : String(value)
 }
 
+test('debit and credit deposits use the same information card and preserve the full copy value', () => {
+  const state = { ...methods(finance), today: new Date(2026, 10, 26) }
+  const account = { id: 1, name: 'Cuenta', type: 'Tarjeta de débito', available: '100', depositDetails: deposit }
+  const debit = text(state.renderBankCard(account))
+  assert.match(debit, /class="card-payment card-deposit deposit-details"/)
+  assert.ok(debit.includes(`<dl><dt>Depósito</dt><dd>${deposit}</dd></dl>`))
+  assert.ok(debit.includes(`<copy-deposit .value=${deposit}></copy-deposit>`))
+  assert.doesNotMatch(debit, /Depósito:/)
+  const credit = text(state.renderBankCard({ ...account, type: 'Tarjeta de crédito' }))
+  assert.match(credit, /class="card-payment card-deposit deposit-details"/)
+  assert.ok(credit.includes(`<copy-deposit .value=${deposit}></copy-deposit>`))
+  assert.doesNotMatch(text(state.renderBankCard({ ...account, depositDetails: '' })), /card-deposit|copy-deposit/)
+})
+
+test('plans, subscriptions and payable loans share the deposit card in card and list views', () => {
+  const today = new Date(2026, 10, 26)
+  const base = { id: 1, name: 'Prueba', depositDetails: deposit, startDate: '2026-01-01' }
+  for (const listView of [false, true]) {
+    const markup = [
+      finance.renderPlans.call({
+        ...methods(finance), today, plansListView: listView,
+        dashboard: { plans: [{ ...base, goal: '100', saved: '0', remaining: '100', periodUnit: 'mes',
+          contribution: '10', contributionDay: 28, visible: 1 }] },
+      }),
+      subscriptions.render.call({
+        ...methods(subscriptions), today, listView,
+        items: [{ ...base, status: 'activa', frequency: 'Mensual', cost: '100', billingDay: 28 }],
+      }),
+      loans.render.call({
+        ...methods(loans), listView, accounts: [],
+        items: [{ ...base, type: 'debo', principal: '100', paid: '0', remaining: '100', commitmentDate: '2026-11-28' }],
+      }),
+    ]
+    for (const card of markup.map(text)) {
+      assert.match(card, /class="card-payment card-deposit deposit-details"/)
+      assert.ok(card.includes(`<dl><dt>Depósito</dt><dd>${deposit}</dd></dl>`))
+      assert.ok(card.includes(`<copy-deposit .value=${deposit}></copy-deposit>`))
+    }
+  }
+})
+
 test('all four forms show an optional text deposit field and restore saved text while Me deben omits it', () => {
   const financial = {
     ...methods(finance), dashboard: { accounts: [], plans: [] }, showPlanForm: true, planUnit: 'mes',
@@ -39,6 +80,7 @@ test('all four forms show an optional text deposit field and restore saved text 
     loans.renderForm.call({ editing: { type: 'debo', depositDetails: deposit }, accounts: [] }),
   ]
   for (const form of markup.map(text)) {
+    assert.match(form, /class="card-deposit"/)
     assert.match(form, /name="depositDetails" maxlength="500"/)
     assert.ok(form.includes(`.value=${deposit}`))
     assert.match(form, /<copy-deposit field>/)
@@ -92,6 +134,7 @@ test('Google preview explicitly discloses deposit sharing and both days of fixed
   assert.match(markup, /seis avisos en total/)
   assert.match(markup, /datos de depósito si existen/)
   assert.match(markup, /<copy-deposit .value=Banco prueba/)
+  assert.match(markup, /class="card-payment card-deposit deposit-details"/)
 })
 
 function clipboard(t, writeText) {
