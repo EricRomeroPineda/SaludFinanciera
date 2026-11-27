@@ -147,6 +147,7 @@ function clipboard(t, writeText) {
 }
 
 test('copy preserves all deposit text including leading zeroes', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   let written
   clipboard(t, async (value) => { written = value })
   const state = { value: deposit }
@@ -155,14 +156,31 @@ test('copy preserves all deposit text including leading zeroes', async (t) => {
   assert.equal(state.notice, 'Datos copiados.')
   assert.equal(state.error, '')
   assert.equal(state.busy, false)
+  assert.match(text(copy.render.call(state)), /class="copy-tooltip" role="status" aria-live="polite"/)
+  t.mock.timers.tick(2500)
+  assert.equal(state.notice, '')
 })
 
 test('form copy reads the current edited input instead of the saved text', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   let written
   clipboard(t, async (value) => { written = value })
   const state = { field: true, value: 'old', closest: () => ({ querySelector: () => ({ value: 'CLABE 00001234' }) }) }
   await copy.copy.call(state)
   assert.equal(written, 'CLABE 00001234')
+})
+
+test('copying again restarts the tooltip timeout without an earlier dismissal', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  clipboard(t, async () => {})
+  const state = { value: deposit }
+  await copy.copy.call(state)
+  t.mock.timers.tick(2000)
+  await copy.copy.call(state)
+  t.mock.timers.tick(500)
+  assert.equal(state.notice, 'Datos copiados.')
+  t.mock.timers.tick(2000)
+  assert.equal(state.notice, '')
 })
 
 test('missing data and denied clipboard access report errors, never success', async (t) => {

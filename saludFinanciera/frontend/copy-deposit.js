@@ -36,16 +36,29 @@ class CopyDeposit extends LitElement {
   }
 
   static styles = css`
-    :host { display: inline-block; vertical-align: middle; margin-inline-start: 4px; }
+    :host { position: relative; display: inline-block; vertical-align: middle; margin-inline-start: 4px; }
     button { display: inline-grid; place-items: center; padding: 5px; border: 1px solid var(--line, #888);
       border-radius: 6px; background: var(--surface, transparent); color: var(--ink, inherit); cursor: pointer; }
     button:disabled { opacity: .5; cursor: default; }
     span { margin-inline-start: 6px; font-size: 12px; }
+    .copy-tooltip { position: absolute; z-index: 1; bottom: calc(100% + 8px); right: 0;
+      width: max-content; max-width: min(240px, calc(100vw - 48px)); margin: 0; padding: 8px 10px;
+      border: 1px solid var(--line, #888); border-radius: 8px; background: var(--surface, #fff);
+      color: var(--ink, #222); box-shadow: 0 3px 12px #0002; line-height: 1.4;
+      overflow-wrap: anywhere; pointer-events: none; }
+    .copy-tooltip:empty { display: none; }
     [role=alert] { color: var(--red, #b42318); }
   `
 
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    clearTimeout(this.noticeTimeout)
+    this.notice = ''
+  }
+
   async copy() {
     if (this.busy) return
+    clearTimeout(this.noticeTimeout)
     this.notice = ''
     this.error = ''
     const value = this.field ? this.closest('label')?.querySelector('[name="depositDetails"]')?.value : this.value
@@ -58,6 +71,7 @@ class CopyDeposit extends LitElement {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(value)
       this.notice = 'Datos copiados.'
+      this.noticeTimeout = setTimeout(() => { this.notice = '' }, 2500)
     } catch {
       this.error = 'No se pudo copiar. Permite el acceso al portapapeles o copia los datos manualmente.'
     } finally {
@@ -71,7 +85,7 @@ class CopyDeposit extends LitElement {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
         <rect x="8" y="8" width="12" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" />
       </svg>
-    </button>${this.notice ? html`<span role="status">${this.notice}</span>` : ''}
+    </button><span class="copy-tooltip" role="status" aria-live="polite" aria-atomic="true">${this.notice}</span>
     ${this.error ? html`<span role="alert">${this.error}</span>` : ''}`
   }
 }
