@@ -89,11 +89,11 @@ test('partial, early and excess transfers reduce the requirement, and manual con
 
 test('period activity sums exact cents for the selected month/year and never takes totals from the recent list', () => {
   const activity = [
-    { month: '2026-11', income: '100.10', expenses: '50.20' },
-    { month: '2026-12', income: '0.20', expenses: '0.10' },
-    { month: '2027-11', income: '999', expenses: '888' },
+    { month: '2026-11', income: '100.10', expenses: '50.20', investment: '12.30' },
+    { month: '2026-12', income: '0.20', expenses: '0.10', investment: '0.20' },
+    { month: '2027-11', income: '999', expenses: '888', investment: '999' },
   ]
-  assert.deepEqual(calculatePeriodActivity(activity, '2026-11'), { income: 100.1, expenses: 50.2 })
-  assert.deepEqual(calculatePeriodActivity(activity, '2026-11', 'year'), { income: 100.3, expenses: 50.3 })
-  assert.deepEqual(calculatePeriodActivity(activity, '2026-01'), { income: 0, expenses: 0 })
+  assert.deepEqual(calculatePeriodActivity(activity, '2026-11'), { income: 100.1, expenses: 50.2, investment: 12.3 })
+  assert.deepEqual(calculatePeriodActivity(activity, '2026-11', 'year'), { income: 100.3, expenses: 50.3, investment: 12.5 })
+  assert.deepEqual(calculatePeriodActivity(activity, '2026-01'), { income: 0, expenses: 0, investment: 0 })
 })

@@ -60,6 +60,7 @@ export function calculatePeriodActivity(months, period, scope = 'month') {
   const totals = months.filter((row) => row.month.startsWith(prefix)).reduce((sum, row) => ({
     income: sum.income + Math.round(Number(row.income) * 100),
     expenses: sum.expenses + Math.round(Number(row.expenses) * 100),
-  }), { income: 0, expenses: 0 })
-  return { income: totals.income / 100, expenses: totals.expenses / 100 }
+    investment: sum.investment + Math.round(Number(row.investment || 0) * 100),
+  }), { income: 0, expenses: 0, investment: 0 })
+  return { income: totals.income / 100, expenses: totals.expenses / 100, investment: totals.investment / 100 }
 }

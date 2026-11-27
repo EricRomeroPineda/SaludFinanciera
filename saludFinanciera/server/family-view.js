@@ -49,7 +49,7 @@ export async function getFamilyView(userId, resource, url) {
     const movements = data.flatMap((item) => item.movements).sort(newestFirst).slice(0, 250)
     return {
       family, accounts, plans, subscriptions, movements, loans: data.flatMap((item) => item.loans), categories: data[0].categories,
-      activityByMonth: sumBy(data.flatMap((item) => item.activityByMonth), (row) => row.month, ['income', 'expenses'])
+      activityByMonth: sumBy(data.flatMap((item) => item.activityByMonth), (row) => row.month, ['income', 'expenses', 'investment'])
         .sort((a, b) => a.month.localeCompare(b.month)),
       summary: {
         accountsCount: accounts.length, plansCount: plans.length, movementsCount: movements.length,

@@ -86,9 +86,12 @@ export async function getDashboardData(userId) {
             SUM(CASE WHEN m.id_prestamo IS NULL AND (cat.tipo = 'ingreso'
               OR (m.id_cuenta_origen IS NULL AND m.id_cuenta_destino IS NOT NULL))
               THEN m.monto ELSE 0 END) AS income,
-            SUM(CASE WHEN m.id_prestamo IS NULL AND (cat.tipo = 'gasto'
+            SUM(CASE WHEN m.id_prestamo IS NULL AND m.id_plan_futuro IS NULL AND (cat.tipo = 'gasto'
               OR (m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL))
-              THEN m.monto ELSE 0 END) AS expenses
+              THEN m.monto ELSE 0 END) AS expenses,
+            SUM(CASE WHEN m.id_plan_futuro IS NOT NULL AND m.id_prestamo IS NULL
+              AND m.id_cuenta_origen IS NOT NULL AND m.id_cuenta_destino IS NULL
+              THEN m.monto ELSE 0 END) AS investment
      FROM movimiento AS m
      LEFT JOIN categorias AS cat ON cat.id = m.id_categoria
      WHERE m.id_usuario = ?

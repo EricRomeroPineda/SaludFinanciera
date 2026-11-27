@@ -202,6 +202,11 @@ td strong { color: var(--ink); }
 .account-form label, .movement-form label, .module-form label { display: grid; gap: 7px; color: var(--ink); font-size: 11px; font-weight: 650; }
 .account-form input, .movement-form input, .movement-form select, .module-form input, .module-form select { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
 .movement-form select, .module-form select { cursor: pointer; }
+.movement-mode { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 0;
+  padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.movement-mode legend { padding: 0 5px; font-size: 12px; font-weight: 650; }
+.movement-mode label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.movement-mode input { width: auto; min-height: 0; margin: 0; accent-color: var(--green); }
 .movement-form input:focus, .movement-form select:focus, .module-form input:focus, .module-form select:focus { border-color: var(--green); outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 15%, transparent); }
 .form-actions { display: flex; align-items: end; }
 .form-hint { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }

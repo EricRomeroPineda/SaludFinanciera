@@ -24,6 +24,7 @@ const dashboard = () => ({
   accounts: [{ id: 2, name: 'Débito', available: '1000' }, { id: 3, name: 'Crédito', available: '500' }],
   categories: [{ id: 4, name: 'Ahorro', type: 'gasto' }],
   plans: [{ id: 8, name: 'Viaje' }], subscriptions: [{ id: 9, name: 'Internet' }],
+  loans: [],
   movements: [], summary: {},
 })
 const financeState = (changes = {}) => ({
@@ -175,11 +176,12 @@ for (const kind of ['plan', 'subscription', 'card']) {
     })
     assert.equal(ctx.showMovementForm, true)
     assert.equal(ctx.movementOperation, kind === 'card' ? 'transfer' : 'expense')
+    assert.equal(ctx.movementMode, kind === 'plan' ? 'investment' : kind === 'subscription' ? 'subscription' : 'normal')
     const markup = text(ctx.renderMovementForm())
     assert.match(markup, /name="date" type="date" .value=2026-12-09/)
     assert.match(markup, /name="amount"[^>]*.value=100.00/)
-    assert.ok(markup.includes(kind === 'plan' ? 'name="planId" .value=8'
-      : kind === 'subscription' ? 'name="subscriptionId" .value=9' : 'name="destinationAccountId" required .value=3'))
+    assert.ok(markup.includes(kind === 'plan' ? 'name="planId" required .value=8'
+      : kind === 'subscription' ? 'name="subscriptionId" required .value=9' : 'name="destinationAccountId" required .value=3'))
   })
 }
 
@@ -204,6 +206,7 @@ test('monthly editing retains all original movement IDs and infers the operation
   const ctx = financeState()
   ctx.startMovementEdit(movement)
   assert.equal(ctx.movementOperation, 'expense')
+  assert.equal(ctx.movementMode, 'investment')
   assert.equal(ctx.editingMovement.planId, 8)
   assert.equal(ctx.editingMovement.originAccountId, 2)
   assert.equal(ctx.showMovementForm, true)
@@ -211,6 +214,74 @@ test('monthly editing retains all original movement IDs and infers the operation
   assert.equal(ctx.movementOperation, 'transfer')
   ctx.startMovementEdit({ ...movement, originAccountId: null, destinationAccountId: 2 })
   assert.equal(ctx.movementOperation, 'income')
+})
+
+test('movement checkboxes select one mode and lock linked operations without mixing fields', () => {
+  const ctx = financeState({ dashboard: {
+    ...dashboard(),
+    loans: [{ id: 12, name: 'Ana', type: 'me_deben', remaining: '50' },
+      { id: 13, name: 'Banco', type: 'debo', remaining: '20' }],
+  } })
+  let markup = text(ctx.renderMovementForm())
+  assert.match(markup, /value=normal \.checked=true/)
+  assert.match(markup, /<select\s+name="operation"/)
+  assert.doesNotMatch(markup, /<select name="planId"|<select name="subscriptionId"|<select name="loanId"/)
+  ctx.selectMovementMode({ currentTarget: { value: 'investment', checked: true } })
+  markup = text(ctx.renderMovementForm())
+  assert.equal(ctx.movementOperation, 'expense')
+  assert.match(markup, /value=investment \.checked=true/)
+  assert.match(markup, /name="planId" required/)
+  assert.doesNotMatch(markup, /<select\s+name="operation"|name="categoryId"|name="loanId"|name="subscriptionId"/)
+  const checked = { value: 'investment', checked: false }
+  ctx.selectMovementMode({ currentTarget: checked })
+  assert.equal(checked.checked, true)
+  assert.equal(ctx.movementMode, 'investment')
+  ctx.selectMovementMode({ currentTarget: { value: 'subscription', checked: true } })
+  markup = text(ctx.renderMovementForm())
+  assert.match(markup, /name="subscriptionId" required/)
+  assert.doesNotMatch(markup, /name="planId"|<select\s+name="operation"/)
+  ctx.selectMovementMode({ currentTarget: { value: 'loan', checked: true } })
+  ctx.selectMovementLoan({ currentTarget: { value: '12' } })
+  markup = text(ctx.renderMovementForm())
+  assert.equal(ctx.movementOperation, 'income')
+  assert.match(markup, /Ingreso \(cobro de préstamo\)/)
+  assert.match(markup, /name="destinationAccountId" required/)
+  assert.doesNotMatch(markup, /name="originAccountId"|name="planId"|name="subscriptionId"/)
+  ctx.selectMovementLoan({ currentTarget: { value: '13' } })
+  assert.equal(ctx.movementOperation, 'expense')
+  ctx.selectMovementMode({ currentTarget: { value: 'normal', checked: true } })
+  assert.equal(ctx.movementLoanId, null)
+  assert.match(text(ctx.renderMovementForm()), /<select\s+name="operation"/)
+})
+
+test('saving a linked movement sends only its selected relationship and fixed operation', async (t) => {
+  const requests = []
+  t.mock.method(globalThis, 'FormData', function () {
+    return new Map([['date', '2026-12-09'], ['amount', '10'], ['originAccountId', '2'],
+      ['destinationAccountId', '3'], ['categoryId', '4'], ['planId', '8'], ['subscriptionId', '9']])
+  })
+  t.mock.method(globalThis, 'fetch', async (_path, options) => {
+    requests.push(JSON.parse(options.body))
+    return new Response(JSON.stringify({ id: 20 }))
+  })
+  const ctx = financeState({ refreshDashboard: async () => {} })
+  for (const [mode, loanId] of [['subscription', null], ['investment', null], ['loan', 13], ['loan', 14]]) {
+    ctx.movementMode = mode
+    ctx.movementOperation = 'transfer'
+    ctx.movementLoanId = loanId
+    if (mode === 'loan') ctx.dashboard.loans = [{ id: 13, type: 'debo' }, { id: 14, type: 'me_deben' }]
+    await ctx.handleSaveMovement({ preventDefault() {}, currentTarget: {} })
+    assert.equal(ctx.error, '')
+  }
+  assert.deepEqual(requests.map(({ operation, categoryId, planId, subscriptionId, loanId }) =>
+    ({ operation, categoryId, planId, subscriptionId, loanId })), [
+    { operation: 'expense', categoryId: null, planId: null, subscriptionId: '9', loanId: undefined },
+    { operation: 'expense', categoryId: null, planId: '8', subscriptionId: null, loanId: undefined },
+    { operation: 'expense', categoryId: null, planId: null, subscriptionId: null, loanId: 13 },
+    { operation: 'income', categoryId: null, planId: null, subscriptionId: null, loanId: 14 },
+  ])
+  assert.equal(requests[2].destinationAccountId, null)
+  assert.equal(requests[3].originAccountId, null)
 })
 
 for (const fails of [false, true]) {
@@ -225,7 +296,8 @@ for (const fails of [false, true]) {
       return new Response(JSON.stringify(fails ? { error: 'Saldo insuficiente' } : { id: 11 }), { status: fails ? 409 : 201 })
     })
     let refreshed = false
-    const ctx = financeState({ showMovementForm: true, refreshDashboard: async () => { refreshed = true } })
+    const ctx = financeState({ showMovementForm: true, movementMode: 'investment',
+      refreshDashboard: async () => { refreshed = true } })
     await ctx.handleSaveMovement({ preventDefault() {}, currentTarget: {} })
     assert.equal(ctx.showMovementForm, fails)
     assert.equal(ctx.submitting, false)

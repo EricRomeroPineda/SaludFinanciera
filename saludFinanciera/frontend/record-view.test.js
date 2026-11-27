@@ -67,6 +67,35 @@ test('view toggle is icon-only with an accessible label and hover description fo
   }
 })
 
+test('new card asks for type first, then name, account number and existing type-specific rules', () => {
+  const ctx = { ...methods('salud-financiera'), formatMoney: (value) => `$${value}` }
+  ctx.startCardCreation()
+  assert.equal(ctx.newAccountType, '')
+  assert.equal(ctx.showAccountForm, true)
+  const initial = text(ctx.renderAccountForm())
+  assert.match(initial, /<select name="type" required/)
+  assert.doesNotMatch(initial, /name="name"|name="depositDetails"|name="available"|name="total"|name="statementDate"|Guardar cuenta/)
+  ctx.newAccountType = 'Tarjeta de débito'
+  const debit = text(ctx.renderAccountForm())
+  assert.ok(debit.indexOf('name="type"') < debit.indexOf('name="name"'))
+  assert.ok(debit.indexOf('name="name"') < debit.indexOf('name="depositDetails"'))
+  assert.ok(debit.indexOf('name="depositDetails"') < debit.indexOf('name="available"'))
+  assert.match(debit, /Número de cuenta o CLABE \(opcional\)/)
+  assert.match(debit, /name="available"[^>]*required/)
+  assert.doesNotMatch(debit, /name="(?:total|statementDate|paymentDueDate|paymentToAvoidInterest)"/)
+  ctx.newAccountType = 'Tarjeta de crédito'
+  const credit = text(ctx.renderAccountForm())
+  for (const field of ['total', 'available', 'statementDate', 'paymentDueDate', 'paymentToAvoidInterest']) {
+    assert.match(credit, new RegExp(`name="${field}"[^>]*required`))
+  }
+  assert.match(credit, /Saldo utilizado \(deuda actual\)/)
+  ctx.startAccountEdit({ id: 8, name: 'Mi tarjeta', type: 'Tarjeta de crédito',
+    available: '80', total: '100', depositDetails: 'Cuenta 001' })
+  const edited = text(ctx.renderAccountForm())
+  assert.match(edited, /name="name"[^>]*\.value=Mi tarjeta/)
+  assert.match(edited, /name="depositDetails"[^>]*\.value=Cuenta 001/)
+})
+
 test('cards keep their categories and sort pending credit by deadline in both independent views', () => {
   const credit = { type: 'Tarjeta de crédito', available: '80', total: '100',
     paymentToAvoidInterest: '20', statementDate: '2026-11-01' }

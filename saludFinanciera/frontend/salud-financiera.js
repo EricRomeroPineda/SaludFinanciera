@@ -66,6 +66,7 @@ class SaludFinanciera extends LitElement {
     selectedPlan: { state: true },
     pendingDeletePlan: { state: true },
     movementOperation: { state: true },
+    movementMode: { state: true },
     movementLoanId: { state: true },
     editingMovement: { state: true },
     pendingEvidenceMovementId: { state: true },
@@ -111,6 +112,7 @@ class SaludFinanciera extends LitElement {
     this.selectedPlan = null
     this.pendingDeletePlan = null
     this.movementOperation = 'expense'
+    this.movementMode = 'normal'
     this.movementLoanId = null
     this.editingMovement = null
     this.pendingEvidenceMovementId = null
@@ -390,6 +392,7 @@ class SaludFinanciera extends LitElement {
     this.editingMovement = null
     this.createdCategory = null
     this.movementOperation = 'expense'
+    this.movementMode = 'investment'
     this.movementLoanId = null
     this.newMovementDefaults = { planId: plan.id, planName: plan.name }
     this.showMovementForm = true
@@ -402,6 +405,7 @@ class SaludFinanciera extends LitElement {
     this.editingMovement = null
     this.createdCategory = null
     this.movementLoanId = loan.id
+    this.movementMode = 'loan'
     this.movementOperation = loan.type === 'me_deben' ? 'income' : 'expense'
     this.newMovementDefaults = {
       amount: loan.remaining,
@@ -416,17 +420,25 @@ class SaludFinanciera extends LitElement {
     this.submitting = true
 
     const formData = new FormData(event.currentTarget)
+    const mode = this.movementMode || 'normal'
+    const loan = (this.dashboard?.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId))
+    if (mode === 'loan' && !loan) {
+      this.error = 'Selecciona un préstamo disponible antes de registrar el abono.'
+      this.submitting = false
+      return
+    }
+    const operation = mode === 'loan' ? loan.type === 'me_deben' ? 'income' : 'expense'
+      : mode === 'normal' ? this.movementOperation : 'expense'
     const payload = {
-      operation: this.movementOperation,
+      operation,
       date: formData.get('date'),
       amount: formData.get('amount'),
-      originAccountId: formData.get('originAccountId') || null,
-      destinationAccountId: formData.get('destinationAccountId') || null,
-      categoryId: formData.get('categoryId') || null,
-      planId: formData.get('planId') || null,
-      subscriptionId: this.movementOperation === 'expense'
-        ? formData.get('subscriptionId') || null : this.editingMovement?.subscriptionId || null,
-      ...(this.movementLoanId ? { loanId: this.movementLoanId, loanKind: 'abono', categoryId: null, planId: null, subscriptionId: null } : {}),
+      originAccountId: operation === 'income' ? null : formData.get('originAccountId') || null,
+      destinationAccountId: operation === 'expense' ? null : formData.get('destinationAccountId') || null,
+      categoryId: mode === 'normal' && operation !== 'transfer' ? formData.get('categoryId') || null : null,
+      planId: mode === 'investment' ? formData.get('planId') || null : null,
+      subscriptionId: mode === 'subscription' ? formData.get('subscriptionId') || null : null,
+      ...(mode === 'loan' ? { loanId: this.movementLoanId, loanKind: 'abono' } : {}),
     }
     const editingId = this.pendingEvidenceMovementId || this.editingMovement?.id
     const evidence = this.renderRoot?.querySelector('#movement-evidence')
@@ -448,6 +460,7 @@ class SaludFinanciera extends LitElement {
       this.pendingEvidenceMovementId = null
       this.editingMovement = null
       this.newMovementDefaults = null
+      this.movementMode = 'normal'
       await this.refreshDashboard()
     } catch (error) {
       if (savedId && evidence?.pending.length) {
@@ -480,6 +493,8 @@ class SaludFinanciera extends LitElement {
       return
     }
     this.movementLoanId = movement.loanId || null
+    this.movementMode = movement.loanId ? 'loan' : movement.planId ? 'investment'
+      : movement.subscriptionId ? 'subscription' : 'normal'
     this.error = ''
     this.createdCategory = null
     this.newMovementDefaults = null
@@ -559,6 +574,7 @@ class SaludFinanciera extends LitElement {
   startCardPayment(card) {
     this.pendingEvidenceMovementId = null
     this.movementLoanId = null
+    this.movementMode = 'normal'
     this.movementOperation = 'transfer'
     this.editingMovement = null
     this.createdCategory = null
@@ -569,7 +585,7 @@ class SaludFinanciera extends LitElement {
 
   startCardCreation() {
     this.editingAccount = null
-    this.newAccountType = 'Tarjeta de crédito'
+    this.newAccountType = ''
     this.formLimit = ''
     this.formAvailable = ''
     this.showAccountForm = true
@@ -621,6 +637,7 @@ class SaludFinanciera extends LitElement {
         `Pendiente del periodo ${periodLabel}`],
       ['Ingresos del periodo', this.formatMoney(activity.income), periodLabel, 'positive'],
       ['Gastos del periodo', this.formatMoney(activity.expenses), periodLabel, 'negative'],
+      ['Inversión del periodo', this.formatMoney(activity.investment), 'Aportaciones a planes · ' + periodLabel, 'positive'],
       ['Suscripciones activas', summary.activeSubscriptionsCount, `${this.formatMoney(summary.monthlySubscriptionTotal)} al mes`],
       ['Planes futuros', summary.plansCount, 'Metas registradas'],
       ['Movimientos recientes', summary.movementsCount, 'Hasta 250 registros'],
@@ -642,10 +659,10 @@ class SaludFinanciera extends LitElement {
             this.overviewPickerYear = undefined
           }}>Mes actual</button>
         </div>
-        <p class="form-hint">El periodo filtra ingresos, gastos y pagos pendientes. Los vencimientos del día 1 al 14
+        <p class="form-hint">El periodo filtra ingresos, gastos, inversión en planes y pagos pendientes. Los vencimientos del día 1 al 14
           corresponden al mes anterior; lo pendiente se arrastra al mes actual. Saldos y deuda son actuales.
           Los pagos se descuentan con transferencias a la tarjeta desde el día siguiente al vencimiento anterior
-          (un mes antes), incluso antes del corte, o con tu confirmación manual. Transferencias y préstamos no cuentan como ingresos ni gastos.</p>
+          (un mes antes), incluso antes del corte, o con tu confirmación manual. Las aportaciones se muestran como inversión, no como gasto; transferencias y préstamos no cuentan como ingresos ni gastos.</p>
         ${totals.missingPayments ? html`<p class="form-hint">${totals.missingPayments} créditos sin fecha límite o importe de pago: no incluidos en el pago del periodo.</p>` : ''}
       </section>
       <section class="metric-grid" aria-label="Resumen">
@@ -834,16 +851,21 @@ class SaludFinanciera extends LitElement {
     const used = Math.round(Number(this.formLimit) * 100) - Math.round(Number(this.formAvailable) * 100)
     return html`
       <form class="account-form" @submit=${this.handleCreateAccount}>
-        <label>Nombre<input name="name" maxlength="100" placeholder="Cuenta principal" .value=${account.name || ''} required /></label>
-        <label>Datos de depósito (opcional)<input name="depositDetails" maxlength="500"
-          placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${account.depositDetails || ''} /><copy-deposit field></copy-deposit></label>
-        <label>Tipo
+        <label>Tipo de tarjeta o cuenta
           <select name="type" required @change=${(event) => { this.newAccountType = event.target.value }}>
             <option value="" .selected=${!this.newAccountType} disabled>Selecciona un tipo</option>
             <option value="Tarjeta de crédito" .selected=${credit}>Crédito</option>
             <option value="Tarjeta de débito" .selected=${isDebitAccount(this.newAccountType)}>Débito</option>
             <option value="Efectivo" .selected=${isCashAccount(this.newAccountType)}>Efectivo</option>
           </select>
+        </label>
+        ${this.newAccountType ? html`
+        <label>Nombre de ${isCashAccount(this.newAccountType) ? 'la cuenta' : 'la tarjeta'}
+          <input name="name" maxlength="100" placeholder="Cuenta principal" .value=${account.name || ''} required />
+        </label>
+        <label>${isCashAccount(this.newAccountType) ? 'Datos de depósito (opcional)' : 'Número de cuenta o CLABE (opcional)'}
+          <input name="depositDetails" maxlength="500"
+            placeholder="Banco, titular, cuenta, CLABE o referencia" .value=${account.depositDetails || ''} /><copy-deposit field></copy-deposit>
         </label>
         ${credit ? html`
           <label>Crédito total (límite máximo)
@@ -856,16 +878,17 @@ class SaludFinanciera extends LitElement {
             @input=${(event) => { this.formAvailable = event.target.value }} required />
         </label>
         ${credit ? html`
-          ${credit ? html`<label>Saldo utilizado (deuda actual)
+          <label>Saldo utilizado (deuda actual)
             <output>${this.formLimit === '' || this.formAvailable === '' ? 'Introduce crédito total y disponible' : used < 0
               ? 'El disponible no puede superar el límite' : this.formatMoney(used / 100)}</output>
-          </label>` : ''}
+          </label>
           <p class="form-hint">Se guardan el crédito total y el disponible por separado. Deuda total = crédito total − crédito disponible; no se captura ni se guarda como disponible.</p>
           <label>Fecha de corte<input name="statementDate" type="date" .value=${account.statementDate || ''} ?required=${credit} /></label>
           <label>Fecha límite de pago<input name="paymentDueDate" type="date" .value=${account.paymentDueDate || ''} ?required=${credit} /></label>
           <label>Pago para no generar intereses de este mes<input name="paymentToAvoidInterest" type="number" min="0" step="0.01" .value=${account.paymentToAvoidInterest ?? ''} ?required=${credit} /></label>
         ` : ''}
         <div class="form-actions"><button class="primary-button compact-button" ?disabled=${this.submitting}>${this.editingAccount ? 'Guardar cambios' : 'Guardar cuenta'}</button></div>
+        ` : ''}
       </form>
     `
   }
@@ -1191,6 +1214,8 @@ class SaludFinanciera extends LitElement {
       return
     }
     this.movementLoanId = null
+    this.movementMode = event?.kind === 'plan' ? 'investment'
+      : event?.kind === 'subscription' ? 'subscription' : 'normal'
     this.error = ''
     this.createdCategory = null
     this.editingMovement = null
@@ -1220,6 +1245,7 @@ class SaludFinanciera extends LitElement {
     this.newMovementDefaults = null
     this.createdCategory = null
     this.movementLoanId = null
+    this.movementMode = 'normal'
     if (savedId) {
       this.error = ''
       try {
@@ -1244,12 +1270,12 @@ class SaludFinanciera extends LitElement {
         </div>
         ${this.error ? html`<p class="error-message" role="alert">${this.error}</p>` : ''}
         ${this.showMovementForm ? keyed(this.editingMovement?.id ?? this.newMovementDefaults ?? 'new', this.renderMovementForm()) : ''}
-        <button class="text-button" type="button" @click=${() => {
+        ${(!this.movementMode || this.movementMode === 'normal') ? html`<button class="text-button" type="button" @click=${() => {
           this.showCategoryForm = !this.showCategoryForm
           this.categoryError = ''
           this.categoryNotice = ''
         }}>${this.showCategoryForm ? 'Cerrar categorías' : html`${addIcon()}Registrar categoría`}</button>
-        ${this.showCategoryForm ? this.renderCategoryForm() : ''}
+        ${this.showCategoryForm ? this.renderCategoryForm() : ''}` : ''}
       </dialog>
     `
   }
@@ -1299,8 +1325,28 @@ class SaludFinanciera extends LitElement {
     `
   }
 
+  selectMovementMode(event) {
+    const mode = event.currentTarget.value
+    if (!['normal', 'loan', 'subscription', 'investment'].includes(mode)) return
+    if (!event.currentTarget.checked) {
+      event.currentTarget.checked = true
+      return
+    }
+    this.movementMode = mode
+    this.movementLoanId = null
+    if (mode !== 'normal') this.movementOperation = 'expense'
+  }
+
+  selectMovementLoan(event) {
+    const id = Number(event.currentTarget.value)
+    const loan = (this.dashboard.loans || []).find((item) => Number(item.id) === id)
+    this.movementLoanId = loan?.id || null
+    this.movementOperation = loan?.type === 'me_deben' ? 'income' : 'expense'
+  }
+
   renderMovementForm() {
     const movement = this.editingMovement || {}
+    const mode = this.movementMode || 'normal'
     const planId = movement.planId || (!this.editingMovement ? this.newMovementDefaults?.planId : null)
     const subscriptionId = movement.subscriptionId || (!this.editingMovement ? this.newMovementDefaults?.subscriptionId : null)
     const categoryId = this.createdCategory?.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
@@ -1313,42 +1359,62 @@ class SaludFinanciera extends LitElement {
       return category.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
     })
     const accounts = this.dashboard.accounts
-    const loan = (this.dashboard.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId))
+    const loan = mode === 'loan'
+      ? (this.dashboard.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId)) : null
 
     return html`
       <form class="movement-form" @submit=${this.handleSaveMovement}>
-        ${this.newMovementDefaults?.cardName
+        ${mode === 'normal' && this.newMovementDefaults?.cardName
           ? html`<p class="form-hint">Registra una transferencia hacia ${this.newMovementDefaults.cardName} para reflejar el pago en el saldo disponible.</p>`
           : ''}
-        ${this.newMovementDefaults?.planName
+        ${mode === 'investment' && this.newMovementDefaults?.planName
           ? html`<p class="form-hint">Registra una aportación para ${this.newMovementDefaults.planName}; se descontará de la cuenta de origen y se sumará al monetizado del plan.</p>`
           : ''}
         ${loan ? html`<p class="form-hint">Abono a ${loan.name}. Pendiente: ${this.formatMoney(loan.remaining)}.
           ${loan.type === 'me_deben' ? 'El dinero regresará a tu cuenta.' : 'El dinero saldrá de tu cuenta para pagar la deuda.'}</p>` : ''}
-        <label>Operación
+        <fieldset class="movement-mode">
+          <legend>Tipo de registro (elige uno)</legend>
+          ${[
+            ['normal', 'Registro normal'],
+            ['loan', 'Abono a préstamo (opcional)'],
+            ['subscription', 'Suscripción relacionada (opcional)'],
+            ['investment', 'Aportación a plan (opcional) · Inversión'],
+          ].map(([value, label]) => html`<label><input type="checkbox" name="movementMode"
+            value=${value} .checked=${mode === value} @change=${this.selectMovementMode} />${label}</label>`)}
+        </fieldset>
+        ${mode === 'normal' ? html`<label>Operación
           <select
             name="operation"
             .value=${this.movementOperation}
             @change=${(event) => { this.movementOperation = event.currentTarget.value; this.movementLoanId = null }}
           >
-            <option value="expense">${loan ? 'Pago de abono · Salida de cuenta' : 'Gasto'}</option>
-            <option value="income" ?selected=${this.movementOperation === 'income'}>${loan ? 'Cobro de abono · Entrada a cuenta' : 'Ingreso'}</option>
+            <option value="expense">Gasto</option>
+            <option value="income" ?selected=${this.movementOperation === 'income'}>Ingreso</option>
             <option value="transfer" ?selected=${this.movementOperation === 'transfer'}>Transferencia</option>
           </select>
-        </label>
-        ${this.movementOperation !== 'transfer' ? html`
+        </label>` : html`<p class="form-hint">Operación fija: ${mode === 'loan' && loan?.type === 'me_deben' ? 'Ingreso (cobro de préstamo)' : 'Gasto (salida de cuenta)'}.</p>`}
+        ${mode === 'loan' ? html`
           <label>Abono a préstamo (opcional)
-            <select name="loanId" .value=${String(this.movementLoanId || '')} @change=${(event) => {
-              this.movementLoanId = event.currentTarget.value ? Number(event.currentTarget.value) : null
-            }}>
-              <option value="" ?selected=${!this.movementLoanId}>Sin préstamo</option>
+            <select name="loanId" required .value=${String(this.movementLoanId || '')} @change=${this.selectMovementLoan}>
+              <option value="" ?selected=${!this.movementLoanId}>Selecciona un préstamo</option>
               ${(this.dashboard.loans || []).filter((item) =>
-                (this.movementOperation === 'income' ? item.type === 'me_deben' : item.type === 'debo') &&
                 (Number(item.remaining) > 0 || item.id === movement.loanId)
               ).map((item) => html`<option value=${item.id} ?selected=${Number(this.movementLoanId) === Number(item.id)}>${item.name} · ${this.formatMoney(item.remaining)} pendiente</option>`)}
             </select>
           </label>
         ` : ''}
+        ${mode === 'subscription' ? html`<label>Suscripción relacionada
+          <select name="subscriptionId" required .value=${String(subscriptionId || '')}>
+            <option value="" ?selected=${!subscriptionId}>Selecciona una suscripción</option>
+            ${this.dashboard.subscriptions.map((subscription) => html`<option value=${subscription.id} ?selected=${Number(subscriptionId) === Number(subscription.id)}>${subscription.name}</option>`)}
+          </select>
+        </label>` : ''}
+        ${mode === 'investment' ? html`<label>Aportación a plan · Inversión
+          <select name="planId" required .value=${String(planId || '')}>
+            <option value="" ?selected=${!planId}>Selecciona un plan</option>
+            ${this.dashboard.plans.map((plan) => html`<option value=${plan.id} ?selected=${Number(planId) === Number(plan.id)}>${plan.name}</option>`)}
+          </select>
+        </label>` : ''}
         <label>Fecha<input name="date" type="date" .value=${movement.date || this.newMovementDefaults?.date || localDateInput()} required /></label>
         <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount ?? this.newMovementDefaults?.amount ?? ''} required /></label>
         ${this.movementOperation !== 'income' ? html`
@@ -1367,25 +1433,11 @@ class SaludFinanciera extends LitElement {
             </select>
           </label>
         ` : ''}
-        ${this.movementOperation !== 'transfer' && !loan ? html`
+        ${mode === 'normal' && this.movementOperation !== 'transfer' ? html`
           <label>Categoría
             <select name="categoryId" .value=${String(categoryId || '')}>
               <option value="" ?selected=${!categoryId}>Sin categoría</option>
               ${categories.map((category) => html`<option value=${category.id} ?selected=${Number(categoryId) === Number(category.id)}>${category.name}</option>`)}
-            </select>
-          </label>
-        ` : ''}
-        ${this.movementOperation === 'expense' && !loan ? html`
-          <label>Suscripción relacionada (opcional)
-            <select name="subscriptionId" .value=${String(subscriptionId || '')}>
-              <option value="" ?selected=${!subscriptionId}>Sin suscripción</option>
-              ${this.dashboard.subscriptions.map((subscription) => html`<option value=${subscription.id} ?selected=${Number(subscriptionId) === Number(subscription.id)}>${subscription.name}</option>`)}
-            </select>
-          </label>
-          <label>Aportación a plan (opcional)
-            <select name="planId" .value=${String(planId || '')}>
-              <option value="" ?selected=${!planId}>Sin plan</option>
-              ${this.dashboard.plans.map((plan) => html`<option value=${plan.id} ?selected=${Number(planId) === Number(plan.id)}>${plan.name}</option>`)}
             </select>
           </label>
         ` : ''}

@@ -148,6 +148,9 @@ function mockMovementConnection(t, { oldPlanId = null, failSync = false } = {}) 
       if (sql.includes('FROM plan_futuro WHERE id_usuario')) {
         return [params.slice(1).map((id) => ({ id }))]
       }
+      if (sql.includes('SELECT id FROM suscripciones WHERE id_usuario')) {
+        return [params.slice(1).map((id) => ({ id }))]
+      }
       if (sql.includes('SELECT id FROM plan_futuro')) return [[{ id: params[0] }]]
       if (sql.includes('SELECT id, disponible FROM cuenta')) return [[{ id: 2, disponible: '1000.00' }]]
       if (failSync && sql.includes('SET monetizado =')) throw new Error('sync failed')
@@ -159,6 +162,20 @@ function mockMovementConnection(t, { oldPlanId = null, failSync = false } = {}) 
 }
 
 const movement = { operation: 'expense', amount: '100', date: '2026-11-18', originAccountId: 2, planId: 9 }
+
+test('linked movements reject multiple relations or a non-expense subscription without changing balances', async (t) => {
+  const calls = mockMovementConnection(t)
+  for (const input of [
+    { ...movement, categoryId: 4 },
+    { ...movement, subscriptionId: 5 },
+    { ...movement, planId: null, subscriptionId: 5, operation: 'income',
+      originAccountId: null, destinationAccountId: 2 },
+  ]) {
+    await assert.rejects(saveMovement(7, input), { statusCode: 400 })
+  }
+  assert.ok(!calls.some(({ sql }) => /(?:UPDATE cuenta|INSERT INTO movimiento)/.test(sql)))
+  assert.equal(calls.filter(({ sql }) => sql === 'ROLLBACK').length, 3)
+})
 
 for (const [label, oldPlanId, newPlanId] of [
   ['create', null, 9], ['edit in same plan', 9, 9], ['reassign', 8, 9],

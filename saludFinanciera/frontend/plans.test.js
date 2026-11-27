@@ -89,6 +89,7 @@ test('overview shows complete period activity, remaining card sums, warnings and
   assert.match(markup, /10,000\.10/)
   assert.match(markup, /Gastos del periodo/)
   assert.match(markup, /3,000\.20/)
+  assert.match(markup, /Inversión del periodo/)
   assert.match(markup, /Pago para no generar intereses[\s\S]*?\$70\.00/)
   assert.match(markup, /⚠ Pago vencido/)
   assert.match(markup, /revisa el nuevo pago para no generar intereses/)
@@ -309,7 +310,7 @@ test('registering a plan movement opens a fresh expense with that plan preselect
   assert.deepEqual(ctx.newMovementDefaults, { planId: 8, planName: 'Vacaciones' })
   ctx.dashboard = { ...ctx.dashboard, accounts: [], categories: [], subscriptions: [] }
   const markup = text(ctx.renderMovementForm())
-  assert.match(markup, /<select name="planId" .value=8>/)
+  assert.match(markup, /<select name="planId" required .value=8>/)
   assert.match(markup, /Registra una aportación para Vacaciones/)
 })
 

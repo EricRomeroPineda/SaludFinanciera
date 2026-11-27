@@ -71,7 +71,8 @@ test('dashboard computes all-month activity separately from the capped list and 
       assert.doesNotMatch(sql, /LIMIT/)
       assert.match(sql, /WHERE m.id_usuario = \?/)
       assert.match(sql, /m.id_prestamo IS NULL AND \(cat.tipo = 'ingreso'/)
-      assert.match(sql, /m.id_prestamo IS NULL AND \(cat.tipo = 'gasto'/)
+      assert.match(sql, /m.id_prestamo IS NULL AND m.id_plan_futuro IS NULL AND \(cat.tipo = 'gasto'/)
+      assert.match(sql, /m.id_plan_futuro IS NOT NULL AND m.id_prestamo IS NULL/)
       assert.match(sql, /GROUP BY DATE_FORMAT\(m.fecha, '%Y-%m'\)/)
       return [[{ month: '2026-11', income: '10000.10', expenses: '3000.20' }]]
     }

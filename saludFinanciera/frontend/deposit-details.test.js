@@ -30,7 +30,8 @@ function text(value) {
 test('all four forms show an optional text deposit field and restore saved text while Me deben omits it', () => {
   const financial = {
     ...methods(finance), dashboard: { accounts: [], plans: [] }, showPlanForm: true, planUnit: 'mes',
-    editingAccount: { depositDetails: deposit }, editingPlan: { depositDetails: deposit },
+    editingAccount: { depositDetails: deposit }, newAccountType: 'Tarjeta de débito',
+    editingPlan: { depositDetails: deposit },
   }
   const markup = [
     financial.renderAccountForm(), financial.renderPlans(),

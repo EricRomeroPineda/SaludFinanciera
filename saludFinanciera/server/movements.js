@@ -99,6 +99,12 @@ async function lockAndValidateReferences(connection, userId, movement) {
   if (operation !== 'expense' && planId) {
     throw invalid('Una aportación a un plan debe registrarse como gasto desde una cuenta.')
   }
+  if (subscriptionId && operation !== 'expense') {
+    throw invalid('Una suscripción relacionada debe registrarse como gasto desde una cuenta.')
+  }
+  if ([categoryId, planId, subscriptionId].filter(Boolean).length > 1) {
+    throw invalid('Selecciona solo una relación: categoría, plan o suscripción.')
+  }
   if (operation === 'transfer' && categoryId) {
     throw invalid('Una transferencia no debe llevar categoría de ingreso o gasto.')
   }
