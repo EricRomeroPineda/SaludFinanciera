@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit'
 import { apiRequest } from '../api.js'
 import { protectedAdminId, userRoles, userRoleLabel } from '../../shared/user-roles.js'
+import './account-removal.js'
 
 const root = '/api/admin/users'
 
@@ -79,6 +80,11 @@ class UserManagement extends LitElement {
           </select></label>
           <button type="submit" ?disabled=${this.busy || user.id === protectedAdminId}>Guardar rol</button>
         </form>
+        <account-removal .userId=${user.id} .userName=${user.name} admin
+          @account-removed=${(event) => {
+            this.users = this.users.filter((entry) => entry.id !== event.detail.id)
+            this.notice = `Usuario eliminado definitivamente.${event.detail.warning ? ` ${event.detail.warning}` : ''}`
+          }}></account-removal>
         ${user.id === protectedAdminId ? html`<small>Administrador protegido: este rol no se puede quitar.</small>` : ''}
       </li>`)}</ul>
       ${!this.busy && !this.error && !users.length ? html`<p>No hay usuarios coincidentes.</p>` : ''}

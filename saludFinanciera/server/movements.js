@@ -245,10 +245,11 @@ export async function saveMovementInTransaction(connection, userId, input, movem
 
   if (movementId) {
     const [oldRows] = await connection.execute(
-      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto, archivo_familiar FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!oldRows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
+    if (oldRows[0].archivo_familiar) throw invalid('Este historial familiar conservado es de solo lectura.', 403)
     if (oldRows[0].clase_prestamo === 'desembolso') {
       throw invalid('El desembolso inicial es fijo y no se puede editar desde movimientos.', 409)
     }
@@ -339,10 +340,11 @@ export async function deleteMovement(userId, movementId) {
   try {
     await connection.beginTransaction()
     const [rows] = await connection.execute(
-      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
+      'SELECT id, id_suscripcion, id_plan_futuro, id_prestamo, clase_prestamo, id_cuenta_origen, id_cuenta_destino, id_usuario_destino, monto, archivo_familiar FROM movimiento WHERE id = ? AND id_usuario = ? FOR UPDATE',
       [movementId, userId],
     )
     if (!rows.length) throw invalid('No se encontró el movimiento de tu usuario.', 404)
+    if (rows[0].archivo_familiar) throw invalid('Este historial familiar conservado es de solo lectura.', 403)
     if (rows[0].clase_prestamo === 'desembolso') {
       throw invalid('El desembolso inicial es fijo y no se puede eliminar desde movimientos.', 409)
     }

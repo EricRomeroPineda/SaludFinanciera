@@ -7,7 +7,7 @@ import {
 
 async function authorize(connection, userId, movementId, write = false) {
   const [rows] = await connection.execute(
-    `SELECT m.id_usuario AS ownerId FROM movimiento m
+    `SELECT m.id_usuario AS ownerId, m.archivo_familiar AS archivedFamily FROM movimiento m
      WHERE m.id = ? AND (m.id_usuario = ?${write ? '' : ` OR m.id_usuario_destino = ? OR EXISTS (
        SELECT 1 FROM familia_integrante viewer
        INNER JOIN familia_integrante owner ON owner.id_familia = viewer.id_familia
@@ -16,7 +16,8 @@ async function authorize(connection, userId, movementId, write = false) {
     write ? [movementId, userId] : [movementId, userId, userId, userId],
   )
   if (!rows.length) throw invalid('No se encontró el movimiento o no tienes permiso para consultar su evidencia.', 404)
-  return Number(rows[0].ownerId) === Number(userId)
+  if (write && rows[0].archivedFamily) throw invalid('El historial familiar conservado es de solo lectura.', 403)
+  return !rows[0].archivedFamily && Number(rows[0].ownerId) === Number(userId)
 }
 
 export async function listEvidence(userId, movementId) {

@@ -16,6 +16,7 @@ import '../../saludFinanciera/frontend/card-catalog-admin.js'
 import { invalidateCardImages } from '../../saludFinanciera/frontend/card-catalog-image.js'
 import { userRoleLabel } from '../../shared/user-roles.js'
 import './user-management.js'
+import './account-removal.js'
 
 class Inicio extends LitElement {
   static styles = [unsafeCSS(appearanceStyles), unsafeCSS(styles), unsafeCSS(responsiveStyles)]
@@ -332,7 +333,7 @@ class Inicio extends LitElement {
         <button class="quiet-button back-to-menu" type="button" @click=${() => { this.activeSection = 'menu' }}>← Menú principal</button>
         ${this.user.role === 'admin' ? html`<user-management @user-role-updated=${(event) => {
           if (Number(event.detail.id) === Number(this.user.id)) this.user = { ...this.user, role: event.detail.role }
-        }}></user-management>` : html`<p class="error-message" role="alert">Solo un administrador puede gestionar cuentas.</p>`}
+        }} @account-removed=${this.handleAccountRemoved}></user-management>` : html`<p class="error-message" role="alert">Solo un administrador puede gestionar cuentas.</p>`}
       </main>`
     }
     if (this.activeSection === 'card-catalog') {
@@ -439,6 +440,7 @@ class Inicio extends LitElement {
           </div>
         </div>
         ${this.error ? html`<div class="error-message dashboard-error" role="alert">${this.error}</div>` : ''}
+        ${this.notice ? html`<p class="success-message" role="status">${this.notice}</p>` : ''}
         <nav class="section-menu" aria-label="Menú principal">
           <article class="section-menu-card">
             <span class="brand-icon" aria-hidden="true">$</span>
@@ -584,7 +586,22 @@ class Inicio extends LitElement {
           </button>
         </form>
       </section>
+      <account-removal .userId=${this.user?.id} .userName=${this.user?.name}
+        @account-removed=${this.handleAccountRemoved}></account-removal>
     `
+  }
+
+  handleAccountRemoved(event) {
+    const { id, deleted, warning } = event.detail
+    if (Number(id) !== Number(this.user?.id)) return
+    this.notice = `${deleted ? 'Tu cuenta se eliminó definitivamente.' : 'Tu información financiera se borró y te desvinculaste de la familia.'}${warning ? ` ${warning}` : ''}`
+    this.error = ''
+    this.activeSection = 'menu'
+    this.activeTab = 'overview'
+    if (this.photoPreview) URL.revokeObjectURL(this.photoPreview)
+    this.photoPreview = ''
+    this.photoFile = null
+    if (deleted) this.user = null
   }
 }
 
