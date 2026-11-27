@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { test } from 'node:test'
+import packageInfo from '../../package.json' with { type: 'json' }
 
 registerHooks({
   load(url, context, next) {
@@ -20,6 +21,27 @@ function text(value) {
   if (value?.strings) return value.strings.reduce((output, part, index) => output + part + text(value.values[index]), '')
   return value == null || typeof value === 'function' ? '' : String(value)
 }
+
+test('main menu keeps the finance section, shows the package version and uses the site brand', () => {
+  const inicio = components.get('inicio-app').prototype
+  const menu = text(inicio.renderMenu.call({
+    renderHeader: () => '', openFinancialSection: () => {},
+  }))
+  assert.match(menu, /<nav class="section-menu" aria-label="Menú principal">/)
+  assert.match(menu, /<strong>Salud financiera<\/strong>/)
+  assert.match(menu, new RegExp(`Versión ${packageInfo.version.replaceAll('.', '\\.')}`))
+  const header = text(inicio.renderHeader.call({
+    activeSection: 'menu', user: { name: 'Ana' }, renderAppearanceToggle: () => '',
+    renderThemeToggle: () => '', renderThemePicker: () => '',
+  }))
+  assert.match(header, /aria-label="lifekit.work"/)
+  assert.doesNotMatch(header, /Salud Financiera/)
+  const auth = text(inicio.renderAuth.call({
+    authMode: 'login', renderAppearanceToggle: () => '',
+  }))
+  assert.match(auth, /lifekit<span>\.work<\/span>/)
+  assert.doesNotMatch(auth, /Salud Financiera|BIENESTAR FINANCIERO/)
+})
 
 test('profile includes an independent family card with explicit acceptance and no automatic joining', () => {
   const inicio = components.get('inicio-app').prototype

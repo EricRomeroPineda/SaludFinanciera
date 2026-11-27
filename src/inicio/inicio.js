@@ -6,6 +6,7 @@ import appearanceStyles from './appearance.css?inline'
 import styles from './styles.css?inline'
 import responsiveStyles from './responsive.css?inline'
 import { themes } from '../../shared/profile.js'
+import packageInfo from '../../package.json' with { type: 'json' }
 import defaultAvatar from '../assets/default-avatar.svg'
 import './familia.js'
 import './email-settings.js'
@@ -317,7 +318,7 @@ class Inicio extends LitElement {
       ${keyed(this.emailLink.token, html`<email-settings .purpose=${this.emailLink.purpose} .token=${this.emailLink.token}></email-settings>`)}
     </main>`
     if (this.loading) {
-      return html`<main class="loading-screen"><span class="spinner"></span><p>Cargando Salud Financiera…</p></main>`
+      return html`<main class="loading-screen"><span class="spinner"></span><p>Cargando lifekit.work…</p></main>`
     }
 
     if (!this.user) return this.renderAuth()
@@ -335,9 +336,9 @@ class Inicio extends LitElement {
   renderHeader() {
     return html`
       <header class=${`app-header${this.activeSection === 'finance' && this.activeTab !== 'profile' ? ' finance-header' : ''}`}>
-        <a class="brand" href="/" aria-label="Salud Financiera">
-          <span class="brand-icon" aria-hidden="true">$</span>
-          Salud <span>Financiera</span>
+        <a class="brand" href="/" aria-label="lifekit.work">
+          <span class="brand-icon" aria-hidden="true">L</span>
+          lifekit<span>.work</span>
         </a>
         <div class="user-actions">
           ${this.renderAppearanceToggle()}
@@ -425,6 +426,7 @@ class Inicio extends LitElement {
             <span class="section-menu-link">Entrar →</span>
           </button>
         </nav>
+        <p class="menu-version">Versión ${packageInfo.version}</p>
       </main>
     `
   }
@@ -436,17 +438,17 @@ class Inicio extends LitElement {
     return html`
       <main class="auth-page">
         <section class="auth-intro">
-          <a class="brand" href="/" aria-label="Salud Financiera">
-            <span class="brand-icon" aria-hidden="true">$</span>
-            Salud <span>Financiera</span>
+          <a class="brand" href="/" aria-label="lifekit.work">
+            <span class="brand-icon" aria-hidden="true">L</span>
+            lifekit<span>.work</span>
           </a>
           <div class="intro-copy">
-            <p class="eyebrow">BIENESTAR FINANCIERO, A TU RITMO</p>
-            <h1>Más claridad para decidir. <span>Más calma para avanzar.</span></h1>
-            <p>Registra tus cuentas y consulta tu información financiera en un solo lugar.</p>
+            <p class="eyebrow">TU ESPACIO EN LIFEKIT.WORK</p>
+            <h1>Todo en un lugar. <span>A tu ritmo.</span></h1>
+            <p>Accede a tus herramientas desde un solo espacio.</p>
             <div class="privacy-note"><span aria-hidden="true">✓</span> Tus datos se consultan únicamente desde tu usuario.</div>
           </div>
-          <p class="auth-footer">Salud Financiera · Tus finanzas, bajo tu control.</p>
+          <p class="auth-footer">lifekit.work · Tu espacio personal.</p>
         </section>
 
         <section class="auth-card" aria-labelledby="auth-title">
@@ -457,7 +459,7 @@ class Inicio extends LitElement {
             <p>${registering
               ? 'Registra tu usuario, correo y palabra clave. La foto de perfil es opcional.'
               : recovering ? 'Recupera tu acceso con tu correo verificado.'
-                : 'Entra con tu usuario o correo verificado en Salud Financiera.'}</p>
+                : 'Entra con tu usuario o correo verificado en lifekit.work.'}</p>
           </div>
 
           ${this.error ? html`<div class="error-message" role="alert">${this.error}</div>` : ''}

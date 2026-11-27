@@ -148,6 +148,7 @@ a { color: inherit; text-decoration: none; }
 .section-menu-card > strong { font-size: 21px; }
 .section-menu-card > span:not(.brand-icon) { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .section-menu-card > .section-menu-link { color: var(--green); font-weight: 700; }
+.menu-version { margin: 20px 0 0; color: var(--muted); font-size: 12px; }
 .preview-photo { width: 80px; height: 80px; }
 .recovery-email { display: flex; align-items: center; gap: 8px; }
 .recovery-email input { min-width: 0; flex: 1; }
