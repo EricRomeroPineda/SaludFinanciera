@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit'
 import { apiRequest } from '../../src/api.js'
 import { depositStyles, renderDeposit } from './copy-deposit.js'
-import { loadGoogleIdentity, prepareGoogleReminders, requestGoogleAccess, syncGoogleReminder } from './google-calendar-client.js'
+import { loadGoogleIdentity, onGoogleCalendarDisconnect, prepareGoogleReminders, requestGoogleAccess, syncGoogleReminder } from './google-calendar-client.js'
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })
 const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -12,7 +12,7 @@ class GoogleCalendarSync extends LitElement {
     revision: { attribute: false }, loading: { state: true }, busy: { state: true },
     error: { state: true }, notice: { state: true }, config: { state: true },
     events: { state: true }, selected: { state: true }, results: { state: true },
-    ready: { state: true }, consent: { state: true },
+    ready: { state: true }, consent: { state: true }, authorization: { state: true },
   }
   static styles = [css`
     :host { display: block; margin: 0 0 16px; }
@@ -53,6 +53,13 @@ class GoogleCalendarSync extends LitElement {
     this.ready = false
     this.consent = false
     this.version = 0
+    this.connectionVersion = 0
+    this.authorization = null
+  }
+
+  connectedCallback() {
+    super.connectedCallback()
+    this.removeDisconnectListener = onGoogleCalendarDisconnect(() => this.disconnect())
   }
 
   updated(changed) {
@@ -61,7 +68,18 @@ class GoogleCalendarSync extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
+    this.removeDisconnectListener?.()
+    this.disconnect()
     this.reset()
+  }
+
+  disconnect() {
+    this.connectionVersion = (this.connectionVersion || 0) + 1
+    this.controller?.abort()
+    this.authorization = null
+    this.busy = false
+    this.consent = false
+    this.notice = ''
   }
 
   reset() {
@@ -96,19 +114,22 @@ class GoogleCalendarSync extends LitElement {
       const config = await apiRequest('/api/calendar/google-config')
       if (version !== this.version) return
       this.config = config
-      if (!config.configured) return
+      if (!config.configured) { this.disconnect(); return }
       const data = await apiRequest(`/api/calendar?month=${encodeURIComponent(month)}&scope=month`)
       if (version !== this.version) return
       this.events = prepareGoogleReminders(month, data.events)
       const now = new Date()
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       this.selected = new Set(this.events.filter((event) => !event.reference && event.date >= today).map((event) => event.key))
-      if (this.events.some((event) => !event.reference)) {
-        await loadGoogleIdentity()
-        if (version === this.version) this.ready = true
-      }
+      if (this.authorization && (this.authorization.namespace !== config.namespace ||
+          this.authorization.clientId !== config.clientId || this.authorization.expiresAt <= Date.now())) this.disconnect()
+      await loadGoogleIdentity()
+      if (version === this.version) this.ready = true
     } catch (error) {
-      if (version === this.version) this.error = error.message
+      if (version === this.version) {
+        if (error.status === 401) this.disconnect()
+        this.error = error.message
+      }
     } finally {
       if (version === this.version) this.loading = false
     }
@@ -121,8 +142,46 @@ class GoogleCalendarSync extends LitElement {
     this.selected = selected
   }
 
+  async checkSession(config) {
+    const current = await apiRequest('/api/calendar/google-config')
+    if (!current.configured || current.namespace !== config.namespace || current.clientId !== config.clientId) {
+      throw new Error('La sesión cambió. Vuelve a abrir Recordatorios y conecta tu cuenta de Google.')
+    }
+  }
+
+  async connect() {
+    if (this.busy || !this.ready || !this.config?.configured || this.familyView) return
+    this.busy = true
+    this.error = ''
+    this.notice = ''
+    const version = this.version
+    const connectionVersion = this.connectionVersion
+    const config = this.config
+    try {
+      // Start OAuth directly in the click handler so the browser permits the account-selection popup.
+      const access = await requestGoogleAccess(config.clientId)
+      if (version !== this.version || connectionVersion !== this.connectionVersion) return
+      await this.checkSession(config)
+      if (version !== this.version || connectionVersion !== this.connectionVersion) return
+      this.authorization = { ...access, namespace: config.namespace, clientId: config.clientId }
+      this.notice = 'Google Calendar conectado. Ya puedes enviar tus recordatorios.'
+    } catch (error) {
+      if (version === this.version && connectionVersion === this.connectionVersion) {
+        this.disconnect()
+        this.error = error.message
+      }
+    } finally {
+      if (version === this.version && connectionVersion === this.connectionVersion) this.busy = false
+    }
+  }
+
   async sync() {
     if (this.busy || !this.ready || !this.consent || !this.selected.size || this.familyView) return
+    if (!this.authorization || this.authorization.expiresAt <= Date.now()) {
+      this.disconnect()
+      this.error = 'Conecta tu Google Calendar para enviar los recordatorios. Si el permiso venció, vuelve a conectar.'
+      return
+    }
     this.busy = true
     this.error = ''
     this.notice = ''
@@ -130,16 +189,20 @@ class GoogleCalendarSync extends LitElement {
     const { signal } = this.controller
     const chosen = this.events.filter((event) => this.selected.has(event.key) && !event.reference)
     const version = this.version
+    const connectionVersion = this.connectionVersion
     let completed = 0
-    let token
+    const authorization = this.authorization
     try {
-      // Keep this call directly in the click handler so the browser allows Google's popup.
-      token = await requestGoogleAccess(this.config.clientId)
       for (const event of chosen) {
         if (signal.aborted || version !== this.version) return
+        await this.checkSession(authorization)
+        if (signal.aborted || version !== this.version) return
+        if (authorization.expiresAt <= Date.now()) {
+          throw Object.assign(new Error('El permiso de Google venció. Vuelve a conectar tu cuenta.'), { status: 401 })
+        }
         try {
-          const status = await syncGoogleReminder(token, this.config.namespace, event, signal)
-          if (version !== this.version) return
+          const status = await syncGoogleReminder(authorization.token, authorization.namespace, event, signal)
+          if (signal.aborted || version !== this.version) return
           this.results = { ...this.results, [event.key]: { status } }
           this.selected = new Set([...this.selected].filter((key) => key !== event.key))
           completed++
@@ -147,6 +210,7 @@ class GoogleCalendarSync extends LitElement {
           if (signal.aborted || version !== this.version) return
           this.results = { ...this.results, [event.key]: { status: 'error', message: error.message } }
           if ([401, 403, 429].includes(error.status)) {
+            if ([401, 403].includes(error.status)) this.disconnect()
             this.error = error.message
             break
           }
@@ -155,10 +219,12 @@ class GoogleCalendarSync extends LitElement {
       if (completed) this.notice = `${completed} recordatorio(s) guardado(s) en tu calendario principal de Google.`
       if (this.selected.size) this.error ||= 'Quedaron recordatorios pendientes. Revisa los errores y vuelve a autorizar para reintentar sin duplicarlos.'
     } catch (error) {
-      if (version === this.version) this.error = error.message
+      if (!signal.aborted && version === this.version) {
+        this.disconnect()
+        this.error = error.message
+      }
     } finally {
-      token = null
-      if (version === this.version) this.busy = false
+      if (version === this.version && connectionVersion === this.connectionVersion) this.busy = false
     }
   }
 
@@ -177,11 +243,19 @@ class GoogleCalendarSync extends LitElement {
         ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
         ${this.notice ? html`<p class="notice" role="status">${this.notice}</p>` : ''}
         ${this.config?.configured === false ? html`
-          <p>Primero configura Google Calendar: habilita Calendar API y crea un cliente OAuth de tipo Aplicación web
-            en Google Cloud. Agrega <code>GOOGLE_CALENDAR_CLIENT_ID</code> al archivo <code>.env</code> y reinicia Node.
-            La guía está en el README del proyecto. No se necesita SQL ni el secreto del cliente.</p>
+          <p role="status">Google Calendar aún no está disponible.</p>
         ` : ''}
         ${this.config?.configured && !this.loading ? html`
+          <div class="actions">
+            ${this.authorization ? html`
+              <span>Google Calendar conectado</span>
+              <button type="button" @click=${this.disconnect}>Desconectar</button>
+            ` : html`
+              <button type="button" ?disabled=${this.busy || !this.ready} @click=${this.connect}>
+                Conectar mi Google Calendar
+              </button>
+            `}
+          </div>
           <p>Se enviarán únicamente los marcadores seleccionados: nombre, tipo, fecha, monto y datos de depósito si existen.
             No se enviarán movimientos registrados ni imágenes. Elige tu cuenta Google en la ventana de autorización.</p>
           <p>Se crearán <strong>tres eventos privados por compromiso</strong> el día límite en tu calendario principal,
@@ -215,9 +289,10 @@ class GoogleCalendarSync extends LitElement {
             Autorizo enviar estos datos financieros a Google Calendar.
           </label>
           <div class="actions">
-            <small>No se guardan contraseñas ni tokens. Cada envío pide autorización.</small>
-            <button type="button" ?disabled=${this.busy || !this.ready || !this.consent || !this.selected.size} @click=${this.sync}>
-              ${this.busy ? 'Sincronizando…' : `Autorizar y enviar ${this.selected.size} recordatorio(s)`}
+            <small>El permiso es temporal, solo en memoria. Se limpia al desconectar o cerrar sesión.
+              Desconectar no elimina los eventos ya enviados.</small>
+            <button type="button" ?disabled=${this.busy || !this.ready || !this.authorization || !this.consent || !this.selected.size} @click=${this.sync}>
+              ${this.busy ? 'Procesando…' : `Enviar ${this.selected.size} recordatorio(s)`}
             </button>
           </div>
         ` : ''}

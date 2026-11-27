@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import { test } from 'node:test'
 import {
   googleCalendarScope, googleEventBody, googleEventId, prepareGoogleReminders,
-  requestGoogleAccess, syncGoogleReminder,
+  requestGoogleAccess, syncGoogleReminder, clearGoogleCalendarAuthorization, onGoogleCalendarDisconnect,
 } from './google-calendar-client.js'
 
 registerHooks({
@@ -39,7 +39,7 @@ function googleMock(t, outcome = {}) {
         assert.equal(config.scope, googleCalendarScope)
         assert.equal(config.include_granted_scopes, false)
         if (outcome.popup) config.error_callback({ type: outcome.popup })
-        else config.callback({ access_token: 'test-only-token', ...outcome })
+        else config.callback({ access_token: 'test-only-token', expires_in: 3600, ...outcome })
       },
     }),
   }
@@ -227,7 +227,10 @@ test('lost insert responses and concurrent conflicts retry the same ID; unrelate
 
 test('OAuth handles denied permissions, blocked/closed popups and missing library without storing access', async (t) => {
   const oauth = googleMock(t)
-  assert.equal(await requestGoogleAccess('client'), 'test-only-token')
+  const before = Date.now()
+  const access = await requestGoogleAccess('client')
+  assert.equal(access.token, 'test-only-token')
+  assert.ok(access.expiresAt >= before + 3600000 && access.expiresAt <= Date.now() + 3600000)
   oauth.hasGrantedAllScopes = () => false
   await assert.rejects(requestGoogleAccess('client'), /permitir el acceso/)
   googleMock(t, { error: 'access_denied' })
@@ -236,6 +239,8 @@ test('OAuth handles denied permissions, blocked/closed popups and missing librar
   await assert.rejects(requestGoogleAccess('client'), /Cerraste/)
   googleMock(t, { popup: 'popup_failed_to_open' })
   await assert.rejects(requestGoogleAccess('client'), /ventanas emergentes/)
+  googleMock(t, { expires_in: 0 })
+  await assert.rejects(requestGoogleAccess('client'), /vigencia/)
   globalThis.google = null
   await assert.rejects(requestGoogleAccess('client'), /no está lista/)
 })
@@ -264,8 +269,27 @@ test('preview is refreshed for the selected month, excludes estimated dates and 
   assert.equal(state.ready, false)
   assert.equal(state.events.length, 0)
   const markup = text(state.render())
-  assert.match(markup, /GOOGLE_CALENDAR_CLIENT_ID/)
+  assert.match(markup, /Google Calendar aún no está disponible/)
+  assert.doesNotMatch(markup, /GOOGLE_CALENDAR_CLIENT_ID|Conectar mi Google Calendar/)
   assert.doesNotMatch(markup, /Autorizo enviar/)
+})
+
+test('connection is available without reminders and an expired application session discards Google access', async (t) => {
+  googleMock(t)
+  const state = {
+    ...methods(sync), month, version: 0,
+    renderRoot: { querySelector: () => ({ close() {}, showModal() {} }) },
+  }
+  t.mock.method(globalThis, 'fetch', async (url) => response(url.endsWith('google-config')
+    ? { configured: true, clientId: 'client', namespace } : { events: [] }))
+  await state.open()
+  assert.equal(state.ready, true)
+  assert.match(text(state.render()), /Conectar mi Google Calendar/)
+  state.authorization = { token: 'old-token', namespace, clientId: 'client', expiresAt: Date.now() + 3600000 }
+  t.mock.method(globalThis, 'fetch', async () => response({ error: 'Inicia sesión.' }, 401))
+  await state.open()
+  assert.equal(state.authorization, null)
+  assert.equal(state.error, 'Inicia sesión.')
 })
 
 function methods(prototype) {
@@ -274,11 +298,15 @@ function methods(prototype) {
 }
 
 test('sync keeps successful results, leaves failed events selected and retries only pending ones', async (t) => {
-  googleMock(t)
+  const oauth = googleMock(t)
+  let authorizations = 0
+  const initialize = oauth.initTokenClient
+  oauth.initTokenClient = (...args) => { authorizations++; return initialize(...args) }
   const other = prepareGoogleReminders(month, [{ ...marker, loanId: 8 }])[0]
   let fail = true
   const posts = []
   t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === '/api/calendar/google-config') return response({ configured: true, clientId: 'client', namespace })
     if (options.method === 'GET') return response({}, 404)
     const body = JSON.parse(options.body)
     posts.push(body.extendedProperties.private.sourceKey)
@@ -286,8 +314,12 @@ test('sync keeps successful results, leaves failed events selected and retries o
   })
   const state = {
     ...methods(sync), selected: new Set([reminder.key, other.key]), events: [reminder, other], results: {},
-    config: { clientId: 'client', namespace }, ready: true, consent: true, version: 0,
+    config: { configured: true, clientId: 'client', namespace }, ready: true, consent: true, version: 0,
+    connectionVersion: 0,
   }
+  await state.connect()
+  assert.equal(state.authorization.token, 'test-only-token')
+  assert.equal(authorizations, 1)
   await state.sync()
   assert.equal(state.results[reminder.key].status, 'created')
   assert.equal(state.results[other.key].status, 'error')
@@ -302,6 +334,97 @@ test('sync keeps successful results, leaves failed events selected and retries o
     `${other.key}:previous`, `${other.key}:afternoon`, other.key,
     `${other.key}:previous`, `${other.key}:afternoon`, other.key])
   assert.equal(state.selected.size, 0)
+  assert.equal(authorizations, 1)
+})
+
+test('disconnect and logout clear memory, abort pending work and require a fresh account selection', async (t) => {
+  googleMock(t)
+  t.mock.method(globalThis, 'fetch', async () => response({ configured: true, clientId: 'client', namespace }))
+  const state = {
+    ...methods(sync), config: { configured: true, clientId: 'client', namespace },
+    ready: true, version: 0, connectionVersion: 0,
+    events: [], selected: new Set(), results: {},
+    renderRoot: { querySelector: () => ({ close() {} }) },
+  }
+  await state.connect()
+  assert.match(text(state.render()), /Google Calendar conectado|Desconectar/)
+  const access = state.authorization
+  state.close()
+  assert.equal(state.authorization, access, 'closing the modal retains only the in-memory permission')
+  state.controller = new AbortController()
+  state.disconnect()
+  assert.equal(state.authorization, null)
+  assert.equal(state.controller.signal.aborted, true)
+  assert.equal(state.consent, false)
+
+  state.config = { configured: true, clientId: 'client', namespace }
+  state.ready = true
+  await state.connect()
+  assert.ok(state.authorization)
+  const unsubscribe = onGoogleCalendarDisconnect(() => state.disconnect())
+  t.after(unsubscribe)
+  clearGoogleCalendarAuthorization()
+  assert.equal(state.authorization, null)
+  state.consent = true
+  state.selected = new Set([reminder.key])
+  await state.sync()
+  assert.match(state.error, /Conecta tu Google Calendar/)
+})
+
+test('logout invalidates a late OAuth callback, and changed sessions cannot connect or send to Google', async (t) => {
+  const oauth = googleMock(t)
+  let callback
+  oauth.initTokenClient = (options) => ({
+    requestAccessToken: () => { callback = options.callback },
+  })
+  t.mock.method(globalThis, 'fetch', () => assert.fail('Late OAuth must not contact APIs'))
+  const state = {
+    ...methods(sync), config: { configured: true, clientId: 'client', namespace },
+    ready: true, version: 0, connectionVersion: 0,
+  }
+  const pending = state.connect()
+  state.disconnect()
+  callback({ access_token: 'late-token', expires_in: 3600 })
+  await pending
+  assert.equal(state.authorization, null)
+  assert.equal(state.busy, false)
+
+  googleMock(t)
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    assert.equal(url, '/api/calendar/google-config', 'Never send Google requests for another session')
+    return response({ configured: true, clientId: 'client', namespace: 'b'.repeat(64) })
+  })
+  await state.connect()
+  assert.equal(state.authorization, null)
+  assert.match(state.error, /sesión cambió/)
+  state.authorization = { token: 'old-token', expiresAt: Date.now() + 3600000, namespace, clientId: 'client' }
+  state.events = [reminder]
+  state.selected = new Set([reminder.key])
+  state.consent = true
+  await state.sync()
+  assert.equal(state.authorization, null)
+  assert.match(state.error, /sesión cambió/)
+})
+
+test('expired or revoked authorization is cleared and cannot be reused', async (t) => {
+  const state = {
+    ...methods(sync), ready: true, consent: true, selected: new Set([reminder.key]),
+    events: [reminder], results: {}, version: 0, connectionVersion: 0,
+    authorization: { token: 'expired', expiresAt: Date.now() - 1, namespace, clientId: 'client' },
+  }
+  t.mock.method(globalThis, 'fetch', () => assert.fail('Expired permission must not contact APIs'))
+  await state.sync()
+  assert.equal(state.authorization, null)
+  assert.match(state.error, /venció/)
+
+  state.authorization = { token: 'revoked', expiresAt: Date.now() + 3600000, namespace, clientId: 'client' }
+  state.consent = true
+  t.mock.method(globalThis, 'fetch', async (url) => url === '/api/calendar/google-config'
+    ? response({ configured: true, clientId: 'client', namespace }) : response({}, 401))
+  await state.sync()
+  assert.equal(state.authorization, null)
+  assert.match(state.error, /revocado/)
+  assert.equal(state.results[reminder.key].status, 'error')
 })
 
 test('consent and individual view are required; switching months invalidates a late preview', async (t) => {

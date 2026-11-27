@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { test } from 'node:test'
+import { onGoogleCalendarDisconnect } from '../saludFinanciera/frontend/google-calendar-client.js'
 
 // Load the browser component without a DOM to exercise its actual request handlers.
 registerHooks({
@@ -19,6 +20,29 @@ globalThis.customElements = { define: (name, component) => components.set(name, 
 await import('../src/inicio/inicio.js')
 const handlers = components.get('inicio-app').prototype
 const photo = 'https://example.com/avatar.png'
+
+test('logout clears Google authorization before the request, even when logout fails', async (t) => {
+  let disconnected = 0
+  const unsubscribe = onGoogleCalendarDisconnect(() => { disconnected++ })
+  t.after(unsubscribe)
+  let fail = false
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    assert.equal(disconnected, fail ? 2 : 1)
+    assert.equal(path, '/api/auth/logout')
+    assert.equal(options.method, 'POST')
+    return new Response(JSON.stringify(fail ? { error: 'Sin conexión' } : { ok: true }), { status: fail ? 503 : 200 })
+  })
+  const state = { user: { id: 7 }, photoPreview: '' }
+  await handlers.handleLogout.call(state)
+  assert.equal(state.user, null)
+  assert.equal(state.authMode, 'login')
+  fail = true
+  state.user = { id: 8 }
+  await handlers.handleLogout.call(state)
+  assert.equal(state.user.id, 8)
+  assert.equal(state.error, 'Sin conexión')
+  assert.equal(disconnected, 2)
+})
 
 for (const mode of ['login', 'register', 'recover']) {
   test(`${mode} sends only its required fields with a photo URL draft`, async (t) => {

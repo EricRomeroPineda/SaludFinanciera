@@ -5,6 +5,20 @@ const labels = {
   plan: 'Aportación a plan', loan: 'Deuda · Fecha compromiso',
 }
 let identityPromise
+const authorizationEvents = new EventTarget()
+const sessionChannel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('salud-financiera-google-session') : null
+if (sessionChannel) sessionChannel.onmessage = () => authorizationEvents.dispatchEvent(new Event('disconnect'))
+
+export function clearGoogleCalendarAuthorization() {
+  authorizationEvents.dispatchEvent(new Event('disconnect'))
+  sessionChannel?.postMessage('disconnect')
+}
+
+export function onGoogleCalendarDisconnect(listener) {
+  authorizationEvents.addEventListener('disconnect', listener)
+  return () => authorizationEvents.removeEventListener('disconnect', listener)
+}
 
 export function loadGoogleIdentity() {
   if (globalThis.google?.accounts?.oauth2) return Promise.resolve()
@@ -42,8 +56,10 @@ export function requestGoogleAccess(clientId) {
           reject(new Error('Google no autorizó el acceso. No se enviaron los recordatorios.'))
         } else if (!oauth.hasGrantedAllScopes(response, googleCalendarScope)) {
           reject(new Error('Debes permitir el acceso a los eventos de Google Calendar para sincronizar.'))
+        } else if (!Number.isFinite(Number(response.expires_in)) || Number(response.expires_in) <= 0) {
+          reject(new Error('Google no indicó la vigencia del permiso. Vuelve a conectar tu cuenta.'))
         } else {
-          resolve(response.access_token)
+          resolve({ token: response.access_token, expiresAt: Date.now() + Number(response.expires_in) * 1000 })
         }
       },
       error_callback: (error) => reject(new Error(error.type === 'popup_closed'

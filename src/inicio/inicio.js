@@ -14,6 +14,7 @@ import './photo-editor.js'
 import './access-recovery.js'
 import '../../saludFinanciera/frontend/card-catalog-admin.js'
 import { invalidateCardImages } from '../../saludFinanciera/frontend/card-catalog-image.js'
+import { clearGoogleCalendarAuthorization } from '../../saludFinanciera/frontend/google-calendar-client.js'
 import { userRoleLabel } from '../../shared/user-roles.js'
 import './user-management.js'
 import './account-removal.js'
@@ -97,7 +98,10 @@ class Inicio extends LitElement {
       this.setAttribute('data-appearance', this.effectiveAppearance)
     }
     if (changed.has('user')) {
-      if (changed.get('user')?.id !== this.user?.id) invalidateCardImages()
+      if (changed.get('user')?.id !== this.user?.id) {
+        invalidateCardImages()
+        clearGoogleCalendarAuthorization()
+      }
       const theme = themes.some(({ id }) => id === this.user?.theme) ? this.user.theme : 'verde'
       this.setAttribute('data-theme', theme)
       if (changed.get('user')?.photo !== this.user?.photo) this.brokenPhoto = false
@@ -204,6 +208,7 @@ class Inicio extends LitElement {
   }
 
   async handleLogout() {
+    clearGoogleCalendarAuthorization()
     this.error = ''
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' })
