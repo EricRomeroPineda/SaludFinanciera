@@ -27,6 +27,7 @@ function text(value) {
 
 test('evidence input is optional and available in movement forms, the general register and related histories', () => {
   const form = text(finance.renderMovementForm.call({
+    ...methods(finance),
     dashboard: { accounts: [], categories: [], plans: [], subscriptions: [] },
     movementOperation: 'expense',
   }))
@@ -247,6 +248,7 @@ test('closing after a partial upload refreshes the already-saved movement and re
   assert.equal(state.pendingEvidenceMovementId, null)
   assert.equal(refreshed, true)
   const markup = text(finance.renderMovementForm.call({
+    ...methods(finance),
     pendingEvidenceMovementId: 18, movementOperation: 'expense',
     dashboard: { accounts: [], categories: [], plans: [], subscriptions: [] },
   }))

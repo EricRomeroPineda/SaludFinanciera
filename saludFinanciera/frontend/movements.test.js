@@ -22,7 +22,7 @@ const movement = {
   originAccount: 'Débito', planId: 8, planName: 'Viaje', categoryId: 4, category: 'Ahorro', categoryType: 'gasto',
 }
 const dashboard = () => ({
-  accounts: [{ id: 2, name: 'Débito', available: '1000' }, { id: 3, name: 'Crédito', available: '500' }],
+  accounts: [{ id: 2, name: 'Débito', type: 'Tarjeta de débito', available: '1000' }, { id: 3, name: 'Crédito', type: 'Tarjeta de crédito', available: '500' }],
   categories: [{ id: 4, name: 'Ahorro', type: 'gasto' }],
   plans: [{ id: 8, name: 'Viaje' }], subscriptions: [{ id: 9, name: 'Internet' }],
   loans: [],
@@ -237,7 +237,7 @@ for (const kind of ['plan', 'subscription', 'card']) {
     assert.match(markup, /name="date" type="date" .value=2026-12-09/)
     assert.match(markup, /name="amount"[^>]*.value=100.00/)
     assert.ok(markup.includes(kind === 'plan' ? 'name="planId" required .value=8'
-      : kind === 'subscription' ? 'name="subscriptionId" required .value=9' : 'name="destinationAccountId" required .value=3'))
+      : kind === 'subscription' ? 'name="subscriptionId" required .value=9' : 'name=destinationAccountId value=3'))
   })
 }
 
@@ -301,7 +301,7 @@ test('movement checkboxes select one mode and lock linked operations without mix
   markup = text(ctx.renderMovementForm())
   assert.equal(ctx.movementOperation, 'income')
   assert.match(markup, /Ingreso \(cobro de préstamo\)/)
-  assert.match(markup, /name="destinationAccountId" required/)
+  assert.match(markup, /name=destinationAccountId value=2[\s\S]*?required/)
   assert.doesNotMatch(markup, /name="originAccountId"|name="planId"|name="subscriptionId"/)
   ctx.selectMovementLoan({ currentTarget: { value: '13' } })
   assert.equal(ctx.movementOperation, 'expense')

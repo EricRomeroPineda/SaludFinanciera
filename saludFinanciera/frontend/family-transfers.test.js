@@ -179,8 +179,8 @@ test('special registration shows credit figures and prefills current debt when t
 test('selecting another family destination replaces the amount with its payment or debt and leaves it editable', () => {
   const credit = { ...accounts[1], type: 'Tarjeta de crédito', total: '1000', available: '700', paymentToAvoidInterest: '0' }
   const ctx = state({ familyTransferData: { userId: 7, accounts: [accounts[0], credit] } })
-  const input = { value: 'old', readOnly: false }
-  const event = { currentTarget: { value: '20', form: { elements: { namedItem: () => input } } } }
+  const input = { value: 'old', readOnly: false, removeAttribute() {}, setCustomValidity() {} }
+  const event = { currentTarget: { value: '20', form: { elements: { namedItem: (name) => name === 'amount' ? input : null } } } }
   ctx.selectFamilyDestination(event)
   assert.equal(input.value, 300)
   assert.equal(input.readOnly, false)
@@ -200,7 +200,7 @@ test('only subscriptions offer credit as an origin while family transfers retain
     const ctx = state({ movementMode: mode, movementOperation: 'expense',
       dashboard: { accounts: all.slice(0, 3), categories: [], plans: [], loans: [], subscriptions: [] } })
     const markup = text(ctx.renderMovementForm())
-    const origin = markup.slice(markup.indexOf('<select name="originAccountId"'), markup.indexOf('</select>', markup.indexOf('<select name="originAccountId"')))
+    const origin = markup.slice(markup.indexOf('<legend>Cuenta de origen</legend>'), markup.indexOf('</fieldset>', markup.indexOf('<legend>Cuenta de origen</legend>')))
     assert.match(origin, /Efectivo propio/)
     assert.match(origin, /Mi débito/)
     if (mode === 'subscription') assert.match(origin, /Crédito propio/)
@@ -211,4 +211,88 @@ test('only subscriptions offer credit as an origin while family transfers retain
   assert.match(origin, /Efectivo propio/)
   assert.doesNotMatch(origin, /Crédito propio/)
   assert.match(markup.slice(markup.indexOf('Cuenta de destino · Tu familia')), /Su tarjeta/)
+})
+
+test('all movement modes use account cards, exclude empty origins, and accept payroll accounts', () => {
+  const payroll = { id: 11, name: 'Mi nómina', type: 'Nómina', available: '99.75' }
+  const empty = { id: 12, name: 'Cuenta vacía', type: 'Tarjeta de débito', available: '0' }
+  for (const mode of ['normal', 'investment', 'loan', 'subscription']) {
+    const ctx = state({ movementMode: mode, movementOperation: 'expense',
+      dashboard: { accounts: [accounts[0], payroll, empty], categories: [], plans: [], loans: [], subscriptions: [] } })
+    const markup = text(ctx.renderMovementForm())
+    assert.match(markup, /class="family-account-options"/)
+    assert.match(markup, /name=originAccountId value=11/)
+    assert.doesNotMatch(markup, /Cuenta vacía|<select name="originAccountId"/)
+  }
+  const ctx = state({ movementMode: 'normal', movementOperation: 'income',
+    dashboard: { accounts: [empty], categories: [], plans: [], loans: [], subscriptions: [] } })
+  assert.match(text(ctx.renderMovementForm()), /name=destinationAccountId value=12/)
+})
+
+function amountForm(value, originId = '10') {
+  const input = {
+    value, validationMessage: '', max: '',
+    setCustomValidity(message) { this.validationMessage = message },
+    removeAttribute(name) { if (name === 'max') this.max = '' },
+  }
+  const origin = { value: originId }
+  return { input, origin, elements: { namedItem: (name) => name === 'amount' ? input : name === 'originAccountId' ? origin : null } }
+}
+
+test('amounts at the available balance are accepted, but one cent over resets with an accessible error', () => {
+  for (const mode of ['normal', 'investment', 'loan', 'subscription', 'family']) {
+    const ctx = state({ movementMode: mode, movementOperation: 'expense' })
+    const form = amountForm('100.00')
+    assert.equal(ctx.validateMovementAmount(form), true)
+    assert.equal(form.input.max, '100.00')
+    form.input.value = '100.01'
+    assert.equal(ctx.validateMovementAmount(form), false)
+    assert.equal(form.input.value, '')
+    assert.match(ctx.movementAmountError, /No cuentas con dinero suficiente/)
+    assert.match(form.input.validationMessage, /Te pasaste/)
+    const markup = text(ctx.renderMovementForm())
+    assert.match(markup, /class=amount-invalid/)
+    assert.match(markup, /aria-invalid=true/)
+    assert.match(markup, /id="movement-amount-error" class="amount-error" role="alert"/)
+    form.input.value = '50.25'
+    assert.equal(ctx.validateMovementAmount(form), true)
+    assert.equal(ctx.movementAmountError, '')
+    assert.equal(form.input.validationMessage, '')
+  }
+})
+
+test('changing to a smaller origin validates the current amount while income remains unrestricted', () => {
+  const ctx = state({ movementMode: 'normal', movementOperation: 'expense',
+    dashboard: { accounts: [accounts[0], { ...accounts[0], id: 11, available: '20' }] } })
+  const form = amountForm('30')
+  assert.equal(ctx.validateMovementAmount(form), true)
+  form.origin.value = '11'
+  ctx.selectMovementAccount({ currentTarget: { form, name: 'originAccountId' } })
+  assert.equal(form.input.value, '')
+  assert.equal(form.input.max, '20.00')
+  ctx.movementOperation = 'income'
+  form.input.value = '1000'
+  assert.equal(ctx.validateMovementAmount(form), true)
+  assert.equal(form.input.max, '')
+})
+
+test('editing restores the previous debit for the available limit without double counting', () => {
+  const account = { ...accounts[0], available: '0' }
+  const ctx = state({ movementMode: 'normal', movementOperation: 'expense', editingMovement: { id: 1, originAccountId: 10, amount: '40.25' },
+    dashboard: { accounts: [account] } })
+  assert.equal(ctx.movementCanFund(account), true)
+  assert.equal(ctx.movementAvailable(account), 40.25)
+  const form = amountForm('40.25')
+  assert.equal(ctx.validateMovementAmount(form), true)
+  form.input.value = '40.26'
+  assert.equal(ctx.validateMovementAmount(form), false)
+})
+
+test('overspending is blocked before sending any movement request', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('Must not submit'))
+  const ctx = state({ movementMode: 'normal', movementOperation: 'expense' })
+  const form = amountForm('100.01')
+  await ctx.handleSaveMovement({ preventDefault() {}, currentTarget: form })
+  assert.equal(form.input.value, '')
+  assert.match(ctx.movementAmountError, /No cuentas con dinero suficiente/)
 })

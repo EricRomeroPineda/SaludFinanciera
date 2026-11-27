@@ -83,6 +83,7 @@ class SaludFinanciera extends LitElement {
     createdCategory: { state: true },
     familyTransferData: { state: true },
     familyTransferLoading: { state: true },
+    movementAmountError: { state: true },
   }
 
   constructor() {
@@ -446,6 +447,7 @@ class SaludFinanciera extends LitElement {
 
   async handleSaveMovement(event) {
     event.preventDefault()
+    if (event.currentTarget.elements && !this.validateMovementAmount(event.currentTarget)) return
     this.error = ''
     this.submitting = true
 
@@ -528,6 +530,7 @@ class SaludFinanciera extends LitElement {
   }
 
   startMovementEdit(movement) {
+    this.movementAmountError = ''
     if (movement.canEdit === false) {
       this.error = 'Solo quien envió el movimiento familiar puede editarlo o eliminarlo.'
       return
@@ -1261,6 +1264,7 @@ class SaludFinanciera extends LitElement {
   }
 
   openCalendarMovement({ date, event = null }) {
+    this.movementAmountError = ''
     this.pendingEvidenceMovementId = null
     if (event?.kind === 'loan') {
       const loan = this.dashboard.loans.find((item) => Number(item.id) === Number(event.loanId))
@@ -1417,6 +1421,48 @@ class SaludFinanciera extends LitElement {
     if (!account) return
     const amountInput = event.currentTarget.form?.elements.namedItem('amount')
     if (amountInput) amountInput.value = this.familyPaymentAmount(account) ?? ''
+    if (event.currentTarget.form?.elements.namedItem('originAccountId')) this.validateMovementAmount(event.currentTarget.form)
+  }
+
+  movementAvailable(account) {
+    const movement = this.editingMovement
+    let cents = Math.round(Number(account.available) * 100)
+    if (movement && Number(movement.originAccountId) === Number(account.id)) cents += Math.round(Number(movement.amount) * 100)
+    if (movement && Number(movement.destinationAccountId) === Number(account.id)) cents -= Math.round(Number(movement.amount) * 100)
+    return Math.max(0, cents) / 100
+  }
+
+  movementCanFund(account) {
+    return (isMoneyAccount(account.type) || (this.movementMode === 'subscription' && isCreditAccount(account.type)))
+      && this.movementAvailable(account) > 0
+  }
+
+  validateMovementAmount(form) {
+    const input = form.elements.namedItem('amount')
+    if (!input) return true
+    const originId = form.elements.namedItem('originAccountId')?.value
+    const accounts = this.movementMode === 'family' ? this.familyTransferData?.accounts : this.dashboard.accounts
+    const account = this.movementOperation !== 'income' && accounts?.find((account) => Number(account.id) === Number(originId))
+    const available = account ? this.movementAvailable(account) : null
+    if (available == null) input.removeAttribute('max')
+    else input.max = available.toFixed(2)
+    if (available != null && input.value !== '' && Math.round(Number(input.value) * 100) > Math.round(available * 100)) {
+      input.value = ''
+      this.movementAmountError = `No cuentas con dinero suficiente. Te pasaste del disponible de ${this.formatMoney(available)}. Ingresa otro monto.`
+      input.setCustomValidity(this.movementAmountError)
+      return false
+    }
+    if (input.value !== '' || !account) {
+      this.movementAmountError = ''
+      input.setCustomValidity('')
+    }
+    return !this.movementAmountError
+  }
+
+  selectMovementAccount(event) {
+    if (this.movementMode === 'family' && event.currentTarget.name === 'destinationAccountId') {
+      this.selectFamilyDestination(event)
+    } else this.validateMovementAmount(event.currentTarget.form)
   }
 
   async loadFamilyTransferAccounts() {
@@ -1438,10 +1484,10 @@ class SaludFinanciera extends LitElement {
     return html`<div class="family-account-options">${accounts.map((account) => html`
       <label class="family-account-option" style=${accountThemeStyle(account)}>
         <input type="radio" name=${field} value=${account.id}
-          @change=${field === 'destinationAccountId' ? this.selectFamilyDestination : undefined}
+          @change=${this.selectMovementAccount}
           .checked=${Number(selectedId) === Number(account.id)} required />
-        <span><strong>${account.name}</strong><small>${account.ownerName} · ${account.type}</small>
-          <small>Disponible: ${this.formatMoney(account.available)}</small>
+        <span><strong>${account.name}</strong><small>${account.ownerName ? `${account.ownerName} · ` : ''}${account.type}</small>
+          <small>Disponible: ${this.formatMoney(field === 'originAccountId' ? this.movementAvailable(account) : account.available)}</small>
           ${isCreditAccount(account.type) ? html`
             <small>Saldo utilizado: ${this.familyUsedBalance(account) == null ? 'Sin configurar' : this.formatMoney(this.familyUsedBalance(account))}</small>
             <small>Pago para no generar intereses: ${account.paymentToAvoidInterest == null ? 'Sin configurar' : this.formatMoney(account.paymentToAvoidInterest)}</small>
@@ -1461,6 +1507,12 @@ class SaludFinanciera extends LitElement {
       return
     }
     this.movementMode = mode
+    this.movementAmountError = ''
+    const amountInput = this.renderRoot?.querySelector('[name="amount"]')
+    if (amountInput) {
+      amountInput.setCustomValidity('')
+      amountInput.removeAttribute('max')
+    }
     this.movementLoanId = null
     if (mode !== 'normal') this.movementOperation = mode === 'family' ? 'transfer' : 'expense'
     if (mode === 'family') this.loadFamilyTransferAccounts()
@@ -1493,7 +1545,7 @@ class SaludFinanciera extends LitElement {
       return category.type === (this.movementOperation === 'income' ? 'ingreso' : 'gasto')
     })
     const accounts = this.dashboard.accounts
-    const originAccounts = mode === 'subscription' ? accounts : accounts.filter((account) => isMoneyAccount(account.type))
+    const originAccounts = accounts.filter((account) => this.movementCanFund(account))
     const loan = mode === 'loan'
       ? (this.dashboard.loans || []).find((item) => Number(item.id) === Number(this.movementLoanId)) : null
 
@@ -1541,9 +1593,9 @@ class SaludFinanciera extends LitElement {
             : !this.familyTransferData ? html`<button class="quiet-button" type="button" @click=${this.loadFamilyTransferAccounts}>Reintentar cargar cuentas</button>` : html`
               <fieldset class="family-account-picker"><legend>Cuenta de origen · Tus cuentas</legend>
                 ${this.renderFamilyAccountOptions(this.familyTransferData.accounts.filter((account) =>
-                  Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type)), 'originAccountId', originAccountId)}
-                ${!this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type))
-                  ? html`<p class="form-hint">Agrega una cuenta propia de débito o efectivo antes de enviar dinero.</p>` : ''}
+                  Number(account.ownerId) === Number(this.familyTransferData.userId) && this.movementCanFund(account)), 'originAccountId', originAccountId)}
+                ${!this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && this.movementCanFund(account))
+                  ? html`<p class="form-hint">No hay cuentas propias de débito, nómina o efectivo con saldo disponible.</p>` : ''}
               </fieldset>
               <fieldset class="family-account-picker"><legend>Cuenta de destino · Tu familia</legend>
                 ${this.renderFamilyAccountOptions(this.familyTransferData.accounts.filter((account) =>
@@ -1576,22 +1628,22 @@ class SaludFinanciera extends LitElement {
           </select>
         </label>` : ''}
         <label>Fecha<input name="date" type="date" .value=${movement.date || this.newMovementDefaults?.date || localDateInput()} required /></label>
-        <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount ?? this.newMovementDefaults?.amount ?? ''} required /></label>
+        <label>Monto<input name="amount" type="number" min="0.01" step="0.01" .value=${movement.amount ?? this.newMovementDefaults?.amount ?? ''} required
+          class=${this.movementAmountError ? 'amount-invalid' : ''}
+          aria-invalid=${this.movementAmountError ? 'true' : 'false'} aria-describedby="movement-amount-error"
+          @input=${(event) => this.validateMovementAmount(event.currentTarget.form)} />
+          <span id="movement-amount-error" class="amount-error" role="alert">${this.movementAmountError || ''}</span>
+        </label>
         ${mode !== 'family' && this.movementOperation !== 'income' ? html`
-          <label>Cuenta de origen
-            <select name="originAccountId" required .value=${String(originAccountId || '')}>
-              <option value="" ?selected=${!originAccountId}>Selecciona una cuenta</option>
-              ${originAccounts.map((account) => html`<option value=${account.id} ?selected=${Number(originAccountId) === Number(account.id)}>${account.name} · ${this.formatMoney(account.available)}</option>`)}
-            </select>
-          </label>
+          <fieldset class="family-account-picker"><legend>Cuenta de origen</legend>
+            ${this.renderFamilyAccountOptions(originAccounts, 'originAccountId', originAccountId)}
+            ${!originAccounts.length ? html`<p class="form-hint">No hay cuentas compatibles con saldo disponible.</p>` : ''}
+          </fieldset>
         ` : ''}
         ${mode !== 'family' && this.movementOperation !== 'expense' ? html`
-          <label>Cuenta de destino
-            <select name="destinationAccountId" required .value=${String(destinationAccountId || '')}>
-              <option value="" ?selected=${!destinationAccountId}>Selecciona una cuenta</option>
-              ${accounts.map((account) => html`<option value=${account.id} ?selected=${Number(destinationAccountId) === Number(account.id)}>${account.name}</option>`)}
-            </select>
-          </label>
+          <fieldset class="family-account-picker"><legend>Cuenta de destino</legend>
+            ${this.renderFamilyAccountOptions(accounts, 'destinationAccountId', destinationAccountId)}
+          </fieldset>
         ` : ''}
         ${mode === 'normal' && this.movementOperation !== 'transfer' ? html`
           <label>Categoría
@@ -1605,9 +1657,11 @@ class SaludFinanciera extends LitElement {
           .movementId=${this.pendingEvidenceMovementId || movement.id || null} .expanded=${true}
           .hideToggle=${true} .locked=${this.submitting}></movement-evidence>
         <div class="form-actions">
-          <button class="primary-button compact-button" ?disabled=${this.submitting || (mode === 'family' &&
+          <button class="primary-button compact-button" ?disabled=${this.submitting
+            || (mode !== 'family' && this.movementOperation !== 'income' && !originAccounts.length)
+            || (mode === 'family' &&
             (this.familyTransferLoading || !this.familyTransferData
-              || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && isMoneyAccount(account.type))
+              || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) === Number(this.familyTransferData.userId) && this.movementCanFund(account))
               || !this.familyTransferData.accounts.some((account) => Number(account.ownerId) !== Number(this.familyTransferData.userId))))}>
             ${this.submitting ? 'Guardando…' : this.editingMovement ? 'Guardar cambios' : 'Registrar movimiento'}
           </button>

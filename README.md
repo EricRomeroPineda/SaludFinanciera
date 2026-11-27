@@ -191,7 +191,9 @@ En Salud financiera, **Vista → Individual / Familiar** alterna entre los datos
 
 #### Pagos y transferencias familiares
 
-Las cuentas de origen del registro normal, préstamos, aportaciones y movimientos familiares se limitan a **débito o efectivo**. Solo **Suscripción relacionada** permite usar una tarjeta de crédito como origen. Los destinos conservan las tarjetas de crédito para registrar sus pagos. La API también valida la restricción al guardar.
+Los selectores de origen y destino de movimientos individuales y familiares usan tarjetas seleccionables, también para suscripciones, aportaciones y abonos a préstamos. Como origen solo aparecen cuentas de **débito, nómina o efectivo con saldo disponible**. Solo **Suscripción relacionada** permite usar crédito disponible como origen. Los destinos conservan cuentas sin saldo y tarjetas de crédito para registrar ingresos y pagos. La API también valida la restricción al guardar.
+
+Al capturar un monto o cambiar la cuenta, se comprueba que no exceda su disponible (también el crédito disponible en suscripciones). Si se supera, se vacía el monto, el campo queda rojo y aparece un mensaje de fondos insuficientes; hay que ingresar un monto válido para continuar. Los ingresos no tienen este límite de salida. Al editar se considera la reversión del movimiento original para no descontarlo dos veces. El servidor vuelve a validar el saldo al guardar para evitar sobregiros si cambió desde que se abrió el formulario.
 
 Si MySQL devuelve `ER_NO_REFERENCED_ROW_2` al guardar un movimiento familiar y la tabla conserva `movimiento_ibfk_6 FOREIGN KEY (id_usuario, id_cuenta_destino)`, aplica una sola vez `server/migrations/014-family-destination-owner.sql`, después de la 013 y con respaldo previo. Esta migración sustituye únicamente esa relación por una clave compuesta que usa el destinatario familiar (o el usuario original en movimientos normales). Conserva la validación del propietario de ambas cuentas y los movimientos existentes; no cambia saldos ni elimina registros. La columna de propietario de destino se calcula automáticamente.
 

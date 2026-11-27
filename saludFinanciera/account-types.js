@@ -7,7 +7,8 @@ export function isCreditAccount(type) {
 }
 
 export function isDebitAccount(type) {
-  return normalizedType(type).includes('debito')
+  const value = normalizedType(type)
+  return value.includes('debito') || value.includes('nomina')
 }
 
 export function isCashAccount(type) {

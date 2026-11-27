@@ -232,6 +232,15 @@ test('family transfers cannot use credit as origin, even with an explicit reques
   assert.deepEqual(state, before)
 })
 
+test('payroll accounts can fund family transfers with the same available-balance limit', async (t) => {
+  const { state } = ledger(t)
+  state.accounts[0].tipo = 'Nómina'
+  await saveMovement(7, transfer)
+  assert.equal(state.accounts[0].disponible, 59.75)
+  await assert.rejects(saveMovement(7, { ...transfer, amount: '59.76' }), { statusCode: 409 })
+  assert.equal(state.accounts[0].disponible, 59.75)
+})
+
 test('only subscription payments can use credit as origin', async (t) => {
   const calls = []
   t.mock.method(pool, 'getConnection', async () => ({
