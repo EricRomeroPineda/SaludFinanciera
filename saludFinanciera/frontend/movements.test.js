@@ -13,6 +13,7 @@ globalThis.customElements = { define: (name, component) => components.set(name, 
 await import('./salud-financiera.js')
 const finance = components.get('salud-financiera').prototype
 const calendar = components.get('financial-calendar').prototype
+const subscriptions = components.get('finance-subscriptions').prototype
 const methods = (prototype) => Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(prototype))
   .filter(([, descriptor]) => typeof descriptor.value === 'function')
   .map(([name, descriptor]) => [name, descriptor.value]))
@@ -36,6 +37,61 @@ const calendarState = (changes = {}) => ({
   data: { days: [{ day: '2026-11-18', count: 1, income: 0, expenses: 100 }], movements: [movement],
     categories: [], events: [{ kind: 'plan', date: '2026-11-18', label: 'Viaje', planId: 8, amount: 100 }] },
   error: '', loading: false, requestVersion: 0, scope: 'all', ...changes,
+})
+
+test('subscription card registers a linked expense with its cost and today as editable defaults', () => {
+  const item = { id: 9, name: 'Internet', cost: '250.50', frequency: 'Mensual',
+    status: 'activa', annualCost: '3006', monetized: '0' }
+  const events = []
+  const state = { familyView: false, submitting: false, dispatchEvent: (event) => events.push(event) }
+  subscriptions.registerMovement.call(state, item)
+  assert.equal(events.length, 1)
+  assert.equal(events[0].type, 'register-subscription-movement')
+  assert.equal(events[0].detail, item)
+  assert.equal(events[0].bubbles, true)
+  assert.equal(events[0].composed, true)
+  subscriptions.registerMovement.call({ ...state, familyView: true }, item)
+  subscriptions.registerMovement.call({ ...state, submitting: true }, item)
+  assert.equal(events.length, 1)
+
+  const ctx = financeState({ movementMode: 'investment', movementOperation: 'transfer',
+    editingMovement: { id: 12 }, newMovementDefaults: { planId: 8 } })
+  assert.match(text(ctx.renderActiveTab.call({ activeTab: 'subscriptions' })),
+    /@register-subscription-movement=/)
+  ctx.startSubscriptionMovement(item)
+  assert.equal(ctx.activeTab, 'movements')
+  assert.equal(ctx.showMovementForm, true)
+  assert.equal(ctx.editingMovement, null)
+  assert.equal(ctx.movementMode, 'subscription')
+  assert.equal(ctx.movementOperation, 'expense')
+  assert.deepEqual(ctx.newMovementDefaults, {
+    date: ctx.newMovementDefaults.date, amount: '250.50', subscriptionId: 9, subscriptionName: 'Internet',
+  })
+  assert.match(ctx.newMovementDefaults.date, /^\d{4}-\d{2}-\d{2}$/)
+  const markup = text(ctx.renderMovementForm())
+  assert.match(markup, /name="subscriptionId" required .value=9/)
+  assert.match(markup, /name="amount"[^>]*.value=250.50/)
+  assert.match(markup, /monto sugerido es su costo por cobro/)
+  assert.doesNotMatch(markup, /<select\s+name="operation"|name="planId"/)
+  const blocked = financeState({ familyView: true, showMovementForm: false })
+  blocked.startSubscriptionMovement(item)
+  assert.equal(blocked.showMovementForm, false)
+  assert.equal(blocked.activeTab, 'movements')
+})
+
+test('credit card payment preloads the interest-free amount only when available', () => {
+  const ctx = financeState()
+  ctx.startCardPayment({ id: 3, name: 'Crédito', paymentToAvoidInterest: '180.25' })
+  assert.equal(ctx.movementMode, 'normal')
+  assert.equal(ctx.movementOperation, 'transfer')
+  assert.deepEqual(ctx.newMovementDefaults, {
+    destinationAccountId: 3, cardName: 'Crédito', amount: '180.25',
+  })
+  assert.match(text(ctx.renderMovementForm()), /name="amount"[^>]*.value=180.25/)
+  assert.match(text(ctx.renderMovementForm()), /monto sugerido es el pago para no generar intereses/)
+  ctx.startCardPayment({ id: 3, name: 'Crédito', paymentToAvoidInterest: null })
+  assert.equal(ctx.newMovementDefaults.amount, null)
+  assert.match(text(ctx.renderMovementForm()), /name="amount"[^>]*.value= required/)
 })
 function text(value) {
   if (Array.isArray(value)) return value.map(text).join('')

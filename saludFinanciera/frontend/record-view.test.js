@@ -173,7 +173,10 @@ test('subscriptions sort weekly and monthly billings, keeping cancelled and unde
     assert.match(markup, /<finance-related-movements relation="subscription"/)
     assert.match(markup, /.relationId=3/)
     assert.match(markup, /\?hidden=true/)
+    assert.doesNotMatch(markup, />Registrar movimiento<\/button>/)
   }
+  ctx.familyView = false
+  assert.match(text(ctx.render()), /<button class="text-button" type="button" \?disabled=[^>]*@click=[^>]*>Registrar movimiento<\/button>/)
   assert.ok(toggle(ctx.render()))
   assert.equal(ctx.listView, false)
   assert.equal(ctx.selectedSubscription.id, 3)

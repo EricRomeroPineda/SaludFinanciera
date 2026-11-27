@@ -270,7 +270,9 @@ class SaludFinanciera extends LitElement {
     switch (this.activeTab) {
       case 'cards': return this.renderCards()
       case 'accounts': return this.renderAccounts()
-      case 'subscriptions': return html`<finance-subscriptions .familyView=${this.familyView} @subscriptions-changed=${this.handleSubscriptionsChanged}></finance-subscriptions>`
+      case 'subscriptions': return html`<finance-subscriptions .familyView=${this.familyView}
+        @subscriptions-changed=${this.handleSubscriptionsChanged}
+        @register-subscription-movement=${(event) => this.startSubscriptionMovement(event.detail)}></finance-subscriptions>`
       case 'plans': return this.renderPlans()
       case 'movements': return this.renderMovements()
       case 'debtors': return this.renderDebtors()
@@ -395,6 +397,25 @@ class SaludFinanciera extends LitElement {
     this.movementMode = 'investment'
     this.movementLoanId = null
     this.newMovementDefaults = { planId: plan.id, planName: plan.name }
+    this.showMovementForm = true
+    this.activeTab = 'movements'
+  }
+
+  startSubscriptionMovement(subscription) {
+    if (this.familyView || this.submitting) return
+    this.pendingEvidenceMovementId = null
+    this.error = ''
+    this.editingMovement = null
+    this.createdCategory = null
+    this.movementLoanId = null
+    this.movementMode = 'subscription'
+    this.movementOperation = 'expense'
+    this.newMovementDefaults = {
+      date: localDateInput(),
+      amount: subscription.cost,
+      subscriptionId: subscription.id,
+      subscriptionName: subscription.name,
+    }
     this.showMovementForm = true
     this.activeTab = 'movements'
   }
@@ -578,7 +599,10 @@ class SaludFinanciera extends LitElement {
     this.movementOperation = 'transfer'
     this.editingMovement = null
     this.createdCategory = null
-    this.newMovementDefaults = { destinationAccountId: card.id, cardName: card.name }
+    this.newMovementDefaults = {
+      destinationAccountId: card.id, cardName: card.name,
+      amount: card.paymentToAvoidInterest ?? null,
+    }
     this.showMovementForm = true
     this.activeTab = 'movements'
   }
@@ -1365,10 +1389,14 @@ class SaludFinanciera extends LitElement {
     return html`
       <form class="movement-form" @submit=${this.handleSaveMovement}>
         ${mode === 'normal' && this.newMovementDefaults?.cardName
-          ? html`<p class="form-hint">Registra una transferencia hacia ${this.newMovementDefaults.cardName} para reflejar el pago en el saldo disponible.</p>`
+          ? html`<p class="form-hint">Registra una transferencia hacia ${this.newMovementDefaults.cardName} para reflejar el pago en el saldo disponible.
+            ${this.newMovementDefaults.amount != null ? 'El monto sugerido es el pago para no generar intereses; puedes ajustarlo antes de guardar.' : ''}</p>`
           : ''}
         ${mode === 'investment' && this.newMovementDefaults?.planName
           ? html`<p class="form-hint">Registra una aportación para ${this.newMovementDefaults.planName}; se descontará de la cuenta de origen y se sumará al monetizado del plan.</p>`
+          : ''}
+        ${mode === 'subscription' && this.newMovementDefaults?.subscriptionName
+          ? html`<p class="form-hint">Registra un gasto para ${this.newMovementDefaults.subscriptionName}. El monto sugerido es su costo por cobro; puedes ajustarlo antes de guardar.</p>`
           : ''}
         ${loan ? html`<p class="form-hint">Abono a ${loan.name}. Pendiente: ${this.formatMoney(loan.remaining)}.
           ${loan.type === 'me_deben' ? 'El dinero regresará a tu cuenta.' : 'El dinero saldrá de tu cuenta para pagar la deuda.'}</p>` : ''}

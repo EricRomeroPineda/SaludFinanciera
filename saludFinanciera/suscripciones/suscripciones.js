@@ -92,6 +92,13 @@ class Subscriptions extends LitElement {
     this.dispatchEvent(new CustomEvent('subscriptions-changed', { bubbles: true, composed: true }))
   }
 
+  registerMovement(item) {
+    if (this.familyView || this.submitting) return
+    this.dispatchEvent(new CustomEvent('register-subscription-movement', {
+      detail: item, bubbles: true, composed: true,
+    }))
+  }
+
   openForm(item = null) {
     this.editing = item
     this.showForm = true
@@ -318,6 +325,8 @@ class Subscriptions extends LitElement {
                     <button class="text-button" type="button"
                       aria-pressed=${this.selectedSubscription?.id === item.id ? 'true' : 'false'}
                       @click=${() => { this.selectedSubscription = item }}>Ver movimientos</button>
+                    ${!this.familyView ? html`<button class="text-button" type="button" ?disabled=${this.submitting}
+                      @click=${() => this.registerMovement(item)}>Registrar movimiento</button>` : ''}
                     <button class="edit-button" type="button" aria-label=${`Editar ${item.name}`} title="Editar suscripción" ?hidden=${this.familyView} ?disabled=${this.submitting} @click=${() => this.openForm(item)}>${editIcon()}</button>
                     <button class="trash-button" type="button" ?hidden=${this.familyView} ?disabled=${this.submitting}
                       aria-label=${`Eliminar ${item.name}`} title="Eliminar suscripción" @click=${() => this.requestDelete(item)}>
