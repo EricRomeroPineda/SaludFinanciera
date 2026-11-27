@@ -1395,10 +1395,28 @@ class SaludFinanciera extends LitElement {
       date: localDateInput(),
       event: destination ? {
         kind: 'card', destinationAccountId: destination.id, label: destination.name,
-        amount: isCreditAccount(destination.type) ? destination.paymentToAvoidInterest : null,
+        amount: this.familyPaymentAmount(destination),
       } : null,
     })
     this.selectMovementMode({ currentTarget: { value: 'family', checked: true } })
+  }
+
+  familyUsedBalance(account) {
+    return account.total == null ? null
+      : Math.max(0, Math.round(Number(account.total) * 100) - Math.round(Number(account.available) * 100)) / 100
+  }
+
+  familyPaymentAmount(account) {
+    if (!isCreditAccount(account.type)) return null
+    return Number(account.paymentToAvoidInterest) > 0
+      ? account.paymentToAvoidInterest : this.familyUsedBalance(account)
+  }
+
+  selectFamilyDestination(event) {
+    const account = this.familyTransferData.accounts.find((account) => Number(account.id) === Number(event.currentTarget.value))
+    if (!account) return
+    const amountInput = event.currentTarget.form?.elements.namedItem('amount')
+    if (amountInput) amountInput.value = this.familyPaymentAmount(account) ?? ''
   }
 
   async loadFamilyTransferAccounts() {
@@ -1420,9 +1438,15 @@ class SaludFinanciera extends LitElement {
     return html`<div class="family-account-options">${accounts.map((account) => html`
       <label class="family-account-option" style=${accountThemeStyle(account)}>
         <input type="radio" name=${field} value=${account.id}
+          @change=${field === 'destinationAccountId' ? this.selectFamilyDestination : undefined}
           .checked=${Number(selectedId) === Number(account.id)} required />
         <span><strong>${account.name}</strong><small>${account.ownerName} · ${account.type}</small>
-          <small>Disponible: ${this.formatMoney(account.available)}</small></span>
+          <small>Disponible: ${this.formatMoney(account.available)}</small>
+          ${isCreditAccount(account.type) ? html`
+            <small>Saldo utilizado: ${this.familyUsedBalance(account) == null ? 'Sin configurar' : this.formatMoney(this.familyUsedBalance(account))}</small>
+            <small>Pago para no generar intereses: ${account.paymentToAvoidInterest == null ? 'Sin configurar' : this.formatMoney(account.paymentToAvoidInterest)}</small>
+          ` : ''}
+        </span>
       </label>
     `)}</div>`
   }
@@ -1510,6 +1534,8 @@ class SaludFinanciera extends LitElement {
         </label>` : html`<p class="form-hint">Operación fija: ${mode === 'family' ? 'Transferencia familiar. Se descuenta de tu cuenta y se abona a la cuenta o tarjeta de tu familiar; no duplica gastos ni ingresos.'
           : mode === 'loan' && loan?.type === 'me_deben' ? 'Ingreso (cobro de préstamo)' : 'Gasto (salida de cuenta)'}.</p>`}
         ${mode === 'family' ? html`
+          <p class="form-hint">Al seleccionar una tarjeta de destino, el monto se completa con el pago para no generar intereses.
+            Si está en cero o sin configurar, se usa la deuda actual (saldo utilizado). Puedes ajustar el monto antes de guardar.</p>
           ${this.familyTransferLoading ? html`<p class="form-hint" role="status">Cargando cuentas familiares…</p>`
             : !this.familyTransferData ? html`<button class="quiet-button" type="button" @click=${this.loadFamilyTransferAccounts}>Reintentar cargar cuentas</button>` : html`
               <fieldset class="family-account-picker"><legend>Cuenta de origen · Tus cuentas</legend>

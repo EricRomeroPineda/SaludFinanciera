@@ -39,7 +39,8 @@ export async function getFamilyTransferAccounts(userId) {
   if (!family) throw Object.assign(new Error('Debes pertenecer a una familia para registrar este movimiento.'), { statusCode: 403 })
   const ids = family.members.map((member) => member.id)
   const [accounts] = await pool.execute(
-    `SELECT id, nombre AS name, tipo AS type, disponible AS available, id_usuario AS ownerId
+    `SELECT id, nombre AS name, tipo AS type, disponible AS available, total,
+            pago_para_no_generar_intereses AS paymentToAvoidInterest, id_usuario AS ownerId
      FROM cuenta WHERE id_usuario IN (${ids.map(() => '?').join(', ')}) ORDER BY nombre, id`, ids,
   )
   const members = new Map(family.members.map((member) => [Number(member.id), member]))

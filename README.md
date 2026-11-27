@@ -191,6 +191,8 @@ En Salud financiera, **Vista → Individual / Familiar** alterna entre los datos
 
 #### Pagos y transferencias familiares
 
+En el registro especial, las tarjetas de crédito muestran **Saldo utilizado** y **Pago para no generar intereses**. El monto sugerido usa este último si es mayor que cero; si está en cero o sin configurar, usa la deuda actual (`límite − disponible`, sin valores negativos). También se actualiza al seleccionar otra cuenta de destino; para débito o efectivo queda libre. El monto siempre es editable.
+
 Antes de desplegar esta versión, respalda la base y aplica una sola vez `server/migrations/013-family-transfers.sql`; añade el destinatario opcional al movimiento sin modificar registros ni saldos existentes. Reinicia el backend y recompila el frontend.
 
 Desde **Familiar → Tarjetas → Registrar movimiento especial**, en la tarjeta de otro integrante, puedes registrar un pago o transferencia sin salir de la vista familiar. Se precarga esa cuenta como destino y, para crédito, el pago para no generar intereses como monto editable. Solo se habilita el modo familiar; las acciones de edición y eliminación de cuentas siguen bloqueadas. También está disponible desde **Individual → Movimiento → Movimiento familiar** o eligiendo ese tipo dentro de **Nuevo movimiento**. Selecciona una cuenta propia como origen y una de otro integrante actual como destino; ambas muestran el propietario y su color. Captura la fecha real (también admite pagos ya realizados) y el monto. Esto registra lo ocurrido: no ordena pagos ni transferencias bancarias. El servidor comprueba nuevamente la membresía y los propietarios, y actualiza ambos saldos en una sola transacción; no permite retirar desde cuentas ajenas ni mezclar categoría, préstamo, plan o suscripción.

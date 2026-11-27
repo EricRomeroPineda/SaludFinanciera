@@ -160,3 +160,34 @@ test('family registration restricts the form to the special mode and saves witho
   assert.equal(calls.length, 1)
   assert.match(ctx.error, /solo puedes registrar movimientos especiales/)
 })
+
+test('special registration shows credit figures and prefills current debt when the interest-free payment is zero', () => {
+  const ctx = state({ familyView: true, dashboard: { viewerId: 7 }, loadFamilyTransferAccounts() {} })
+  const credit = { ...accounts[1], type: 'Tarjeta de crédito', total: '1000', available: '549.75', paymentToAvoidInterest: '0.00' }
+  ctx.startFamilyMovement(credit)
+  assert.equal(ctx.newMovementDefaults.amount, 450.25)
+  const options = text(ctx.renderFamilyAccountOptions([credit], 'destinationAccountId', credit.id))
+  assert.ok(options.includes(`Saldo utilizado: ${ctx.formatMoney(450.25)}`))
+  assert.ok(options.includes(`Pago para no generar intereses: ${ctx.formatMoney(0)}`))
+  assert.equal(ctx.familyPaymentAmount({ ...credit, paymentToAvoidInterest: '100.50' }), '100.50')
+  assert.equal(ctx.familyPaymentAmount({ ...credit, paymentToAvoidInterest: null }), 450.25)
+  assert.equal(ctx.familyPaymentAmount({ ...credit, available: '1100' }), 0)
+  assert.equal(ctx.familyPaymentAmount({ ...credit, total: null }), null)
+  assert.equal(ctx.familyPaymentAmount({ ...credit, type: 'Tarjeta de débito' }), null)
+})
+
+test('selecting another family destination replaces the amount with its payment or debt and leaves it editable', () => {
+  const credit = { ...accounts[1], type: 'Tarjeta de crédito', total: '1000', available: '700', paymentToAvoidInterest: '0' }
+  const ctx = state({ familyTransferData: { userId: 7, accounts: [accounts[0], credit] } })
+  const input = { value: 'old', readOnly: false }
+  const event = { currentTarget: { value: '20', form: { elements: { namedItem: () => input } } } }
+  ctx.selectFamilyDestination(event)
+  assert.equal(input.value, 300)
+  assert.equal(input.readOnly, false)
+  credit.paymentToAvoidInterest = '50.25'
+  ctx.selectFamilyDestination(event)
+  assert.equal(input.value, '50.25')
+  event.currentTarget.value = '10'
+  ctx.selectFamilyDestination(event)
+  assert.equal(input.value, '')
+})
