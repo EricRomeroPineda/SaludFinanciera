@@ -85,6 +85,9 @@ test('one eye icon opens the evidence modal in every history without adding tabl
   assert.match(opened, /Actualizar evidencia/)
   assert.match(opened, /Subir imágenes|type="file"/)
   assert.match(opened, /\/api\/movements\/8\/evidence\/1/)
+  assert.match(opened, /<button class="image-thumb" type="button"/)
+  assert.doesNotMatch(opened, /target="_blank"/)
+  assert.match(opened, /<svg width="16" height="16"[^>]*aria-hidden="true"/)
   const dialog = { open: false, showModal() { this.open = true }, close() { this.open = false } }
   const modal = { renderRoot: { querySelector: () => dialog }, expanded: false, requestVersion: 0, loading: true }
   evidence.open.call(modal)
@@ -94,8 +97,30 @@ test('one eye icon opens the evidence modal in every history without adding tabl
   evidence.handleClose.call(modal)
   assert.equal(dialog.open, false)
   assert.equal(modal.expanded, false)
+  assert.equal(modal.selectedImageId, null)
   assert.equal(modal.requestVersion, 1)
   assert.equal(modal.loading, false)
+})
+
+test('clicking an evidence thumbnail shows the complete image inside the wider modal and allows returning', () => {
+  const image = { id: 1, name: 'recibo.webp' }
+  const state = { ...methods(evidence), movementId: 8, images: [image], pending: [],
+    selectedImageId: null, canManage: true, expanded: true, error: 'Error anterior' }
+  state.showImage(image)
+  assert.equal(state.selectedImageId, 1)
+  assert.equal(state.error, '')
+  const detail = text(state.render())
+  assert.match(detail, /<dialog aria-label="Evidencia del movimiento" class=detail-dialog/)
+  assert.match(detail, /<img src=\/api\/movements\/8\/evidence\/1 alt=recibo.webp/)
+  assert.match(detail, /Volver a imágenes/)
+  assert.match(detail, /Abrir en otra pestaña/)
+  assert.doesNotMatch(detail, /class="gallery"|class="image-thumb"|type="file"/)
+  const styles = components.get('movement-evidence').styles.cssText
+  assert.match(styles, /dialog\.detail-dialog \{ width: min\(950px, calc\(100% - 32px\)\); \}/)
+  assert.match(styles, /\.image-detail img \{[^}]*max-height: calc\(100dvh - 220px\);[^}]*object-fit: contain;/s)
+  const preview = evidence.renderPanel.call({ ...state, readOnly: true })
+  assert.doesNotMatch(text(preview), /Eliminar imagen/)
+  assert.match(text(evidence.renderPanel.call({ ...state, selectedImageId: null })), /class="gallery"/)
 })
 
 test('selection validates total count and file sizes and leaves previous pending evidence intact on error', () => {
@@ -147,10 +172,11 @@ test('removing the last image clears the eye indicator', async (t) => {
   globalThis.window = { confirm: () => true }
   t.after(() => { delete globalThis.window })
   const state = { ...methods(evidence), movementId: 8, images: [{ id: 1, name: 'recibo.webp' }],
-    hasEvidence: true }
+    hasEvidence: true, selectedImageId: 1 }
   await state.remove(state.images[0])
   assert.deepEqual(state.images, [])
   assert.equal(state.hasEvidence, false)
+  assert.equal(state.selectedImageId, null)
 })
 
 test('refreshing evidence updates the eye indicator from the saved images', async (t) => {
