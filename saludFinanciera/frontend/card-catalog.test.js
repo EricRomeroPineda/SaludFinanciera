@@ -37,17 +37,18 @@ test('menu entry and administrative screen are available only to admins, without
   assert.match(text(inicio.render.call({ ...normal, user: { role: 'admin' }, activeSection: 'card-catalog' })), /<card-catalog-admin>/)
 })
 
-test('optional image uses 40px square contain styling and is invisible until successfully loaded', () => {
+test('optional image uses 80px square contain styling and is invisible until successfully loaded', () => {
   const styles = components.get('card-catalog-image').styles.cssText
   assert.match(styles, /:host \{ display: none;/)
   assert.match(styles, /:host\(\[loaded\]\)/)
-  assert.match(styles, /width: 40px; height: 40px/)
+  assert.match(styles, /width: 80px; height: 80px/)
   assert.match(styles, /object-fit: contain/)
   assert.match(styles, /border-radius: 8px/)
   assert.equal(image.render.call({ source: '' }), '')
   let visible = false
   const state = { source: '/api/card-images/1/version.webp', setAttribute: () => { visible = true }, removeAttribute: () => { visible = false } }
   const template = image.render.call(state)
+  assert.match(text(template), /width="80" height="80"/)
   const callbacks = template.values.filter((value) => typeof value === 'function')
   callbacks[0]()
   assert.equal(visible, true)

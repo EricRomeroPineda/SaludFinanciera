@@ -11,8 +11,8 @@ class CardCatalogImage extends LitElement {
   static properties = { name: { type: String }, type: { type: String }, source: { state: true }, loaded: { state: true } }
   static styles = css`
     :host { display: none; }
-    :host([loaded]) { display: block; width: 40px; height: 40px; margin: 0 0 10px; flex: none; }
-    img { display: block; width: 40px; height: 40px; border-radius: 8px; object-fit: contain; object-position: center; }
+    :host([loaded]) { display: block; width: 80px; height: 80px; margin: 0 0 10px; flex: none; }
+    img { display: block; width: 80px; height: 80px; border-radius: 8px; object-fit: contain; object-position: center; }
   `
   constructor() {
     super()
@@ -52,7 +52,7 @@ class CardCatalogImage extends LitElement {
     }
   }
   render() {
-    return this.source ? html`<img src=${this.source} alt="" width="40" height="40"
+    return this.source ? html`<img src=${this.source} alt="" width="80" height="80"
       @load=${() => { this.loaded = true; this.setAttribute('loaded', '') }}
       @error=${() => {
         this.loaded = false

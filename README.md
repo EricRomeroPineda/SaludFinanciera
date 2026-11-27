@@ -260,7 +260,7 @@ Solo Admin ve **Gestión de cuentas** en el menú principal. Allí puede buscar 
 
 El menú principal muestra **Agregar info de tarjetas nuevas**, junto a **Entrar**, únicamente a administradores. La pantalla permite buscar nombres registrados, agruparlos por tipo, distinguir imágenes asignadas y pendientes, cargar o reutilizar imágenes, previsualizar coincidencias y crear, editar o eliminar reglas. El inventario compartido contiene exclusivamente nombres y tipos de cuentas, suscripciones, servicios y planes: nunca saldos, números de cuenta, usuarios ni titulares. Los nombres de personas de Deudores no se incorporan al catálogo; sus tarjetas pueden mostrar la imagen de la cuenta sugerida, si existe.
 
-Las imágenes opcionales de 40 × 40 px se muestran después del nombre y antes del importe en tarjetas bancarias, nómina, débito, efectivo, servicios, suscripciones, planes, selectores de cuenta y resúmenes de Panorama, también en Familiar. Conservan proporción y esquinas redondeadas. Sin coincidencia, durante la carga o si el archivo falta, el elemento no ocupa espacio y el resto de la tarjeta funciona normalmente.
+Las imágenes opcionales de 80 × 80 px se muestran después del nombre y antes del importe en tarjetas bancarias, nómina, débito, efectivo, servicios, suscripciones, planes, selectores de cuenta y resúmenes de Panorama, también en Familiar. Conservan proporción y esquinas redondeadas. Sin coincidencia, durante la carga o si el archivo falta, el elemento no ocupa espacio y el resto de la tarjeta funciona normalmente.
 
 ### Reglas, alias y permisos
 
